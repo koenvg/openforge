@@ -2,13 +2,28 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_IDLE_OPTIONS,
   discoverIdleProcessSet,
+  discoverSessionDaemon,
   evaluateIdleSample,
   fetchProcessMemoryDiagnostics,
   parseIdleOptions,
+  parseTopWakeupCounters,
+  readWakeupCounters,
   sampleIdleResources,
 } from './idle-resource-sampler.mjs'
 
 const mib = 1024 ** 2
+const RUN_DAEMON_ROOT = '/tmp/openforge-desktop-test-abc/app-data/session-daemon'
+const INSTALLED_DAEMON_ROOT = '/Users/me/Library/Application Support/com.openforge.app/session-daemon'
+
+function daemonRows() {
+  return [
+    { pid: 300, parentPid: 1, cpuSeconds: 50, rssBytes: 30 * mib, command: `${INSTALLED_DAEMON_ROOT}/session-v1/releases/aaa/openforge-session-daemon ${INSTALLED_DAEMON_ROOT}` },
+    { pid: 301, parentPid: 300, cpuSeconds: 1, rssBytes: 5 * mib, command: '-zsh' },
+    { pid: 400, parentPid: 1, cpuSeconds: 2, rssBytes: 10 * mib, command: `${RUN_DAEMON_ROOT}/session-v1/releases/bbb/openforge-session-daemon ${RUN_DAEMON_ROOT}` },
+    { pid: 401, parentPid: 400, cpuSeconds: 0.1, rssBytes: 4 * mib, command: '-zsh' },
+    { pid: 402, parentPid: 400, cpuSeconds: 0.1, rssBytes: 4 * mib, command: '-zsh' },
+  ]
+}
 
 function processRows(overrides = {}) {
   const rows = [
@@ -67,6 +82,7 @@ describe('idle resource sampler', () => {
       '--max-average-cores', '0.5',
       '--max-event-rate', '3',
       '--max-sidecar-peak-mib', '512',
+      '--session-daemon-scope', RUN_DAEMON_ROOT,
     ])).toEqual({
       ...DEFAULT_IDLE_OPTIONS,
       durationSeconds: 12,
@@ -74,6 +90,7 @@ describe('idle resource sampler', () => {
       maxAverageCores: 0.5,
       maxEventRate: 3,
       maxSidecarPeakMiB: 512,
+      sessionDaemonScope: RUN_DAEMON_ROOT,
     })
     expect(parseIdleOptions(['--no-thresholds'])).toMatchObject({
       maxAverageCores: null,
@@ -96,6 +113,119 @@ describe('idle resource sampler', () => {
     ])
     expect(selected.optional.map(process => process.role)).toEqual(['utility'])
     expect(selected.sidecar.pid).toBe(101)
+  })
+
+  it('selects only the session daemon that references the app data under test', () => {
+    const daemon = discoverSessionDaemon([...processRows(), ...daemonRows()], RUN_DAEMON_ROOT)
+
+    expect(daemon).toMatchObject({ pid: 400, role: 'session-daemon', childPids: [401, 402] })
+  })
+
+  it.each([
+    ['no scope', rows => rows, null],
+    ['only a foreign daemon', rows => rows.filter(row => row.pid < 400), RUN_DAEMON_ROOT],
+    ['a scope that is only a path prefix', rows => rows, '/tmp/openforge-desktop-test-ab'],
+    ['two matching daemons', rows => [...rows, { ...rows.find(row => row.pid === 400), pid: 500 }], RUN_DAEMON_ROOT],
+  ])('omits the session daemon for %s', (_name, mutate, scope) => {
+    expect(discoverSessionDaemon(mutate([...processRows(), ...daemonRows()]), scope)).toBeNull()
+  })
+
+  it('parses cumulative context switches and idle wakeups from top', () => {
+    const output = [
+      'Processes: 700 total, 3 running, 697 sleeping, 4000 threads',
+      'Disks: 1/2G read, 3/4G written.',
+      '',
+      'PID   CSW      IDLEW ',
+      '6624  12443989 159240',
+      '1     15732358+ 320  ',
+      '77    12K      3M   ',
+    ].join('\n')
+
+    expect(parseTopWakeupCounters(output)).toEqual(new Map([
+      [6624, { contextSwitches: 12_443_989, idleWakeups: 159_240 }],
+      [1, { contextSwitches: 15_732_358, idleWakeups: 320 }],
+      [77, { contextSwitches: 12 * 1024, idleWakeups: 3 * 1024 * 1024 }],
+    ]))
+  })
+
+  it('reads wakeup counters for the requested PIDs with one top sample', async () => {
+    const execFileImpl = vi.fn(async () => ({ stdout: 'PID CSW IDLEW\n101 10 2\n' }))
+
+    const counters = await readWakeupCounters([100, 101], { execFileImpl })
+
+    expect(execFileImpl).toHaveBeenCalledWith(
+      'top',
+      ['-l', '1', '-stats', 'pid,csw,idlew', '-pid', '100', '-pid', '101'],
+      expect.any(Object),
+    )
+    expect(counters.get(101)).toEqual({ contextSwitches: 10, idleWakeups: 2 })
+  })
+
+  it('reports per-process and total wakeup rates as evidence without changing CPU thresholds', () => {
+    const input = completeInput({
+      wakeupsBefore: new Map([
+        [100, { contextSwitches: 1000, idleWakeups: 100 }],
+        [101, { contextSwitches: 2000, idleWakeups: 200 }],
+      ]),
+      wakeupsAfter: new Map([
+        [100, { contextSwitches: 1500, idleWakeups: 150 }],
+        [101, { contextSwitches: 4000, idleWakeups: 400 }],
+      ]),
+    })
+    const baseline = evaluateIdleSample(completeInput())
+
+    const result = evaluateIdleSample(input)
+
+    expect(result.averageCores).toBe(baseline.averageCores)
+    expect(result.thresholdFailures).toEqual(baseline.thresholdFailures)
+    expect(result.processes.find(process => process.pid === 101).wakeups).toEqual({
+      contextSwitches: 2000,
+      idleWakeups: 200,
+      contextSwitchesPerSecond: 200,
+      idleWakeupsPerSecond: 20,
+    })
+    expect(result.processes.find(process => process.pid === 102).wakeups).toBeNull()
+    expect(result.wakeups).toEqual({
+      processCount: 2,
+      contextSwitches: 2500,
+      idleWakeups: 250,
+      contextSwitchesPerSecond: 250,
+      idleWakeupsPerSecond: 25,
+    })
+  })
+
+  it('reports the session daemon separately from the core CPU total', () => {
+    const beforeRows = [...processRows(), ...daemonRows()]
+    const afterRows = [...completeInput().afterRows, ...daemonRows().map(row => (
+      row.pid === 400 ? { ...row, cpuSeconds: 3 } : row
+    ))]
+    const baseline = evaluateIdleSample(completeInput())
+
+    const result = evaluateIdleSample(completeInput({
+      processSet: discoverIdleProcessSet(beforeRows, 101, RUN_DAEMON_ROOT),
+      afterRows,
+      wakeupsBefore: new Map([[400, { contextSwitches: 100, idleWakeups: 10 }]]),
+      wakeupsAfter: new Map([[400, { contextSwitches: 2100, idleWakeups: 30 }]]),
+    }))
+
+    expect(result.averageCores).toBe(baseline.averageCores)
+    expect(result.sessionDaemon).toEqual({
+      role: 'session-daemon',
+      pid: 400,
+      cpuDeltaSeconds: 1,
+      averageCores: 0.1,
+      rssBytes: 10 * mib,
+      childCount: 2,
+      childPids: [401, 402],
+      wakeups: {
+        contextSwitches: 2000,
+        idleWakeups: 20,
+        contextSwitchesPerSecond: 200,
+        idleWakeupsPerSecond: 2,
+      },
+    })
+    expect(result.wakeups).toMatchObject({ processCount: 1, contextSwitches: 2000 })
+    expect(result.evidenceFailures).toEqual([])
   })
 
   it('reports complete measurements and threshold failures separately', () => {
@@ -165,6 +295,49 @@ describe('idle resource sampler', () => {
     expect(collectFootprint).toHaveBeenCalledTimes(5)
     expect(result.measuredAt).toBe('2026-01-02T03:04:05.000Z')
     expect(result.evidenceFailures).toEqual([])
+  })
+
+  it('reads wakeups before and after the window for core processes and the scoped session daemon', async () => {
+    const rows = [
+      [...processRows(), ...daemonRows()],
+      [...processRows({ 101: { cpuSeconds: 5.1 } }), ...daemonRows()],
+    ]
+    const readings = [
+      new Map([[101, { contextSwitches: 10, idleWakeups: 1 }], [400, { contextSwitches: 100, idleWakeups: 5 }]]),
+      new Map([[101, { contextSwitches: 30, idleWakeups: 3 }], [400, { contextSwitches: 300, idleWakeups: 9 }]]),
+    ]
+    const readWakeups = vi.fn(async () => readings.shift())
+
+    const result = await sampleIdleResources({ durationSeconds: 2, sidecarPid: 101, sessionDaemonScope: RUN_DAEMON_ROOT }, {
+      readProcesses: vi.fn(async () => rows.shift()),
+      readWakeups,
+      collectEvents: vi.fn(async () => ({ complete: true, durationMs: 2_000, eventCount: 0, payloadBytes: 0, topEventTypes: [] })),
+      collectFootprint: vi.fn(async () => ({ currentBytes: 1, peakBytes: 2 })),
+      wait: vi.fn(async () => {}),
+      platform: 'darwin',
+    })
+
+    expect(readWakeups).toHaveBeenCalledTimes(2)
+    expect(readWakeups).toHaveBeenCalledWith([100, 101, 102, 103, 104, 400])
+    expect(result.sessionDaemon).toMatchObject({ pid: 400, childCount: 2, wakeups: { contextSwitchesPerSecond: 100 } })
+    expect(result.wakeups).toMatchObject({ processCount: 2, contextSwitches: 220, idleWakeups: 6 })
+  })
+
+  it('keeps sampling when wakeup counters are unavailable', async () => {
+    const rows = [processRows(), processRows()]
+
+    const result = await sampleIdleResources({ durationSeconds: 1, sidecarPid: 101 }, {
+      readProcesses: vi.fn(async () => rows.shift()),
+      readWakeups: vi.fn(async () => { throw new Error('top failed') }),
+      collectEvents: vi.fn(async () => ({ complete: true, durationMs: 1_000, eventCount: 0, payloadBytes: 0, topEventTypes: [] })),
+      collectFootprint: vi.fn(async () => ({ currentBytes: 1, peakBytes: 2 })),
+      wait: vi.fn(async () => {}),
+      platform: 'darwin',
+    })
+
+    expect(result.evidenceFailures).toEqual([])
+    expect(result.sessionDaemon).toBeNull()
+    expect(result.wakeups).toMatchObject({ processCount: 0, error: 'top failed' })
   })
 })
 

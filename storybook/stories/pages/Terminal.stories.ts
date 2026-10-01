@@ -36,13 +36,18 @@ export const ShellTabsAndInput: Story = {
     await waitFor(() => expect(canvas.getAllByRole('tab')).toHaveLength(2))
     await waitFor(() => expect(context.canvasElement.querySelectorAll('.xterm-helper-textarea')).toHaveLength(2))
     await terminalReady(context)
-    const activeTab = canvas.getByRole('tab', { name: /Shell 2, active/ })
-    const panel = context.canvasElement.ownerDocument.getElementById(activeTab.getAttribute('aria-controls')!)!
+    const shell1 = canvas.getAllByRole('tab')[0]
+    const shell1Panel = context.canvasElement.ownerDocument.getElementById(shell1.getAttribute('aria-controls')!)!
+    const shell1Input = shell1Panel.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')!
+    await userEvent.click(shell1)
+    await waitFor(() => expect(shell1Input).toHaveFocus())
+    const shell2 = canvas.getByRole('tab', { name: /Shell 2, inactive/ })
+    const panel = context.canvasElement.ownerDocument.getElementById(shell2.getAttribute('aria-controls')!)!
     const input = panel.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')!
-    input.focus()
-    await expect(input).toHaveFocus()
+    await userEvent.click(shell2)
+    await waitFor(() => expect(input).toHaveFocus())
     await userEvent.keyboard('pwd{Enter}')
-    await waitFor(() => expect(terminal.transport.inputs.map(input => input.data).join('')).toContain('pwd'))
+    await waitFor(() => expect(terminal.transport.inputs.map(input => input.data).join('')).toContain('pwd\r'))
     expect([...new Set(terminal.transport.inputs.map(input => input.shellSessionKey))]).toEqual(['project-P-1-shell-1'])
     await userEvent.click(canvas.getAllByRole('tab')[0])
     await expect(canvas.getAllByRole('tab')[0]).toHaveAttribute('aria-selected', 'true')

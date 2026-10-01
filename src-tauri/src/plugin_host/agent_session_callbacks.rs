@@ -25,18 +25,6 @@ impl PluginHost {
             .map_err(|error| format!("INVALID_SCOPE: invalid Session Scope: {error}"))
     }
 
-    fn publish_scoped_session_change(&self, plugin_id: &str, scope: &OwnedSessionScope) {
-        let _ = self.app_handle.emit(
-            "scoped-agent-session-changed",
-            serde_json::json!({
-                "pluginId": plugin_id,
-                "namespace": scope.namespace,
-                "targetKey": scope.target_key,
-                "revision": scope.revision,
-            }),
-        );
-    }
-
     pub(super) async fn start_scoped_agent_session_for_host(
         &self,
         params: &Value,
@@ -60,7 +48,6 @@ impl PluginHost {
             })
             .await
             .map_err(scoped_error)?;
-        self.publish_scoped_session_change(&plugin_id, &scope);
         serde_json::to_value(state).map_err(|error| error.to_string())
     }
 
@@ -121,11 +108,6 @@ impl PluginHost {
         };
         let service = self.scoped_agent_session_service_for_host()?;
         let state = service.status(&plugin_id, &scope).map_err(scoped_error)?;
-        let output_revision = if state.is_some() {
-            service.output_revision(&plugin_id, &scope).await.ok()
-        } else {
-            None
-        };
         let latest_sequence = {
             let db_state = self.database_state_for_host()?;
             let latest = crate::db::acquire_db(db_state.as_ref())
@@ -162,7 +144,6 @@ impl PluginHost {
             .collect::<Vec<_>>();
         Ok(serde_json::json!({
             "state": state,
-            "outputRevision": output_revision,
             "cursor": cursor,
             "transitions": transitions,
             "hasMore": has_more,
@@ -181,7 +162,6 @@ impl PluginHost {
             .input(&plugin_id, &scope, &input)
             .await
             .map_err(scoped_error)?;
-        self.publish_scoped_session_change(&plugin_id, &scope);
         serde_json::to_value(state).map_err(|error| error.to_string())
     }
 
@@ -196,7 +176,6 @@ impl PluginHost {
             .abort(&plugin_id, &scope)
             .await
             .map_err(scoped_error)?;
-        self.publish_scoped_session_change(&plugin_id, &scope);
         serde_json::to_value(state).map_err(|error| error.to_string())
     }
 
@@ -210,7 +189,6 @@ impl PluginHost {
             .release(&plugin_id, &scope)
             .await
             .map_err(scoped_error)?;
-        self.publish_scoped_session_change(&plugin_id, &scope);
         Ok(Value::Null)
     }
 

@@ -40,12 +40,7 @@ export function createSelfReviewWorkspaceController(
 
   const diffController = createSelfReviewDiffController({
     getTaskId: options.getTaskId,
-  })
-  let replyPullRequest = $derived.by(() => {
-    const loadedPr = diffController.linkedPr
-    if (!loadedPr) return null
-    return (pullRequestsByTask.get(options.getTaskId()) ?? [])
-      .find(pr => pr.id === loadedPr.id && pr.state === 'open') ?? null
+    getPullRequests: () => pullRequestsByTask.get(options.getTaskId()) ?? [],
   })
 
   const fileStateController = createSelfReviewFileStateController({
@@ -74,7 +69,6 @@ export function createSelfReviewWorkspaceController(
     getPrComments: () => diffController.prComments,
     getGithubUsername: () => diffController.githubUsername,
     getLinkedPr: () => diffController.linkedPr,
-    getReplyPullRequest: () => replyPullRequest,
     getComparisonFilenames: () => fileStateController.comparisonFilenames,
   })
 

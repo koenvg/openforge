@@ -311,6 +311,7 @@ impl PluginHost {
         }
 
         self.state_change.notify_waiters();
+        self.forward_scoped_agent_session_changes(session_id, process_token);
 
         let stdout_host = (*self).clone();
         tokio::spawn(async move {

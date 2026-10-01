@@ -2,6 +2,7 @@ use crate::host::Host;
 use crate::replacement::{Manager, Resources};
 use openforge_session_client::runtime::{check_peer, io_error, RuntimeDirectory};
 use openforge_session_protocol::*;
+use std::os::fd::AsRawFd;
 use std::os::unix::{fs::PermissionsExt, net::UnixListener};
 use std::time::Duration;
 use subtle::ConstantTimeEq;
@@ -62,16 +63,31 @@ pub(crate) fn serve(
     mut manager: Manager,
 ) -> Result<(), Error> {
     let socket = runtime.socket_path();
+    crate::wake::watch_child_exits().map_err(io_error)?;
+    let mut subscribers = crate::subscription::Subscribers::new(host.backend.journal.clone());
     eprintln!("session daemon ready");
     loop {
+        // Drain before polling so a wake that races this pass is not lost.
+        crate::wake::daemon().drain();
         host.poll()?;
         manager.poll();
+        let deadline = [host.next_deadline()?, manager.next_deadline()]
+            .into_iter()
+            .flatten()
+            .min();
+        let ready = crate::wake::wait(
+            resources.control.as_raw_fd(),
+            false,
+            crate::wake::daemon(),
+            deadline,
+        )
+        .map_err(io_error)?;
+        if !ready.readable {
+            continue;
+        }
         let mut stream = match resources.control.accept() {
             Ok((stream, _)) => stream,
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                std::thread::sleep(Duration::from_millis(5));
-                continue;
-            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => continue,
             Err(error) => return Err(io_error(error)),
         };
         if check_peer(&stream).is_err() {
@@ -88,7 +104,8 @@ pub(crate) fn serve(
             continue;
         }
         let mut activation = None;
-        let result = read_frame::<_, Request>(&mut stream).and_then(|request| {
+        let mut subscribing = false;
+        let mut result = read_frame::<_, Request>(&mut stream).and_then(|request| {
             if !bool::from(
                 request
                     .token
@@ -97,10 +114,26 @@ pub(crate) fn serve(
             ) {
                 return Err(Error::Unauthorized);
             }
+            if let Command::Subscribe { controller, after } = request.command {
+                subscribing = true;
+                return host.handle(Command::Events { controller, after });
+            }
+            let connecting = matches!(request.command, Command::Connect { .. });
             let dispatch = manager.dispatch(&mut host, &runtime, &resources, request.command)?;
+            if connecting {
+                subscribers.close_all();
+            }
             activation = dispatch.activation;
             Ok(dispatch.response)
         });
+        if subscribing {
+            if let Ok(Response::Events(first)) = result {
+                match subscribers.add(&stream, first) {
+                    Ok(()) => continue,
+                    Err(error) => result = Err(error),
+                }
+            }
+        }
         if host.shutdown {
             std::fs::remove_file(&socket).map_err(io_error)?;
         }

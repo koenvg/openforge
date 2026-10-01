@@ -398,7 +398,6 @@ describe('runtime contribution registry', () => {
     const createdTask = { id: 'T-2', initial_prompt: 'New prompt', prompt: null, title: null, title_source: null, title_generated_at: null, status: 'backlog' as const, agent: null, permission_mode: null, worktree_source: null, worktree_branch: null, source_ticket_url: null, depends_on: ['T-1'], project_id: 'P-1', created_at: 3, updated_at: 3 }
     const host = {
       listProjects: vi.fn(async () => [{ id: 'P-1', name: 'OpenForge', path: '/repo', created_at: 1, updated_at: 2 }]),
-      listTasks: vi.fn(async () => [{ id: 'T-1', initial_prompt: 'Prompt', prompt: null, title: null, title_source: null, title_generated_at: null, status: 'doing' as const, agent: null, permission_mode: null, worktree_source: null, worktree_branch: null, source_ticket_url: null, depends_on: [], project_id: 'P-1', created_at: 1, updated_at: 2 }]),
       createTask: vi.fn(async () => createdTask),
       startTaskImplementation: vi.fn(async () => ({ taskId: 'T-2', workspacePath: '/repo/.worktrees/T-2', sessionId: 'S-1' })),
       sendTaskFollowUp: vi.fn(async () => ({ taskId: 'T-2', sessionId: 'S-1', disposition: 'queued' as const })),
@@ -421,9 +420,6 @@ describe('runtime contribution registry', () => {
     const api = registry.getFrontendApi()
 
     await expect(api.projects.list()).resolves.toHaveLength(1)
-    await expect(api.tasks.list({ projectId: 'P-1' })).resolves.toHaveLength(1)
-    await api.tasks.list({ projectId: 'P-1', includeDone: true })
-    expect(host.listTasks).toHaveBeenCalledWith({ projectId: 'P-1', includeDone: true })
     await expect(api.tasks.create({
       initialPrompt: 'New prompt',
       projectId: 'P-1',

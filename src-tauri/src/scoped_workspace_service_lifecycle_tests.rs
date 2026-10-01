@@ -280,6 +280,50 @@ async fn count_limit_evicts_the_least_recently_used_inactive_checkout() {
 }
 
 #[tokio::test]
+async fn evicting_a_checkout_publishes_a_change_for_its_session_scope() {
+    let (database, temp_dir) = make_test_db("scoped_workspace_eviction_change");
+    let repo = repository(temp_dir.path());
+    let project = database
+        .create_project("Repository", &repo.to_string_lossy())
+        .expect("create project");
+    let (events, mut received) = tokio::sync::broadcast::channel(16);
+    let service = ScopedWorkspaceService::new(
+        Arc::new(Mutex::new(database)),
+        temp_dir.path().join("scoped-workspaces"),
+    )
+    .with_limits(1, MAX_SCOPED_WORKSPACE_BYTES)
+    .with_events(RuntimeEventPublisher::new(None, Some(events)));
+    for target_key in ["owner/repo#1", "owner/repo#2"] {
+        service
+            .acquire(AcquireScopedWorkspace {
+                owner_plugin_id: "com.example.review",
+                scope: SessionScope {
+                    namespace: "github-pr",
+                    target_key,
+                    revision: "head",
+                },
+                project_id: &project.id,
+                checkout_revision: "HEAD",
+            })
+            .await
+            .expect("create checkout");
+    }
+
+    let change = received.try_recv().expect("eviction change");
+    assert_eq!(change.event_name, "scoped-agent-session-changed");
+    assert_eq!(
+        change.payload,
+        serde_json::json!({
+            "pluginId": "com.example.review",
+            "namespace": "github-pr",
+            "targetKey": "owner/repo#1",
+            "revision": "head",
+        })
+    );
+    assert!(received.try_recv().is_err());
+}
+
+#[tokio::test]
 async fn reuse_refreshes_lru_recency_before_eviction() {
     let (database, temp_dir) = make_test_db("scoped_workspace_lru_touch");
     let repo = repository(temp_dir.path());

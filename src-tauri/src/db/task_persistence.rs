@@ -2,8 +2,8 @@ use super::{
     task_dependencies::{load_task_dependency_ids, load_task_dependency_ids_for_tasks},
     task_labels::{load_task_labels, load_task_labels_for_tasks},
     tasks::{
-        resolved_projection_title, CompactTaskRow, TaskDetail, TaskDetailRelationshipRow,
-        TaskDetailRelationships, TaskRelationshipReferenceRow, TaskRow,
+        resolved_projection_title, TaskDetail, TaskDetailRelationshipRow, TaskDetailRelationships,
+        TaskRelationshipReferenceRow, TaskRow,
     },
     Database,
 };
@@ -22,29 +22,10 @@ macro_rules! task_row_query {
     };
 }
 
-macro_rules! compact_task_row_query {
-    ($suffix:literal) => {
-        concat!(
-            "SELECT id, status, project_id, created_at, updated_at, agent, permission_mode, ",
-            "worktree_source, worktree_branch, ",
-            "title, prompt_preview, title_source, title_generated_at, source_ticket_url FROM tasks ",
-            $suffix
-        )
-    };
-}
-
 const TASKS_FOR_PROJECT_SQL: &str =
     task_row_query!("WHERE project_id = ?1 ORDER BY updated_at DESC");
 const TASKS_FOR_PROJECT_EXCLUDING_STATE_SQL: &str =
     task_row_query!("WHERE project_id = ?1 AND status != ?2 ORDER BY updated_at DESC");
-const TASKS_FOR_PROJECT_BY_STATE_SQL: &str =
-    task_row_query!("WHERE project_id = ?1 AND status = ?2 ORDER BY updated_at DESC");
-const COMPACT_TASKS_FOR_PROJECT_SQL: &str =
-    compact_task_row_query!("WHERE project_id = ?1 ORDER BY updated_at DESC");
-const COMPACT_TASKS_FOR_PROJECT_EXCLUDING_STATE_SQL: &str =
-    compact_task_row_query!("WHERE project_id = ?1 AND status != ?2 ORDER BY updated_at DESC");
-const COMPACT_TASKS_FOR_PROJECT_BY_STATE_SQL: &str =
-    compact_task_row_query!("WHERE project_id = ?1 AND status = ?2 ORDER BY updated_at DESC");
 const ALL_TASKS_SQL: &str = task_row_query!("ORDER BY updated_at DESC");
 const TASK_BY_ID_SQL: &str = task_row_query!("WHERE id = ?1");
 
@@ -101,29 +82,6 @@ pub(super) fn task_from_row(row: &rusqlite::Row<'_>) -> Result<TaskRow> {
         worktree_branch: row.get(13)?,
         source_ticket_url: row.get(14)?,
         completed_at: row.get(15)?,
-        depends_on: Vec::new(),
-        labels: Vec::new(),
-    })
-}
-
-fn compact_task_from_row(row: &rusqlite::Row<'_>) -> Result<CompactTaskRow> {
-    let id: String = row.get(0)?;
-    let explicit_title: Option<String> = row.get(9)?;
-    let prompt_preview: String = row.get(10)?;
-    Ok(CompactTaskRow {
-        title: resolved_projection_title(&id, explicit_title.as_deref(), &prompt_preview),
-        id,
-        status: row.get(1)?,
-        project_id: row.get(2)?,
-        created_at: row.get(3)?,
-        updated_at: row.get(4)?,
-        agent: row.get(5)?,
-        permission_mode: row.get(6)?,
-        worktree_source: row.get(7)?,
-        worktree_branch: row.get(8)?,
-        title_source: row.get(11)?,
-        title_generated_at: row.get(12)?,
-        source_ticket_url: row.get(13)?,
         depends_on: Vec::new(),
         labels: Vec::new(),
     })
@@ -199,20 +157,6 @@ pub(super) fn hydrate_task_rows(
     Ok(tasks)
 }
 
-fn hydrate_compact_task_rows(
-    conn: &rusqlite::Connection,
-    mut tasks: Vec<CompactTaskRow>,
-) -> Result<Vec<CompactTaskRow>> {
-    let task_ids = tasks.iter().map(|task| task.id.clone()).collect::<Vec<_>>();
-    let mut dependencies = load_task_dependency_ids_for_tasks(conn, &task_ids)?;
-    let mut labels = load_task_labels_for_tasks(conn, &task_ids)?;
-    for task in &mut tasks {
-        task.depends_on = dependencies.remove(&task.id).unwrap_or_default();
-        task.labels = labels.remove(&task.id).unwrap_or_default();
-    }
-    Ok(tasks)
-}
-
 pub(super) fn hydrate_task_relationship_references(
     conn: &rusqlite::Connection,
     mut tasks: Vec<TaskRelationshipReferenceRow>,
@@ -236,17 +180,6 @@ fn query_task_rows<const N: usize>(
     hydrate_task_rows(conn, tasks)
 }
 
-fn query_compact_task_rows<const N: usize>(
-    conn: &rusqlite::Connection,
-    query: &str,
-    params: [&str; N],
-) -> Result<Vec<CompactTaskRow>> {
-    let mut statement = conn.prepare(query)?;
-    let rows = statement.query_map(params_from_iter(params), compact_task_from_row)?;
-    let tasks = rows.collect::<Result<Vec<_>>>()?;
-    hydrate_compact_task_rows(conn, tasks)
-}
-
 impl Database {
     /// Get all tasks for a project.
     pub fn get_tasks_for_project(&self, project_id: &str) -> Result<Vec<TaskRow>> {
@@ -265,46 +198,6 @@ impl Database {
             TASKS_FOR_PROJECT_EXCLUDING_STATE_SQL,
             [project_id, state],
         )
-    }
-
-    pub fn get_compact_tasks_for_project(&self, project_id: &str) -> Result<Vec<CompactTaskRow>> {
-        let conn = self.lock_conn()?;
-        query_compact_task_rows(&conn, COMPACT_TASKS_FOR_PROJECT_SQL, [project_id])
-    }
-
-    pub fn get_compact_tasks_for_project_excluding_state(
-        &self,
-        project_id: &str,
-        state: &str,
-    ) -> Result<Vec<CompactTaskRow>> {
-        let conn = self.lock_conn()?;
-        query_compact_task_rows(
-            &conn,
-            COMPACT_TASKS_FOR_PROJECT_EXCLUDING_STATE_SQL,
-            [project_id, state],
-        )
-    }
-
-    pub fn get_compact_tasks_for_project_by_state(
-        &self,
-        project_id: &str,
-        state: &str,
-    ) -> Result<Vec<CompactTaskRow>> {
-        let conn = self.lock_conn()?;
-        query_compact_task_rows(
-            &conn,
-            COMPACT_TASKS_FOR_PROJECT_BY_STATE_SQL,
-            [project_id, state],
-        )
-    }
-
-    pub fn get_tasks_for_project_by_state(
-        &self,
-        project_id: &str,
-        state: &str,
-    ) -> Result<Vec<TaskRow>> {
-        let conn = self.lock_conn()?;
-        query_task_rows(&conn, TASKS_FOR_PROJECT_BY_STATE_SQL, [project_id, state])
     }
 
     pub fn get_active_task_details(&self, project_id: Option<&str>) -> Result<Vec<TaskDetail>> {
@@ -492,21 +385,30 @@ ORDER BY
 mod tests {
     use super::*;
     use crate::db::{
-        task_persistence_test_support::{
-            seed_project_task_history, ACTIVE_TASK_COUNT, COMPLETED_TASK_HISTORY_SIZE,
-        },
+        task_persistence_test_support::{seed_project_task_history, ACTIVE_TASK_COUNT},
         test_helpers::*,
+        CompletedTaskQuery,
     };
     use rusqlite::trace::{TraceEvent, TraceEventCodes};
-    use std::cell::Cell;
+    use std::cell::{Cell, RefCell};
 
     thread_local! {
         static TRACED_STATEMENT_COUNT: Cell<usize> = const { Cell::new(0) };
+        static COMPLETED_PAGE_SQL: RefCell<Option<String>> = const { RefCell::new(None) };
     }
 
     fn count_traced_statement(event: TraceEvent<'_>) {
         if matches!(event, TraceEvent::Stmt(_, _)) {
             TRACED_STATEMENT_COUNT.set(TRACED_STATEMENT_COUNT.get() + 1);
+        }
+    }
+
+    fn capture_completed_page_sql(event: TraceEvent<'_>) {
+        if let TraceEvent::Stmt(statement, _) = event {
+            let sql = statement.sql();
+            if sql.contains("FROM tasks WHERE tasks.status = 'done'") && sql.contains("ORDER BY") {
+                COMPLETED_PAGE_SQL.with(|slot| *slot.borrow_mut() = Some(sql.into_owned()));
+            }
         }
     }
 
@@ -529,10 +431,6 @@ mod tests {
     }
 
     fn task_ids(tasks: &[TaskRow]) -> Vec<&str> {
-        tasks.iter().map(|task| task.id.as_str()).collect()
-    }
-
-    fn compact_task_ids(tasks: &[CompactTaskRow]) -> Vec<&str> {
         tasks.iter().map(|task| task.id.as_str()).collect()
     }
 
@@ -619,39 +517,11 @@ mod tests {
             task_ids(&project_tasks),
             vec![newest.id.as_str(), middle.id.as_str(), oldest.id.as_str()]
         );
-        let backlog_tasks = db
-            .get_tasks_for_project_by_state(&project.id, "backlog")
-            .expect("get backlog tasks");
-        assert_eq!(
-            task_ids(&backlog_tasks),
-            vec![middle.id.as_str(), oldest.id.as_str()]
-        );
         let non_doing_tasks = db
             .get_tasks_for_project_excluding_state(&project.id, "doing")
             .expect("get non-doing tasks");
         assert_eq!(
             task_ids(&non_doing_tasks),
-            vec![middle.id.as_str(), oldest.id.as_str()]
-        );
-        let compact_tasks = db
-            .get_compact_tasks_for_project(&project.id)
-            .expect("get compact project tasks");
-        assert_eq!(
-            compact_task_ids(&compact_tasks),
-            vec![newest.id.as_str(), middle.id.as_str(), oldest.id.as_str()]
-        );
-        let compact_backlog_tasks = db
-            .get_compact_tasks_for_project_by_state(&project.id, "backlog")
-            .expect("get compact backlog tasks");
-        assert_eq!(
-            compact_task_ids(&compact_backlog_tasks),
-            vec![middle.id.as_str(), oldest.id.as_str()]
-        );
-        let compact_non_doing_tasks = db
-            .get_compact_tasks_for_project_excluding_state(&project.id, "doing")
-            .expect("get compact non-doing tasks");
-        assert_eq!(
-            compact_task_ids(&compact_non_doing_tasks),
             vec![middle.id.as_str(), oldest.id.as_str()]
         );
         let all_tasks = db.get_all_tasks().expect("get all tasks");
@@ -679,30 +549,18 @@ mod tests {
         let connection = db.connection();
         let conn = connection.lock().expect("lock connection");
 
-        for query in [TASKS_FOR_PROJECT_SQL, COMPACT_TASKS_FOR_PROJECT_SQL] {
-            assert_plan_uses_index_without_temp_sort(
-                &query_plan(&conn, query, [&project.id]),
-                "idx_tasks_project_updated_at",
-            );
-        }
-        for query in [
-            TASKS_FOR_PROJECT_EXCLUDING_STATE_SQL,
-            COMPACT_TASKS_FOR_PROJECT_EXCLUDING_STATE_SQL,
-        ] {
-            assert_plan_uses_index_without_temp_sort(
-                &query_plan(&conn, query, [&project.id, "done"]),
-                "idx_tasks_project_active_updated_at",
-            );
-        }
-        for query in [
-            TASKS_FOR_PROJECT_BY_STATE_SQL,
-            COMPACT_TASKS_FOR_PROJECT_BY_STATE_SQL,
-        ] {
-            assert_plan_uses_index_without_temp_sort(
-                &query_plan(&conn, query, [&project.id, "done"]),
-                "idx_tasks_project_completed_updated_at",
-            );
-        }
+        assert_plan_uses_index_without_temp_sort(
+            &query_plan(&conn, TASKS_FOR_PROJECT_SQL, [&project.id]),
+            "idx_tasks_project_updated_at",
+        );
+        assert_plan_uses_index_without_temp_sort(
+            &query_plan(
+                &conn,
+                TASKS_FOR_PROJECT_EXCLUDING_STATE_SQL,
+                [&project.id, "done"],
+            ),
+            "idx_tasks_project_active_updated_at",
+        );
 
         let relationship_plan = query_plan(
             &conn,
@@ -721,84 +579,40 @@ mod tests {
         drop(conn);
 
         assert_eq!(
-            db.get_compact_tasks_for_project_excluding_state(&project.id, "done")
+            db.get_tasks_for_project_excluding_state(&project.id, "done")
                 .expect("refresh active tasks")
                 .len() as i64,
             ACTIVE_TASK_COUNT
         );
-        assert_eq!(
-            db.get_compact_tasks_for_project_by_state(&project.id, "done")
-                .expect("refresh completed tasks")
-                .len() as i64,
-            COMPLETED_TASK_HISTORY_SIZE
+        COMPLETED_PAGE_SQL.with(|slot| *slot.borrow_mut() = None);
+        connection.lock().expect("lock connection").trace_v2(
+            TraceEventCodes::SQLITE_TRACE_STMT,
+            Some(capture_completed_page_sql),
         );
+        let completed = db
+            .tasks()
+            .completed(&project.id, CompletedTaskQuery::default())
+            .expect("refresh completed tasks");
+        connection
+            .lock()
+            .expect("lock connection")
+            .trace_v2(TraceEventCodes::empty(), None);
+        let completed_sql = COMPLETED_PAGE_SQL
+            .with(|slot| slot.borrow_mut().take())
+            .expect("trace canonical Completed page SQL");
+        let conn = connection.lock().expect("lock connection");
+        let completed_plan = query_plan(&conn, &completed_sql, [&project.id, "51"]);
+        // The keyset index covers both the update time and ID tie-breaker for bounded pages.
+        assert_plan_uses_index_without_temp_sort(&completed_plan, "idx_tasks_completed_keyset");
+        drop(conn);
+        assert_eq!(completed.tasks.len(), 50);
+        assert!(completed.next_cursor.is_some());
         assert_eq!(
             db.get_task_relationship_references_for_project(&project.id)
                 .expect("refresh relationship references")
                 .len(),
             10
         );
-    }
-
-    #[test]
-    fn compact_rows_use_explicit_titles_and_prompt_fallbacks() {
-        let (db, _temp_dir) = make_test_db("task_persistence_compact_titles");
-        let project = db
-            .create_project("Project", "/tmp/task-persistence-compact-titles")
-            .expect("create project");
-        let long_prompt = "x".repeat(130);
-        let null_title = db
-            .create_task(&long_prompt, "backlog", Some(&project.id), None, None)
-            .expect("create null-title task");
-        let empty_title = db
-            .create_task(
-                "Empty title fallback",
-                "backlog",
-                Some(&project.id),
-                None,
-                None,
-            )
-            .expect("create empty-title task");
-        let explicit_title = db
-            .create_task(
-                "Prompt is not the title",
-                "backlog",
-                Some(&project.id),
-                None,
-                None,
-            )
-            .expect("create explicit-title task");
-        {
-            let connection = db.connection();
-            let conn = connection.lock().expect("lock connection");
-            conn.execute(
-                "UPDATE tasks SET title = '' WHERE id = ?1",
-                [&empty_title.id],
-            )
-            .expect("store empty title");
-            conn.execute(
-                "UPDATE tasks SET title = 'Explicit title' WHERE id = ?1",
-                [&explicit_title.id],
-            )
-            .expect("store explicit title");
-        }
-
-        let tasks = db
-            .get_compact_tasks_for_project(&project.id)
-            .expect("get compact tasks");
-        let title_for = |id: &str| {
-            tasks
-                .iter()
-                .find(|task| task.id == id)
-                .expect("find compact task")
-                .title
-                .as_str()
-        };
-        assert_eq!(title_for(&null_title.id), "x".repeat(120));
-        assert_eq!(title_for(&empty_title.id), "Empty title fallback");
-        assert_eq!(title_for(&explicit_title.id), "Explicit title");
-
-        drop(db);
     }
 
     #[test]
@@ -1034,8 +848,6 @@ mod tests {
                 .expect("get project tasks"),
             db.get_tasks_for_project_excluding_state(&project.id, "doing")
                 .expect("get non-doing tasks"),
-            db.get_tasks_for_project_by_state(&project.id, "backlog")
-                .expect("get backlog tasks"),
             db.get_all_tasks().expect("get all tasks"),
         ] {
             assert_hydrated(
@@ -1043,22 +855,6 @@ mod tests {
                     .find(|row| row.id == task.id)
                     .expect("find hydrated task"),
             );
-        }
-
-        for rows in [
-            db.get_compact_tasks_for_project(&project.id)
-                .expect("get compact project tasks"),
-            db.get_compact_tasks_for_project_excluding_state(&project.id, "doing")
-                .expect("get compact non-doing tasks"),
-            db.get_compact_tasks_for_project_by_state(&project.id, "backlog")
-                .expect("get compact backlog tasks"),
-        ] {
-            let row = rows
-                .iter()
-                .find(|row| row.id == task.id)
-                .expect("find hydrated compact task");
-            assert_eq!(row.depends_on, vec![dependency.id.clone()]);
-            assert_eq!(row.labels, vec![label.clone()]);
         }
 
         drop(db);

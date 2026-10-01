@@ -1,7 +1,6 @@
 import { getCommitDiff, getTaskCommits, getTaskDiff } from "./ipc";
 import { setSelfReviewDiffFiles } from "./taskScopedSelfReviewState";
 import type { CommitInfo } from "./types";
-import type { InitialSelfReviewContextLoader } from "./initialSelfReviewContextLoader.svelte";
 
 // ============================================================================
 // Interface
@@ -28,10 +27,6 @@ export function createDiffLoader(deps: {
 	/** Whether committed changes (merge-base..HEAD) are part of the diff. Defaults to true. */
 	getIncludeCommitted?: () => boolean;
 	getIncludeUncommitted: () => boolean;
-	initialReviewContext?: Pick<
-		InitialSelfReviewContextLoader,
-		"hydrate" | "invalidate" | "cleanup"
-	>;
 	initialSelectedCommitSha?: string | null;
 	onSelectedCommitShaChange?: (sha: string | null) => void;
 }): DiffLoaderState {
@@ -45,7 +40,6 @@ export function createDiffLoader(deps: {
 
 	function beginLoad(): number {
 		const generation = ++loadGeneration;
-		deps.initialReviewContext?.invalidate();
 		isLoading = true;
 		error = null;
 		return generation;
@@ -72,32 +66,20 @@ export function createDiffLoader(deps: {
 	async function loadDiffFiles(
 		taskId: string,
 		generation: number,
-	): Promise<boolean> {
+	): Promise<void> {
 		const diffs = await fetchDiff(taskId);
-		if (isStale(generation)) return false;
+		if (isStale(generation)) return;
 		setSelfReviewDiffFiles(taskId, diffs);
-		return true;
 	}
 
 	async function requestDiff(options: {
-		loadInitialReviewData: boolean;
 		failureLog: string;
 		failureMessage: string;
 	}): Promise<void> {
 		const generation = beginLoad();
 		try {
 			const taskId = deps.getTaskId();
-			const diffLoaded = await loadDiffFiles(taskId, generation);
-			if (!diffLoaded) return;
-
-			if (
-				options.loadInitialReviewData &&
-				selectedCommitSha === null &&
-				deps.initialReviewContext
-			) {
-				await deps.initialReviewContext.hydrate(taskId);
-				if (isStale(generation)) return;
-			}
+			await loadDiffFiles(taskId, generation);
 		} catch (e) {
 			if (isStale(generation)) return;
 			console.error(options.failureLog, e);
@@ -111,7 +93,6 @@ export function createDiffLoader(deps: {
 
 	async function loadDiff(): Promise<void> {
 		await requestDiff({
-			loadInitialReviewData: true,
 			failureLog: "Failed to load self-review data:",
 			failureMessage: "Failed to load diff. Please try again.",
 		});
@@ -139,7 +120,6 @@ export function createDiffLoader(deps: {
 
 	async function refresh(): Promise<void> {
 		await requestDiff({
-			loadInitialReviewData: false,
 			failureLog: "Failed to refresh diff:",
 			failureMessage: "Failed to refresh diff.",
 		});
@@ -150,7 +130,6 @@ export function createDiffLoader(deps: {
 		commitLoadGeneration += 1;
 		isLoading = false;
 		error = null;
-		deps.initialReviewContext?.cleanup(deps.getTaskId());
 		setSelfReviewDiffFiles(deps.getTaskId(), []);
 		selectedCommitSha = null;
 		commits = [];

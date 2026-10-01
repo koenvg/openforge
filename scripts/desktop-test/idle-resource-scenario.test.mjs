@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { runIdleResourceScenario } from './idle-resource-scenario.mjs'
+import { runIdleResourceScenario, waitForQuietSessionDaemonShells } from './idle-resource-scenario.mjs'
+
+const DAEMON_SCOPE = '/tmp/run/app-data/session-daemon'
 
 const processEvidence = [
   { role: 'electron-main', pid: 100, averageCores: 0.01, rssBytes: 1000, vmmap: { currentBytes: 1000, peakBytes: 1200 } },
@@ -42,17 +44,21 @@ function createHarness({ sample = validSample(), memory = validMemory() } = {}) 
     attachTerminalView: vi.fn(async () => { operations.push('attach'); return { region, terminalKey: 'T-1-shell-0' } }),
     detachTerminalView: vi.fn(async () => { operations.push('detach') }),
     waitForUiQuiescence: vi.fn(async () => { operations.push('quiescent') }),
+    spawnShellPty: vi.fn(async ({ terminalIndex }) => { operations.push(`spawn-${terminalIndex}`); return 1000 + terminalIndex }),
   }
+  const waitForIdleShells = vi.fn(async () => { operations.push('shells-quiet') })
   const sampleIdle = vi.fn(async () => { operations.push('sample'); return sample })
   const readConnection = vi.fn(async () => { operations.push('connection'); return { port: 4311, token: 'secret' } })
   const fetchMemory = vi.fn(async () => { operations.push('memory'); return memory })
   return {
     context: {
       page: {},
-      fixture: { manifest: { taskId: 'T-1', projectName: 'Project', taskTitle: 'Task' } },
+      fixture: { manifest: { taskId: 'T-1', projectName: 'Project', taskTitle: 'Task', workspacePath: '/tmp/run/repository' } },
+      paths: { appDataDir: '/tmp/run/app-data' },
       readiness: { process: { pid: 101, command: '/tmp/openforge-sidecar --port 4311' } },
     },
-    dependencies: { createDriver: () => driver, fetchMemory, readConnection, sampleIdle },
+    dependencies: { createDriver: () => driver, fetchMemory, readConnection, sampleIdle, waitForIdleShells },
+    waitForIdleShells,
     driver,
     fetchMemory,
     operations,
@@ -73,7 +79,7 @@ describe('idle-resource invariant scenario', () => {
     expect(harness.operations).toEqual([
       'verify', 'select', 'attach', 'detach', 'quiescent', 'sample', 'connection', 'memory',
     ])
-    expect(harness.sampleIdle).toHaveBeenCalledWith({ durationSeconds: 30, sidecarPid: 101 })
+    expect(harness.sampleIdle).toHaveBeenCalledWith({ durationSeconds: 30, sidecarPid: 101, sessionDaemonScope: DAEMON_SCOPE })
     expect(harness.readConnection).toHaveBeenCalledWith(101, '/tmp/openforge-sidecar --port 4311')
     expect(result).toMatchObject({
       assertions: [
@@ -86,6 +92,48 @@ describe('idle-resource invariant scenario', () => {
     })
   })
 
+  it('spawns idle fixture shells and waits for them to become quiet before sampling', async () => {
+    const sample = { ...validSample(), sessionDaemon: { pid: 400, childCount: 3 } }
+    const harness = createHarness({ sample })
+
+    const result = await runIdleResourceScenario({
+      context: harness.context,
+      options: { idleDurationSeconds: 30, idleShells: 2, scenarioTimeoutMs: 8_000 },
+    }, harness.dependencies)
+
+    expect(harness.operations).toEqual([
+      'verify', 'select', 'attach', 'detach', 'quiescent',
+      'spawn-1', 'spawn-2', 'shells-quiet', 'quiescent', 'sample', 'connection', 'memory',
+    ])
+    expect(harness.driver.spawnShellPty).toHaveBeenCalledWith({
+      taskId: 'T-1',
+      cwd: '/tmp/run/repository',
+      terminalIndex: 1,
+    })
+    expect(harness.waitForIdleShells).toHaveBeenCalledWith(expect.objectContaining({ scope: DAEMON_SCOPE, count: 2 }))
+    expect(result.idleEvidence).toMatchObject({ idleShells: { requested: 2, instanceIds: [1001, 1002] } })
+  })
+
+  it('rejects idle shells that did not run in the isolated session daemon', async () => {
+    const harness = createHarness()
+
+    await expect(runIdleResourceScenario({
+      context: harness.context,
+      options: { idleDurationSeconds: 30, idleShells: 2, scenarioTimeoutMs: 8_000 },
+    }, harness.dependencies)).rejects.toThrow('Idle shells were not sampled in the isolated session daemon')
+  })
+
+  it('refuses idle shells in reuse mode', async () => {
+    const harness = createHarness()
+    harness.context.fixture = null
+    harness.context.policy = { mode: 'reuse' }
+
+    await expect(runIdleResourceScenario({
+      context: harness.context,
+      options: { idleDurationSeconds: 30, idleShells: 1, scenarioTimeoutMs: 8_000 },
+    }, harness.dependencies)).rejects.toThrow('Idle shells require an isolated fixture')
+    expect(harness.operations).toEqual([])
+  })
 
   it('keeps reuse mode observational without fixture setup or UI operations', async () => {
     const harness = createHarness()
@@ -102,6 +150,7 @@ describe('idle-resource invariant scenario', () => {
 
     expect(createDriver).not.toHaveBeenCalled()
     expect(harness.operations).toEqual(['sample', 'connection', 'memory'])
+    expect(harness.sampleIdle).toHaveBeenCalledWith({ durationSeconds: 30, sidecarPid: 101, sessionDaemonScope: null })
   })
   it.each([
     ['unsupported peak evidence', {
@@ -126,5 +175,40 @@ describe('idle-resource invariant scenario', () => {
       context: harness.context,
       options: { idleDurationSeconds: 30, scenarioTimeoutMs: 8_000 },
     }, harness.dependencies)).rejects.toThrow(expected)
+  })
+})
+
+describe('quiet session daemon shells', () => {
+  const daemon = { pid: 400, parentPid: 1, cpuSeconds: 1, rssBytes: 1, command: `${DAEMON_SCOPE}/session-v1/releases/x/openforge-session-daemon ${DAEMON_SCOPE}` }
+  const shell = (pid, cpuSeconds) => ({ pid, parentPid: 400, cpuSeconds, rssBytes: 1, command: '-zsh' })
+
+  it('waits until the expected shells exist and their CPU counters stop moving', async () => {
+    const snapshots = [
+      [daemon, shell(401, 0.1)],
+      [daemon, shell(401, 0.2), shell(402, 0.1)],
+      [daemon, shell(401, 0.3), shell(402, 0.2)],
+      [daemon, shell(401, 0.3), shell(402, 0.2)],
+    ]
+    const readProcesses = vi.fn(async () => snapshots.shift())
+
+    const result = await waitForQuietSessionDaemonShells(
+      { scope: DAEMON_SCOPE, count: 2, timeoutMs: 10_000 },
+      { readProcesses, wait: vi.fn(async () => {}), now: () => 0 },
+    )
+
+    expect(readProcesses).toHaveBeenCalledTimes(4)
+    expect(result).toEqual({ pid: 400, childCount: 2 })
+  })
+
+  it('fails when the shells never appear in the scoped daemon', async () => {
+    let clock = 0
+    await expect(waitForQuietSessionDaemonShells(
+      { scope: DAEMON_SCOPE, count: 2, timeoutMs: 3_000 },
+      {
+        readProcesses: vi.fn(async () => [daemon, shell(401, 0.1)]),
+        wait: vi.fn(async milliseconds => { clock += milliseconds }),
+        now: () => clock,
+      },
+    )).rejects.toThrow('Expected 2 quiet shells in the isolated session daemon within 3000 ms')
   })
 })

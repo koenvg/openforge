@@ -53,13 +53,13 @@ describe('plugin-host stdio transport', () => {
     const stdout = captureStdout()
     const bridge = new StdioHostCallbackBridge()
 
-    const result = bridge.request({ method: 'openforge.tasks.get', params: { taskId: 'T-1' } })
+    const result = bridge.request({ method: 'openforge.tasks.detail', params: { projectId: 'P-1', taskId: 'T-1' } })
 
     expect(JSON.parse(stdout.output.join(''))).toEqual({
       jsonrpc: '2.0',
       id: 1,
-      method: 'openforge.tasks.get',
-      params: { taskId: 'T-1' },
+      method: 'openforge.tasks.detail',
+      params: { projectId: 'P-1', taskId: 'T-1' },
     })
     expect(bridge.handleResponse({ jsonrpc: '2.0', id: 1, result: { id: 'T-1' } })).toBe(true)
     await expect(result).resolves.toEqual({ id: 'T-1' })

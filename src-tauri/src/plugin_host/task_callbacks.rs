@@ -54,43 +54,6 @@ impl PluginHost {
             .ok_or_else(|| format!("plugin host app task command returned no value: {command}"))
     }
 
-    pub(super) fn list_tasks_for_host(&self, params: &Value) -> Result<Value, String> {
-        let project_id = optional_param_string(params, "projectId")?;
-        let include_done = optional_param_bool(params, "includeDone")?.unwrap_or(false);
-        let db_state = self.database_state_for_host()?;
-        let db = crate::db::acquire_db(db_state.as_ref());
-        let tasks = if let Some(project_id) = project_id {
-            if include_done {
-                db.get_tasks_for_project(&project_id)
-                    .map_err(|error| format!("failed to list project tasks: {error}"))?
-            } else {
-                db.get_tasks_for_project_excluding_state(&project_id, "done")
-                    .map_err(|error| format!("failed to list project tasks: {error}"))?
-            }
-        } else {
-            db.get_all_tasks()
-                .map_err(|error| format!("failed to list tasks: {error}"))?
-        };
-        serde_json::to_value(tasks).map_err(|error| format!("failed to serialize tasks: {error}"))
-    }
-
-    pub(super) fn get_task_for_host(&self, params: &Value) -> Result<Value, String> {
-        let task_id = required_param_string(params, "taskId")?;
-        let db_state = self.database_state_for_host()?;
-        let db = crate::db::acquire_db(db_state.as_ref());
-        let task = db
-            .get_task(&task_id)
-            .map_err(|error| format!("failed to get task: {error}"))?;
-        match task {
-            // A missing row is a closed/deleted Task, not a failure: return null so
-            // the plugin API resolves to `null` rather than rejecting. A genuine DB
-            // failure above still surfaces as an Err the caller can distinguish.
-            None => Ok(Value::Null),
-            Some(task) => serde_json::to_value(task)
-                .map_err(|error| format!("failed to serialize task: {error}")),
-        }
-    }
-
     pub(super) fn active_tasks_for_host(&self, params: &Value) -> Result<Value, String> {
         let project_id = required_param_string(params, "projectId")?;
         let db_state = self.database_state_for_host()?;
@@ -329,16 +292,6 @@ fn required_param_text(params: &Value, key: &str) -> Result<String, String> {
         .and_then(Value::as_str)
         .map(ToOwned::to_owned)
         .ok_or_else(|| format!("plugin host callback missing string param: {key}"))
-}
-
-fn optional_param_bool(params: &Value, key: &str) -> Result<Option<bool>, String> {
-    match params.get(key) {
-        None | Some(Value::Null) => Ok(None),
-        Some(Value::Bool(value)) => Ok(Some(*value)),
-        Some(_) => Err(format!(
-            "plugin host callback param must be a boolean or null: {key}"
-        )),
-    }
 }
 
 fn optional_param_string_vec(params: &Value, key: &str) -> Result<Option<Vec<String>>, String> {

@@ -73,6 +73,7 @@ fn resolve_openforge_global_command(qualified_id: &str) -> Result<ResolvedGlobal
         )),
         "dismissReviewPr" => Ok(ResolvedGlobalCommand::github_review("dismiss_review_pr")),
         "getPrFileDiffs" => Ok(ResolvedGlobalCommand::github_review("get_pr_file_diffs")),
+        "getPrHeadSha" => Ok(ResolvedGlobalCommand::github_review("get_pr_head_sha")),
         "getFileContent" => Ok(ResolvedGlobalCommand::github_review("get_file_content")),
         "getFileContentBase64" => Ok(ResolvedGlobalCommand::github_review(
             "get_file_content_base64",
@@ -201,6 +202,11 @@ mod tests {
             (
                 "openforge.createReviewComment",
                 "create_review_comment",
+                GlobalCommandHandler::GithubReview,
+            ),
+            (
+                "openforge.getPrHeadSha",
+                "get_pr_head_sha",
                 GlobalCommandHandler::GithubReview,
             ),
         ];

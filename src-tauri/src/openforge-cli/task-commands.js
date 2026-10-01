@@ -103,10 +103,6 @@ async function linkTasks(flags) {
   }));
 }
 
-async function getTask(flags) {
-  const taskId = encodeURIComponent(requireFlag(flags, 'taskId'));
-  printJson(await requestJson(`/task/${taskId}`));
-}
 
 async function listTaskLabels(flags) {
   const taskId = encodeURIComponent(requireFlag(flags, 'taskId'));
@@ -169,17 +165,6 @@ async function readTaskDetail(flags) {
 }
 
 
-
-async function listTasks(flags) {
-  const params = new URLSearchParams({ project_id: requireFlag(flags, 'projectId') });
-  if (typeof flags.state === 'string') {
-    params.set('state', flags.state);
-  } else {
-    params.set('exclude_done', 'true');
-  }
-  if (flags.full !== true) params.set('compact', 'true');
-  printJson(await requestJson(`/tasks?${params.toString()}`));
-}
 
 export const TASK_COMMAND_SPECS = [
   {
@@ -255,12 +240,6 @@ export const TASK_COMMAND_SPECS = [
     handler: readTaskDetail,
   },
   {
-    path: ['task', 'get'],
-    flags: ['taskId'],
-    usage: '[deprecated; removed in v2] openforge task get --task-id <id>',
-    handler: getTask,
-  },
-  {
     path: ['task', 'labels', 'list'],
     flags: ['taskId'],
     usage: 'openforge task labels list --task-id <id>',
@@ -277,11 +256,5 @@ export const TASK_COMMAND_SPECS = [
     flags: ['taskId', 'labelId'],
     usage: 'openforge task labels remove --task-id <id> --label-id <id>',
     handler: removeTaskLabel,
-  },
-  {
-    path: ['task', 'list'],
-    flags: ['projectId', 'state', 'full'],
-    usage: '[deprecated; removed in v2] openforge task list --project-id <id> [--state backlog|doing|done] [--full]',
-    handler: listTasks,
   },
 ];

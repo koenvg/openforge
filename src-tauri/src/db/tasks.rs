@@ -265,25 +265,6 @@ impl From<&TaskRow> for TaskDetail {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct CompactTaskRow {
-    pub id: String,
-    pub status: String,
-    pub project_id: Option<String>,
-    pub created_at: i64,
-    pub updated_at: i64,
-    pub agent: Option<String>,
-    pub permission_mode: Option<String>,
-    pub worktree_source: Option<String>,
-    pub worktree_branch: Option<String>,
-    pub title: String,
-    pub title_source: Option<String>,
-    pub title_generated_at: Option<i64>,
-    pub source_ticket_url: Option<String>,
-    pub depends_on: Vec<String>,
-    pub labels: Vec<TaskLabelRow>,
-}
-
-#[derive(Debug, Clone, Serialize)]
 pub struct TaskRelationshipReferenceRow {
     pub id: String,
     pub status: String,

@@ -83,16 +83,6 @@ pub struct TaskDependencyLink {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct GetTaskInfoResponse {
-    pub id: String,
-    pub initial_prompt: String,
-    pub prompt: Option<String>,
-    pub status: String,
-    pub depends_on: Vec<String>,
-    pub labels: Vec<db::TaskLabelRow>,
-}
-
-#[derive(Debug, Clone, Serialize)]
 pub struct TaskLabelsResponse {
     pub task_id: String,
     pub labels: Vec<db::TaskLabelRow>,
@@ -115,22 +105,6 @@ pub struct AddTaskLabelResponse {
     pub task_id: String,
     pub status: String,
     pub label: db::TaskLabelRow,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct TasksQuery {
-    pub project_id: String,
-    pub state: Option<String>,
-    pub include_done: Option<bool>,
-    pub exclude_done: Option<bool>,
-    pub compact: Option<bool>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(untagged)]
-pub enum TaskListRow {
-    Full(db::TaskRow),
-    Compact(db::CompactTaskRow),
 }
 
 /// Payload from Claude Code hooks

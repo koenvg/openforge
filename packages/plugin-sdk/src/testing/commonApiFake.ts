@@ -892,17 +892,6 @@ export class TestingCommonApiFake {
             if (handlers.size === 0) this.taskChangeHandlers.delete(projectId)
           })
         },
-        list: async (request) => {
-          const projectId = request?.projectId ?? null
-          const includeDone = request?.includeDone ?? false
-          this.services.calls.taskListRequests.push({ projectId, includeDone })
-          return this.services.seededTasks.filter((task) => {
-            if (projectId !== null && task.project_id !== projectId) return false
-            if (projectId !== null && !includeDone && task.status === 'done') return false
-            return true
-          })
-        },
-        get: async (taskId) => this.services.seededTasks.find(task => task.id === taskId) ?? null,
         active: async (projectId): Promise<ActiveTasks> => {
           this.services.calls.taskActiveRequests.push({ projectId })
           const activeTasks = this.services.seededTasks.filter(task =>

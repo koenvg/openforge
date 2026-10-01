@@ -16,7 +16,8 @@ const task = createTask({
 const meta = {
   title: 'Pages/GitHub Sync/Task Status',
   component: TaskPullRequestStatus,
-  args: { taskActionPending: false },
+  // The installed story scenario supplies the API and context in render.
+  args: { api: undefined!, context: undefined!, taskId: task.id, task, projectId: task.projectId, taskActionPending: false },
   parameters: { openforge: githubSyncScenario('populated') },
   decorators: [() => ({ Component: GitHubSyncContributionFrame, props: { host: 'task-status', task } })],
   render: (args, context) => {
@@ -36,9 +37,10 @@ const meta = {
 } satisfies Meta<typeof TaskPullRequestStatus>
 
 export default meta
-type Story = StoryObj<{ taskActionPending?: boolean }>
+type Story = StoryObj<typeof meta>
 
 export const Populated: Story = {
+  args: meta.args,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await expect(canvas.findByText('Add deterministic UI catalogs')).resolves.toBeVisible()
@@ -48,6 +50,7 @@ export const Populated: Story = {
 }
 
 export const Empty: Story = {
+  args: meta.args,
   parameters: { openforge: githubSyncScenario('empty') },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -57,6 +60,7 @@ export const Empty: Story = {
 }
 
 export const Loading: Story = {
+  args: meta.args,
   parameters: { openforge: githubSyncScenario('loading') },
   play: async ({ canvasElement }) => {
     await expect(within(canvasElement).findByText('Loading pull requests…', {}, { timeout: 2000 }))
@@ -65,6 +69,7 @@ export const Loading: Story = {
 }
 
 export const Failure: Story = {
+  args: meta.args,
   parameters: { openforge: githubSyncScenario('failure') },
   play: async ({ canvasElement }) => {
     await expect(within(canvasElement).findByRole('alert')).resolves.toHaveTextContent(
@@ -74,7 +79,7 @@ export const Failure: Story = {
 }
 
 export const DisabledActions: Story = {
-  args: { taskActionPending: true },
+  args: { ...meta.args, taskActionPending: true },
   play: async ({ canvasElement }) => {
     const button = await within(canvasElement).findByRole('button', { name: 'Merging…' })
     await expect(button).toBeDisabled()
@@ -82,6 +87,7 @@ export const DisabledActions: Story = {
 }
 
 export const LinkPullRequest: Story = {
+  args: meta.args,
   parameters: { openforge: githubSyncScenario('empty') },
   play: async (context) => {
     const canvas = within(context.canvasElement)
@@ -100,6 +106,7 @@ export const LinkPullRequest: Story = {
 }
 
 export const RefreshWithLocalResponse: Story = {
+  args: meta.args,
   play: async (context) => {
     const canvas = within(context.canvasElement)
     await userEvent.click(await canvas.findByRole('button', { name: 'Refresh GitHub status' }))

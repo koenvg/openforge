@@ -9,6 +9,8 @@ const meta = {
   title: 'Pages/GitHub Sync/Settings/Jira',
   component: JiraSettingsSection,
   parameters: { openforge: githubSyncScenario('connected') },
+  // The installed story scenario supplies this required prop in render.
+  args: { api: undefined! },
   decorators: [() => ({ Component: GitHubSyncContributionFrame, props: { host: 'settings' } })],
   render: (_args, context) => ({
     Component: JiraSettingsSection,
@@ -17,9 +19,10 @@ const meta = {
 } satisfies Meta<typeof JiraSettingsSection>
 
 export default meta
-type Story = StoryObj
+type Story = StoryObj<typeof meta>
 
 export const Connected: Story = {
+  args: meta.args,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     await expect(canvas.findByDisplayValue('https://openforge.atlassian.net')).resolves.toBeVisible()
@@ -28,6 +31,7 @@ export const Connected: Story = {
 }
 
 export const Disconnected: Story = {
+  args: meta.args,
   parameters: { openforge: githubSyncScenario('disconnected') },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -38,6 +42,7 @@ export const Disconnected: Story = {
 }
 
 export const SaveConfiguration: Story = {
+  args: meta.args,
   play: async (context) => {
     const canvas = within(context.canvasElement)
     const field = await canvas.findByLabelText('Acceptance criteria field id')
@@ -53,6 +58,7 @@ export const SaveConfiguration: Story = {
 }
 
 export const ConnectionFailure: Story = {
+  args: meta.args,
   parameters: { openforge: githubSyncScenario('test-failure') },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -63,6 +69,7 @@ export const ConnectionFailure: Story = {
 }
 
 export const SaveFailure: Story = {
+  args: meta.args,
   parameters: { openforge: githubSyncScenario('save-failure') },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -73,6 +80,7 @@ export const SaveFailure: Story = {
 }
 
 export const Loading: Story = {
+  args: meta.args,
   parameters: { openforge: githubSyncScenario('loading') },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
@@ -81,6 +89,7 @@ export const Loading: Story = {
 }
 
 export const Failure: Story = {
+  args: meta.args,
   parameters: { openforge: githubSyncScenario('failure') },
   play: async (context) => {
     const canvas = within(context.canvasElement)

@@ -204,6 +204,23 @@ describe('createCommentSelection', () => {
     cleanup()
   })
 
+  it('keeps an addressed comment hidden when stale comments are reloaded', async () => {
+    let comments = $state<PrComment[]>([makeComment(1), makeComment(2)])
+    let selection!: ReturnType<typeof createCommentSelection>
+    const cleanup = $effect.root(() => {
+      selection = createCommentSelection({ getPrComments: () => comments })
+    })
+    flushSync()
+
+    await selection.markAddressed(1)
+    comments = [makeComment(1), makeComment(2)]
+    flushSync()
+
+    expect(selection.unaddressedComments.map(c => c.id)).toEqual([2])
+    expect(selection.addressedCount).toBe(1)
+    cleanup()
+  })
+
   it('keeps a failed comment visible and exposes retry state until addressing succeeds', async () => {
     const comments = [makeComment(1)]
     mockMarkCommentAddressed

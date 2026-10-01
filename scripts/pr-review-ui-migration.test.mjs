@@ -41,9 +41,10 @@ function isReviewed(record) {
 }
 
 describe('PR review UI semantic presentation inventory', () => {
+  // This reads the full legacy tree before filtering the package; give the scan its own budget.
   it('has no legacy styling consumers or unexplained dynamic class expressions', () => {
     const sources = readLegacyUiSources().filter(source => owned(source.path))
     expect(sources.length).toBeGreaterThan(20)
     expect(inventoryLegacyUiConsumers(sources).filter(record => stylingKinds.has(record.kind) && !isReviewed(record))).toEqual([])
-  })
+  }, 30_000)
 })

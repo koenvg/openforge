@@ -256,24 +256,6 @@ describe('OpenForge task commands', () => {
     })).resolves.toEqual(detail);
   });
 
-  it('retrieves task rows through the nested task get command', async () => {
-    const task = {
-      id: 'T-1',
-      prompt: 'Nested get full prompt',
-      prompt_preview: 'Nested get full prompt',
-      title: 'Nested get',
-      status: 'backlog',
-      labels: [],
-      depends_on: [],
-    };
-
-    const result = await runCliAgainstJsonBridge(['task', 'get', '--task-id', 'T-1'], {
-      url: '/task/T-1',
-      response: task,
-    });
-
-    expect(result).toEqual(task);
-  });
 
   it('manages task labels through the nested task labels group', async () => {
     const labels = [{ id: 2, name: 'nested' }];
@@ -376,94 +358,6 @@ describe('OpenForge task commands', () => {
     }
   });
 
-  it('keeps completed tasks reachable through get-task and explicit done lists', async () => {
-    let completed = false;
-    const completedTask = {
-      id: 'T-1',
-      initial_prompt: 'Completed prompt',
-      prompt: 'Full prompt kept for agents',
-      status: 'done',
-      depends_on: [],
-      labels: [],
-    };
-    const openTask = {
-      id: 'T-2',
-      prompt_preview: 'Open task',
-      status: 'backlog',
-      labels: [],
-      depends_on: [],
-      updated_at: 300,
-    };
-    const server = createServer((req, res) => {
-      if (req.url === '/delete_task' && req.method === 'POST') {
-        let body = '';
-        req.on('data', (chunk) => {
-          body += chunk;
-        });
-        req.on('end', () => {
-          expect(JSON.parse(body)).toEqual({ task_id: 'T-1' });
-          completed = true;
-          res.writeHead(200, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ task_id: 'T-1', status: 'completed' }));
-        });
-        return;
-      }
-
-      if (req.url === '/task/T-1' && req.method === 'GET' && completed) {
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify(completedTask));
-        return;
-      }
-
-      if (req.url === '/tasks?project_id=P-1&exclude_done=true&compact=true' && req.method === 'GET') {
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify([openTask]));
-        return;
-      }
-
-      if (req.url === '/tasks?project_id=P-1&state=done&compact=true' && req.method === 'GET' && completed) {
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify([
-          {
-            id: completedTask.id,
-            prompt_preview: completedTask.initial_prompt,
-            status: completedTask.status,
-            labels: completedTask.labels,
-            depends_on: completedTask.depends_on,
-            updated_at: 301,
-          },
-        ]));
-        return;
-      }
-
-      res.writeHead(404, { 'content-type': 'text/plain' });
-      res.end('not found');
-    });
-    const port = await listen(server);
-
-    try {
-      await runCli(['task', 'delete', '--task-id', 'T-1'], { OPENFORGE_HTTP_PORT: String(port) });
-
-      const { stdout: getTaskStdout } = await runCli(['task', 'get', '--task-id', 'T-1'], {
-        OPENFORGE_HTTP_PORT: String(port),
-      });
-      expect(JSON.parse(getTaskStdout)).toEqual(completedTask);
-
-      const { stdout: normalListStdout } = await runCli(['task', 'list', '--project-id', 'P-1'], {
-        OPENFORGE_HTTP_PORT: String(port),
-      });
-      expect(JSON.parse(normalListStdout)).toEqual([openTask]);
-
-      const { stdout: doneListStdout } = await runCli(['task', 'list', '--project-id', 'P-1', '--state', 'done'], {
-        OPENFORGE_HTTP_PORT: String(port),
-      });
-      const doneTasks = JSON.parse(doneListStdout);
-      expect(doneTasks).toHaveLength(1);
-      expect(doneTasks[0]).toMatchObject({ id: 'T-1', status: 'done' });
-    } finally {
-      await close(server);
-    }
-  });
 
   it('rejects delete-task without task-id before contacting the HTTP bridge', async () => {
     let requestCount = 0;

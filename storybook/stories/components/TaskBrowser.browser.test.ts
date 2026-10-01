@@ -98,7 +98,7 @@ describe.skipIf(!storybookUrl)('Visual feedback header', () => {
         const box = panel.getBoundingClientRect()
         const css = getComputedStyle(panel)
         const attachedPage = panel.nextElementSibling?.getBoundingClientRect()
-        const columns = selector => getComputedStyle(panel.querySelector(selector)).gridTemplateColumns.split(' ').length
+        const columns = (selector: string) => getComputedStyle(panel.querySelector(selector)!).gridTemplateColumns.split(' ').length
         return {
           height: box.height,
           maxHeight: css.maxHeight,
@@ -108,7 +108,7 @@ describe.skipIf(!storybookUrl)('Visual feedback header', () => {
           attachedPageHeight: attachedPage?.height ?? 0,
           captureColumns: columns('div.grid.gap-3'),
           metadataColumns: columns('dl.grid'),
-          geometryColumns: getComputedStyle(panel.querySelector('fieldset.grid')).gridTemplateColumns,
+          geometryColumns: getComputedStyle(panel.querySelector('fieldset.grid')!).gridTemplateColumns,
         }
       })
       expect(bounds.maxHeight).toBe('288px')

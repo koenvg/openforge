@@ -84,14 +84,15 @@ impl Process {
             root_exit: self
                 .root_exit
                 .map(|(code, observed)| (code, observed.elapsed().as_millis().min(250) as u64)),
-            stopping: self.stopping.load(Ordering::Acquire),
+            stopping: self.reader.stopping(),
             reader_done: self.reader_done.load(Ordering::Acquire),
         })
     }
     pub fn restore(checkpoint: ProcessCheckpoint, journal: SharedJournal) -> Result<Self, Error> {
         checkpoint.validate()?;
         let master = Master::restore(&checkpoint.descriptor)?;
-        let reader = Box::new(process_native::duplicate(checkpoint.descriptor.fd)?);
+        let reader = process_native::duplicate(checkpoint.descriptor.fd)?;
+        let reader_signal = ReaderSignal::new(checkpoint.stopping)?;
         let writer = Arc::new(Mutex::new(InputWriter::restore(
             Box::new(process_native::duplicate(checkpoint.descriptor.fd)?),
             checkpoint.input,
@@ -99,7 +100,12 @@ impl Process {
         let (model, feeder) = TerminalModelSession::restore_with_event_sink(
             checkpoint.session_key.clone(),
             checkpoint.model,
-            event_sink(checkpoint.pty.clone(), journal, Arc::clone(&writer)),
+            event_sink(
+                checkpoint.pty.clone(),
+                journal,
+                Arc::clone(&writer),
+                Arc::clone(&reader_signal),
+            ),
         )
         .map_err(host_error)?;
         let reader_gate = Arc::new(Gate::default());
@@ -113,7 +119,7 @@ impl Process {
             identity: checkpoint.identity,
             writer,
             model: Arc::new(model),
-            stopping: Arc::new(AtomicBool::new(checkpoint.stopping)),
+            reader: reader_signal,
             reader_done: Arc::new(AtomicBool::new(checkpoint.reader_done)),
             reader_gate,
             restore_pause: Some(restore_pause),

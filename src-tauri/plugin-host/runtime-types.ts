@@ -80,6 +80,10 @@ export type HostCallbackRequest = {
   method: string
   params: Record<string, unknown>
 }
+export type ScopedAgentSessionChangeSignal =
+  | { kind: 'changed', pluginId: string, namespace: string, targetKey: string, revision: string }
+  | { kind: 'resync' }
+
 export type HostCallbackOptions = {
   signal?: AbortSignal
 }

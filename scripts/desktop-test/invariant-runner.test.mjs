@@ -18,6 +18,7 @@ describe('invariant runner command contract', () => {
       startupTimeoutMs: 120_000,
       scenarioTimeoutMs: 60_000,
       idleDurationSeconds: 30,
+      idleShells: 0,
       outputDir: null,
       devMode: false,
     })
@@ -40,9 +41,11 @@ describe('invariant runner command contract', () => {
       startupTimeoutMs: 90_000,
       scenarioTimeoutMs: 45_000,
       idleDurationSeconds: 10,
+      idleShells: 0,
       outputDir: '/artifacts/custom',
       devMode: true,
     })
+    expect(parseInvariantOptions(['--idle-shells', '5'])).toMatchObject({ idleShells: 5 })
   })
 
   it.each([
@@ -50,9 +53,16 @@ describe('invariant runner command contract', () => {
     ['--reuse=http://192.168.1.5:9222', 'loopback'],
     ['--startup-timeout=0', 'startup-timeout'],
     ['--idle-duration=nope', 'idle-duration'],
+    ['--idle-shells=1.5', '--idle-shells must be a positive integer'],
+    ['--idle-shells=0', '--idle-shells must be a positive integer'],
     ['--wat', 'Unknown invariant option'],
   ])('rejects invalid option %s', (option, expected) => {
     expect(() => parseInvariantOptions([option])).toThrow(expected)
+  })
+
+  it('rejects idle shells in reuse mode', () => {
+    expect(() => parseInvariantOptions(['--reuse=http://127.0.0.1:9222', '--idle-shells=2']))
+      .toThrow('--idle-shells requires isolated mode')
   })
 
   it('registers focused development and invariant suite commands', () => {
@@ -230,6 +240,25 @@ describe('serial invariant orchestration', () => {
       retainRuntime: true,
       timeoutMs: 5_000,
     }))
+  })
+
+  it('asks the isolated lifecycle for its own session daemon only when idle shells are requested', async () => {
+    const createLifecycle = vi.fn(() => ({
+      start: vi.fn(async () => ({ policy: { mode: 'isolated' }, rendererIdentity: { e2eEnabled: true } })),
+      shutdown: vi.fn(async () => ({ status: 'passed' })),
+    }))
+    const scenarios = {
+      'idle-resources': { mutating: false, run: vi.fn(async () => ({ name: 'idle-resources', status: 'passed' })) },
+    }
+
+    await runInvariantSuite(parseInvariantOptions(['--scenario=idle-resources']), {
+      createLifecycle, finalizeReport: vi.fn(async () => undefined), scenarios,
+    })
+    await runInvariantSuite(parseInvariantOptions(['--scenario=idle-resources', '--idle-shells=5']), {
+      createLifecycle, finalizeReport: vi.fn(async () => undefined), scenarios,
+    })
+
+    expect(createLifecycle.mock.calls.map(([options]) => options.isolatedSessionDaemon)).toEqual([false, true])
   })
 
   it('retains readable evidence for forced scenario and cleanup failures', async () => {

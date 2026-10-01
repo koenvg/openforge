@@ -55,22 +55,32 @@ export async function checkMountedTaskState(page, story) {
       await hint.waitFor({ state: 'visible' })
       for (const theme of baselineThemeIds) {
         await selectBaselineTheme(page, theme)
-        const comparison = await hint.evaluate(element => {
-          const legacy = document.createElement('kbd')
-          legacy.className = 'kbd kbd-xs absolute top-2 right-2 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none z-10'
-          legacy.textContent = 'E'
-          element.parentElement.append(legacy)
-          const measure = node => {
-            const style = getComputedStyle(node)
-            const bounds = node.getBoundingClientRect()
-            return { width: bounds.width, height: bounds.height, color: style.color, background: style.backgroundColor,
-              border: style.borderColor, borderWidth: style.borderWidth, radius: style.borderRadius, padding: style.padding, font: style.fontFamily }
+        const { actual, tokens } = await hint.evaluate(element => {
+          const reference = document.createElement('span')
+          reference.style.cssText = `position: absolute; color: color-mix(in oklab, var(--of-text) 40%, transparent);
+            background-color: color-mix(in oklab, var(--of-text) 10%, transparent);
+            border: var(--of-border-width) solid color-mix(in oklab, var(--of-text) 20%, transparent);
+            border-bottom-width: calc(var(--of-border-width) + 1px);
+            border-radius: var(--of-radius-control)`
+          element.parentElement.append(reference)
+          const style = getComputedStyle(element)
+          const expected = getComputedStyle(reference)
+          const bounds = element.getBoundingClientRect()
+          const result = {
+            actual: { width: bounds.width, height: bounds.height, color: style.color, background: style.backgroundColor,
+              border: style.borderTopColor, borderWidth: style.borderWidth, radius: style.borderRadius,
+              paddingLeft: style.paddingLeft, paddingRight: style.paddingRight, fontSize: style.fontSize },
+            tokens: { color: expected.color, background: expected.backgroundColor, border: expected.borderTopColor,
+              borderWidth: expected.borderWidth, radius: expected.borderRadius },
           }
-          const result = { actual: measure(element), legacy: measure(legacy) }
-          legacy.remove()
+          reference.remove()
           return result
         })
-        assert.deepEqual(comparison.actual, comparison.legacy, `${theme}: native keyboard hint paint and geometry`)
+        assert.deepEqual({ color: actual.color, background: actual.background, border: actual.border,
+          borderWidth: actual.borderWidth, radius: actual.radius }, tokens, `${theme}: keyboard hint must use OpenForge tokens`)
+        assert.ok(actual.width >= 16 && actual.width <= 24 && actual.height === 16, `${theme}: keyboard hint must keep compact geometry`)
+        assert.equal(parseFloat(actual.paddingLeft), parseFloat(actual.fontSize) / 2, `${theme}: keyboard hint left padding`)
+        assert.equal(actual.paddingRight, actual.paddingLeft, `${theme}: keyboard hint symmetric padding`)
       }
     } finally { await page.keyboard.up('Meta') }
   }

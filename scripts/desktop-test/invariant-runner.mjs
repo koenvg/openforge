@@ -18,6 +18,7 @@ const DEFAULT_OPTIONS = Object.freeze({
   startupTimeoutMs: 120_000,
   scenarioTimeoutMs: 60_000,
   idleDurationSeconds: 30,
+  idleShells: 0,
   outputDir: null,
   devMode: false,
 })
@@ -25,6 +26,12 @@ const DEFAULT_OPTIONS = Object.freeze({
 function positiveNumber(value, option) {
   const number = Number(value)
   if (!Number.isFinite(number) || number <= 0) throw new Error(`${option} must be a positive number`)
+  return number
+}
+
+function positiveInteger(value, option) {
+  const number = Number(value)
+  if (!Number.isInteger(number) || number <= 0) throw new Error(`${option} must be a positive integer`)
   return number
 }
 
@@ -57,8 +64,9 @@ export function parseInvariantOptions(argv) {
       const startupTimeout = optionValue(argv, index, '--startup-timeout')
       const scenarioTimeout = optionValue(argv, index, '--scenario-timeout')
       const idleDuration = optionValue(argv, index, '--idle-duration')
+      const idleShells = optionValue(argv, index, '--idle-shells')
       const output = optionValue(argv, index, '--output')
-      const option = scenario ?? reuse ?? startupTimeout ?? scenarioTimeout ?? idleDuration ?? output
+      const option = scenario ?? reuse ?? startupTimeout ?? scenarioTimeout ?? idleDuration ?? idleShells ?? output
       if (!option) throw new Error(`Unknown invariant option: ${argument}`)
       index += option.consumed
       if (scenario) {
@@ -70,9 +78,11 @@ export function parseInvariantOptions(argv) {
       else if (startupTimeout) parsed.startupTimeoutMs = positiveNumber(option.value, '--startup-timeout')
       else if (scenarioTimeout) parsed.scenarioTimeoutMs = positiveNumber(option.value, '--scenario-timeout')
       else if (idleDuration) parsed.idleDurationSeconds = positiveNumber(option.value, '--idle-duration')
+      else if (idleShells) parsed.idleShells = positiveInteger(option.value, '--idle-shells')
       else if (output) parsed.outputDir = option.value
     }
   }
+  if (parsed.idleShells > 0 && parsed.reuseEndpoint) throw new Error('--idle-shells requires isolated mode')
   const selected = new Set(parsed.scenarios.length === 0 ? INVARIANT_SCENARIO_ORDER : parsed.scenarios)
   parsed.scenarios = INVARIANT_SCENARIO_ORDER.filter(name => selected.has(name))
   return parsed
@@ -243,6 +253,7 @@ export async function runInvariantSuite(options, dependencies = {}) {
     outputDir: options.outputDir,
     requireSidecarReadiness: true,
     playwrightElectron: options.reuseEndpoint === null,
+    isolatedSessionDaemon: options.reuseEndpoint === null && options.idleShells > 0,
   })
   let shutdownPromise = null
   const shutdown = () => {

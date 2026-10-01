@@ -941,8 +941,9 @@ export interface ScopedAgentSessionState {
 
 /**
  * Scoped session change. Frontend delivery may coalesce invalidations. Backend
- * observers receive durable provider-turn snapshots in order; other state and
- * terminal-output changes may coalesce to the latest snapshot.
+ * observers receive durable provider-turn snapshots in order; other state
+ * changes may coalesce to the latest snapshot. Terminal output alone does not
+ * produce a change.
  */
 export interface ScopedAgentSessionChangeEvent extends SessionScope {
   state?: ScopedAgentSessionState | null
@@ -975,14 +976,6 @@ export interface TaskChangeEvent {
 }
 
 export interface TaskOperationsAPI {
-  /**
-   * Lists legacy Task rows. Project-scoped reads exclude Completed Tasks unless
-   * `includeDone` is true; unscoped reads preserve the complete legacy array.
-   * @deprecated Use `active`, `completed`, or `detail`. Removed in version 2.
-   */
-  list(request?: { projectId?: string | null; includeDone?: boolean }): Promise<Task[]>
-  /** @deprecated Use `detail`. Removed in version 2. */
-  get(taskId: string): Promise<Task | null>
   active(projectId: string): Promise<ActiveTasks>
   completed(projectId: string, query?: CompletedTaskQuery): Promise<CompletedTaskPage>
   detail(projectId: string, taskId: string): Promise<TaskRead | null>

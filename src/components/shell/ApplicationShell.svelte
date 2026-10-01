@@ -31,6 +31,9 @@
     {@render projectNavigation?.()}
   {/if}
   <div class="flex flex-col flex-1 min-w-0 relative">
+    {#if zen}
+      <div class="of-window-controls-spacer of-window-drag" aria-hidden="true"></div>
+    {/if}
     <main class="flex-1 overflow-hidden flex">
       <div class="flex-1 overflow-hidden flex flex-col">
         {@render children()}

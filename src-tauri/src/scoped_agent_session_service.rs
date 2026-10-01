@@ -1,6 +1,7 @@
 //! Host-owned lifecycle for Agent Sessions addressed by a Session Scope.
 
 use crate::{
+    app_events::RuntimeEventPublisher,
     db::{
         Database, NewScopedAgentSession, ScopedAgentSessionRow, ScopedAgentSessionStatus,
         ScopedAgentSessionStoreError,
@@ -105,7 +106,6 @@ pub(crate) trait ScopedSessionRuntime: Send + Sync {
     fn input<'a>(&'a self, terminal_key: &'a str, input: &'a str) -> RuntimeFuture<'a, ()>;
     fn abort<'a>(&'a self, terminal_key: &'a str) -> RuntimeFuture<'a, ()>;
     fn output<'a>(&'a self, terminal_key: &'a str) -> RuntimeFuture<'a, String>;
-    fn output_revision<'a>(&'a self, terminal_key: &'a str) -> RuntimeFuture<'a, u64>;
     fn dispose<'a>(&'a self, terminal_key: &'a str) -> RuntimeFuture<'a, ()>;
 }
 
@@ -282,6 +282,7 @@ pub(crate) struct ScopedAgentSessionService {
     pending: Arc<Mutex<HashMap<String, PendingLaunch>>>,
     workspace_leases: Arc<Mutex<HashMap<String, Box<dyn Send + Sync>>>>,
     session_operations: SessionOperationLocks,
+    events: RuntimeEventPublisher,
 }
 
 impl ScopedAgentSessionService {
@@ -289,6 +290,7 @@ impl ScopedAgentSessionService {
         database: Arc<Mutex<Database>>,
         workspaces: Arc<dyn ScopedSessionWorkspace>,
         runtime: Arc<dyn ScopedSessionRuntime>,
+        events: RuntimeEventPublisher,
     ) -> Self {
         Self {
             database,
@@ -297,6 +299,7 @@ impl ScopedAgentSessionService {
             pending: Arc::new(Mutex::new(HashMap::new())),
             workspace_leases: Arc::new(Mutex::new(HashMap::new())),
             session_operations: SessionOperationLocks::default(),
+            events,
         }
     }
 
@@ -354,9 +357,13 @@ impl ScopedAgentSessionService {
         for promoted in promoted {
             self.launch_promoted(Some(promoted)).await;
         }
-        if should_launch {
-            self.launch_starting(row.clone()).await?;
-        }
+        let launched = if should_launch {
+            self.launch_starting(row.clone()).await
+        } else {
+            Ok(())
+        };
+        self.publish_change(&row);
+        launched?;
         self.state_for_row(&self.require_owned_by_id(&row.id, &request.owner_plugin_id)?)
     }
 
@@ -429,9 +436,12 @@ impl ScopedAgentSessionService {
             }
         }
         drop(session_guard);
-        if let Some(row) = launch {
-            self.launch_starting(row).await?;
-        }
+        let launched = match launch {
+            Some(row) => self.launch_starting(row).await,
+            None => Ok(()),
+        };
+        self.publish_change(&row);
+        launched?;
         self.state_for_row(&self.require_owned_by_id(&row.id, owner)?)
     }
 
@@ -460,6 +470,7 @@ impl ScopedAgentSessionService {
         let promoted =
             lock(&self.database).abort_scoped_agent_session(&row.id, SCOPED_EXECUTION_LIMIT)?;
         drop(session_guard);
+        self.publish_removal(&row);
         self.launch_promoted(promoted).await;
         self.state_for_row(&self.require_owned_by_id(&row.id, owner)?)
     }
@@ -491,6 +502,9 @@ impl ScopedAgentSessionService {
         lock(&self.pending).remove(id);
         lock(&self.workspace_leases).remove(id);
         drop(session_guard);
+        if let Some(row) = lock(&self.database).scoped_agent_session_by_id(id)? {
+            self.publish_change(&row);
+        }
         self.launch_promoted(promoted).await;
         Ok(true)
     }
@@ -506,18 +520,6 @@ impl ScopedAgentSessionService {
         let row = self.require_owned_by_id(&row.id, owner)?;
         self.runtime
             .output(&row.terminal_key)
-            .await
-            .map_err(ScopedAgentSessionError::Runtime)
-    }
-
-    pub(crate) async fn output_revision(
-        &self,
-        owner: &str,
-        scope: &OwnedSessionScope,
-    ) -> Result<u64, ScopedAgentSessionError> {
-        let row = self.require_owned_scope(owner, scope)?;
-        self.runtime
-            .output_revision(&row.terminal_key)
             .await
             .map_err(ScopedAgentSessionError::Runtime)
     }
@@ -586,8 +588,10 @@ impl ScopedAgentSessionService {
         if row.owner_plugin_id != owner {
             return Err(ScopedAgentSessionError::Forbidden);
         }
-        let (promoted, cleanup) = self.release_locked_row(&row).await?;
+        let released = self.release_locked_row(&row).await;
         drop(session_guard);
+        self.publish_removal(&row);
+        let (promoted, cleanup) = released?;
         self.launch_promoted(promoted).await;
         cleanup?;
         Ok(true)
@@ -617,8 +621,10 @@ impl ScopedAgentSessionService {
             if current.owner_plugin_id != request.owner_plugin_id {
                 return Err(ScopedAgentSessionError::Forbidden);
             }
-            let (promoted, cleanup) = self.release_locked_row(&current).await?;
+            let released = self.release_locked_row(&current).await;
             drop(session_guard);
+            self.publish_removal(&current);
+            let (promoted, cleanup) = released?;
             if let Err(error) = cleanup {
                 self.launch_promoted(promoted).await;
                 return Err(error);
@@ -755,9 +761,44 @@ impl ScopedAgentSessionService {
     }
 
     async fn launch_promoted(&self, promoted: Option<ScopedAgentSessionRow>) {
-        if let Some(promoted) = promoted {
-            if let Err(error) = self.launch_starting(promoted).await {
-                log::warn!("[scoped-agent-session] promoted session failed to launch: {error}");
+        let Some(promoted) = promoted else {
+            return;
+        };
+        self.publish_waiters_after(None);
+        if let Err(error) = self.launch_starting(promoted.clone()).await {
+            log::warn!("[scoped-agent-session] promoted session failed to launch: {error}");
+        }
+        self.publish_change(&promoted);
+    }
+
+    fn publish_change(&self, row: &ScopedAgentSessionRow) {
+        publish_scope_change(
+            &self.events,
+            &row.owner_plugin_id,
+            SessionScope {
+                namespace: &row.namespace,
+                target_key: &row.target_key,
+                revision: &row.revision,
+            },
+        );
+    }
+
+    fn publish_removal(&self, row: &ScopedAgentSessionRow) {
+        self.publish_change(row);
+        if row.status == ScopedAgentSessionStatus::Queued {
+            self.publish_waiters_after(row.queue_sequence);
+        }
+    }
+
+    fn publish_waiters_after(&self, queue_sequence: Option<u64>) {
+        let queued = lock(&self.database).queued_scoped_agent_sessions();
+        match queued {
+            Ok(rows) => rows
+                .iter()
+                .filter(|row| row.queue_sequence > queue_sequence)
+                .for_each(|row| self.publish_change(row)),
+            Err(error) => {
+                log::warn!("[scoped-agent-session] failed to read queued sessions: {error}")
             }
         }
     }
@@ -828,6 +869,22 @@ impl ScopedAgentSessionService {
             updated_at: row.updated_at,
         })
     }
+}
+
+pub(crate) fn publish_scope_change(
+    events: &RuntimeEventPublisher,
+    owner_plugin_id: &str,
+    scope: SessionScope<'_>,
+) {
+    events.publish(
+        "scoped-agent-session-changed",
+        &serde_json::json!({
+            "pluginId": owner_plugin_id,
+            "namespace": scope.namespace,
+            "targetKey": scope.target_key,
+            "revision": scope.revision,
+        }),
+    );
 }
 
 fn validate_input(input: &str) -> Result<(), ScopedAgentSessionError> {

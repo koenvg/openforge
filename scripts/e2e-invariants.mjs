@@ -24,6 +24,7 @@ Options:
   --startup-timeout <ms>      Override application readiness timeout.
   --scenario-timeout <ms>     Override each scenario timeout.
   --idle-duration <seconds>   Override idle sampling duration.
+  --idle-shells <n>           Spawn n idle fixture shells in an isolated session daemon before idle sampling.
   --output <directory>        Write the report and artifacts to this directory.
   --dev                       Run the headed development command with retained runtime data.
   --help                      Show this help.

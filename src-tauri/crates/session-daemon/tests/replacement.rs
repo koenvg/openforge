@@ -261,7 +261,7 @@ fn repeated_real_images_keep_daemon_and_shell_pids_pty_identity_state_and_retry_
     client = client.with_controller(connection.controller);
     let command = ShellCommand {
         owner: TerminalOwner::Shell { task_id: "replacement".into(), index: Some(3) },
-        command: PreparedCommand { program: "/bin/sh".into(), args: vec!["-c".into(), "value=kept; while IFS= read -r line; do printf 'STATE:%s:%s:%s:' \"$$\" \"$value\" \"$line\"; tty; done".into()], cwd: fixture.root.path().into(), env: BTreeMap::new() },
+        command: PreparedCommand { program: "/bin/sh".into(), args: vec!["-c".into(), "value=kept; while IFS= read -r line; do printf 'STATE:%s:%s:%s:' \"$$\" \"$value\" \"$line\"; tty; printf 'TTY-END:%s\\n' \"$line\"; done".into()], cwd: fixture.root.path().into(), env: BTreeMap::new() },
         columns: 80, rows: 24, image_protocol: None,
     };
     let session = client.spawn("spawn", &command).unwrap();
@@ -274,6 +274,8 @@ fn repeated_real_images_keep_daemon_and_shell_pids_pty_identity_state_and_retry_
         &session.pty,
         &format!("STATE:{}:kept:before:", session.pid),
     );
+    // The prefix and tty result are separate writes; wait for the complete response.
+    wait_text(&client, &session.pty, "TTY-END:before");
     let initial_recovery = client.recover(&session.pty).unwrap();
     let tty = String::from_utf8_lossy(&initial_recovery.portable_vt)
         .split("/dev/ttys")

@@ -130,6 +130,19 @@ describe("SelfReviewView — hide addressed comments", () => {
 		expect(screen.getByRole("tab", { name: "Changed files" }).getAttribute("aria-selected")).toBe("true");
 	});
 
+  it('shows GitHub comments that arrive after the review opened', async () => {
+    ticketPrs.set(new Map([['task-1', [mockPr]]]));
+    vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
+    vi.mocked(getPrComments).mockResolvedValue([]);
+    await renderFeedbackView();
+    await waitFor(() => expect(getPrComments).toHaveBeenCalledWith(mockPr.id));
+
+    vi.mocked(getPrComments).mockResolvedValue([makeComment(1, 0)]);
+    ticketPrs.set(new Map([['task-1', [{ ...mockPr, unaddressed_comment_count: 1 }]]]));
+
+    expect(await screen.findByText('Comment 1')).toBeTruthy();
+  });
+
   it('does not carry selected GitHub feedback into another task linked to the same PR', async () => {
     ticketPrs.set(new Map([['task-1', [mockPr]], ['task-2', [mockPr]]]));
     vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
@@ -216,7 +229,7 @@ describe("SelfReviewView — hide addressed comments", () => {
 
 		const { container } = await renderFeedbackView();
 
-		expect(await screen.findByText("Outdated review comment")).toBeTruthy();
+		expect(await within(await screen.findByRole("region", { name: "Feedback panel" })).findByText("Outdated review comment")).toBeTruthy();
 		expect(
 			within(screen.getByRole("region", { name: "Feedback panel" })).queryByRole("button", {
 				name: "Reply to this comment on GitHub",
@@ -252,7 +265,7 @@ describe("SelfReviewView — hide addressed comments", () => {
 		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
 
 		const { container } = await renderFeedbackView();
-		expect(await screen.findByText("Closing review comment")).toBeTruthy();
+		expect(await within(await screen.findByRole("region", { name: "Feedback panel" })).findByText("Closing review comment")).toBeTruthy();
 		const diffFile = container.querySelector('[data-diff-file="src/main.rs"]');
 		expect(diffFile).not.toBeNull();
 		expect(await within(diffFile as HTMLElement).findByText("Closing review comment")).toBeTruthy();

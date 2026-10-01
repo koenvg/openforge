@@ -73,6 +73,11 @@ try {
         if (id === blank) continue
         if (id === 'components-terminal-runtime--overflow') await page.mouse.move(0, 0)
         await select(id)
+        if (id === 'pages-terminal--shell-tabs-and-input') {
+          // Same-document remount must discard the input story's old shell state.
+          await select(id, 'forceRemount')
+          assert.equal(await page.getByRole('tab').count(), 1, 'Remount must reset Shell 2')
+        }
         if (['components-terminal-runtime--empty', 'components-terminal-tabs--overflow'].includes(id)) {
           const screen = page.locator('.xterm-screen:visible').first()
           const first = await screen.screenshot()

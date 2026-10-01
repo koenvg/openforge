@@ -51,6 +51,13 @@ export function createDesktopAppDriver(page, options = {}) {
     return result
   }
 
+  async function spawnShellPty({ taskId, cwd, terminalIndex }) {
+    return page.evaluate(
+      payload => window.openforge.invoke('pty_spawn_shell', payload),
+      { taskId, cwd, cols: 80, rows: 24, terminalIndex, terminalImageProtocol: null },
+    )
+  }
+
   async function selectTaskView(name) {
     await page
       .getByRole('navigation', { name: 'Task workbench tabs' })
@@ -297,6 +304,7 @@ export function createDesktopAppDriver(page, options = {}) {
     observeTerminal,
     selectSeededTask,
     selectTaskView,
+    spawnShellPty,
     resumeTerminalGate,
     startTerminalPerformanceTrace,
     openSeededTerminal,

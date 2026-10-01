@@ -160,6 +160,84 @@ test('test-like names cannot exclude UI used by production, including through an
   expect(result.errors.join('\n')).toContain('used by production')
 })
 
+test('visual harnesses stay test-only despite unrelated main.ts mentions, but production imports reject them', () => {
+  const harnesses = [
+    ['packages/pr-review-ui/src/visual', 'RichMarkdownDiffVisualHarness'],
+    ['src/components/shared/ui/visual', 'InteractionOverlayVisualHarness'],
+  ]
+  const files = Object.fromEntries(harnesses.flatMap(([directory, name]) => [
+    [`${directory}/${name}.svelte`, '<p>Visual test only</p>'],
+    [`${directory}/main.ts`, `import Harness from './${name}.svelte'`],
+  ]))
+  const root = repository({ ...files, 'src/electron/main.ts': 'export const boot = true',
+    'src/electron/bootLifecycle.ts': `// Boot wiring belongs to main.ts, not here.\nimport { boot } from './main.ts'`,
+  })
+  const inventory = { ...emptyInventory(), exclusions: harnesses.map(([directory, name]) => ({
+    source: `${directory}/${name}.svelte`, kind: 'test-only-wrapper', reason: 'Only used in visual tests.',
+  })) }
+  expect(checkCoverage(root, inventory, indexes)).toMatchObject({ errors: [], excluded: 2 })
+  writeFileSync(join(root, 'src/production.ts'), `import Harness from './components/shared/ui/visual/InteractionOverlayVisualHarness.svelte'`)
+  expect(checkCoverage(root, inventory, indexes).errors.join('\n')).toContain('test-only wrapper is used by production')
+})
+
+test('unresolved production imports mentioning a test wrapper remain unsafe to exclude', () => {
+  const root = repository({
+    'src/ControlTestWrapper.svelte': '<button>Control</button>',
+    'src/production.ts': `import Wrapper from '@controls/ControlTestWrapper.svelte'`,
+  })
+  const inventory = { ...emptyInventory(), exclusions: [
+    { source: 'src/ControlTestWrapper.svelte', kind: 'test-only-wrapper', reason: 'Used by tests.' },
+  ] }
+  expect(checkCoverage(root, inventory, indexes).errors.join('\n')).toContain('test-only wrapper is used by production')
+})
+
+test('computed production imports mentioning a test wrapper stay ambiguous', () => {
+  const root = repository({
+    'src/ControlTestWrapper.svelte': '<button>Control</button>',
+    'src/production.ts': `const view = import('./' + variant + '/ControlTestWrapper.svelte')`,
+  })
+  const inventory = { ...emptyInventory(), exclusions: [
+    { source: 'src/ControlTestWrapper.svelte', kind: 'test-only-wrapper', reason: 'Used by tests.' },
+  ] }
+  expect(checkCoverage(root, inventory, indexes).errors.join('\n')).toContain('test-only wrapper is used by production')
+})
+
+test('a distinctive wrapper basename in production text stays ambiguous', () => {
+  const root = repository({
+    'src/ControlTestWrapper.svelte': '<button>Control</button>',
+    'src/production.ts': `const path = 'ControlTestWrapper.svelte'`,
+  })
+  const inventory = { ...emptyInventory(), exclusions: [
+    { source: 'src/ControlTestWrapper.svelte', kind: 'test-only-wrapper', reason: 'Used by tests.' },
+  ] }
+  expect(checkCoverage(root, inventory, indexes).errors.join('\n')).toContain('test-only wrapper is used by production')
+})
+
+test('production .js specifiers resolve to TypeScript visual entrypoints', () => {
+  const root = repository({
+    'src/components/shared/ui/visual/InteractionOverlayVisualHarness.svelte': '<p>Visual</p>',
+    'src/components/shared/ui/visual/main.ts': `import Harness from './InteractionOverlayVisualHarness.svelte'`,
+    'src/production.ts': `import './components/shared/ui/visual/main.js'`,
+  })
+  const inventory = { ...emptyInventory(), exclusions: [
+    { source: 'src/components/shared/ui/visual/InteractionOverlayVisualHarness.svelte', kind: 'test-only-wrapper', reason: 'Visual only.' },
+  ] }
+  expect(checkCoverage(root, inventory, indexes).errors.join('\n')).toContain('test-only wrapper is used by production')
+})
+
+test('computed production imports can use a filename variable to reach a visual entrypoint', () => {
+  const root = repository({
+    'src/components/shared/ui/visual/InteractionOverlayVisualHarness.svelte': '<p>Visual</p>',
+    'src/components/shared/ui/visual/main.ts': `import Harness from './InteractionOverlayVisualHarness.svelte'`,
+    'src/electron/main.ts': 'export const boot = true',
+    'src/production.ts': `const entry = 'main.ts'; import('./components/shared/ui/visual/' + entry)`,
+  })
+  const inventory = { ...emptyInventory(), exclusions: [
+    { source: 'src/components/shared/ui/visual/InteractionOverlayVisualHarness.svelte', kind: 'test-only-wrapper', reason: 'Visual only.' },
+  ] }
+  expect(checkCoverage(root, inventory, indexes).errors.join('\n')).toContain('test-only wrapper is used by production')
+})
+
 test.each(['pages-missing--ready', 'pages-home--renamed'])('identifies missing or renamed story %s with its catalog and production source', story => {
   const root = repository({ 'src/Page.svelte': '<h1>Home</h1>' })
   const report = checkCoverage(root, { ...emptyInventory(), pages: [{ source: 'src/Page.svelte', stories: [story] }] }, indexes)

@@ -345,14 +345,14 @@
 </script>
 
 {#if startupError}
-  <div role="alert" class="p-6">
+  <div role="alert" class="of-window-drag of-window-controls-offset p-6">
     <p>Could not restore your workspace. Your retained shell sessions have not been stopped.</p>
     <p>{startupError}</p>
     <Button onClick={() => { void restoreWorkspace() }}>Retry restoration</Button>
   </div>
 {/if}
 {#if !appReady && !startupError}
-  <div role="status" class="p-6">Loading workspace…</div>
+  <div role="status" class="of-window-drag of-window-controls-offset p-6">Loading workspace…</div>
 {/if}
 <ApplicationShell ready={appReady} zen={zenActive}>
   {#snippet sidebar()}
@@ -371,7 +371,7 @@
   {/snippet}
   {#snippet projectNavigation()}
     {#if !isCrossProjectView($currentView, sidebarPluginViewKeySet)}
-      <IconRail currentView={$currentView} onNavigate={navigation.navigate} pluginNavItems={pluginNavItems} {dashboardNavItem} modalsOpen={showCommandPalette || showProjectSwitcher || showAttentionOverview || actionPalette.showActionPalette || taskCreation.dialog !== null || showFileQuickOpen} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} activeProjectAttentionCount={$activeProjectAttentionCount} />
+      <IconRail currentView={$currentView} onNavigate={navigation.navigate} pluginNavItems={pluginNavItems} {dashboardNavItem} modalsOpen={showCommandPalette || showProjectSwitcher || showAttentionOverview || actionPalette.showActionPalette || taskCreation.dialog !== null || showFileQuickOpen} activeRepoReviewRequestCount={$activeRepoReviewRequestCount} activeProjectAttentionCount={$activeProjectAttentionCount} sidebarCollapsed={appSidebarCollapsed} />
     {/if}
   {/snippet}
   {#snippet children()}

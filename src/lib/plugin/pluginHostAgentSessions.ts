@@ -3,7 +3,6 @@ import { ScopedAgentSessionError } from '@openforge-app/plugin-sdk'
 import type {
   Disposable,
   ScopedAgentSessionChangeEvent,
-  ScopedAgentSessionState,
   SessionScope,
   ScopedAgentSessionErrorCode,
 } from '@openforge-app/plugin-sdk'
@@ -32,11 +31,8 @@ type ChangeHandler = (event: ScopedAgentSessionChangeEvent) => void
 type SharedChangeObserver = {
   disposed: boolean
   ready: boolean
-  polling: boolean
-  previous: string
   handlers: Set<ChangeHandler>
-  setupCoverageHandlers: Set<ChangeHandler>
-  interval: number
+  setupGapHandlers: Set<ChangeHandler>
   unsubscribers: Array<() => void>
 }
 const changeObservers = new Map<string, SharedChangeObserver>()
@@ -65,15 +61,11 @@ function matchesScope(payload: unknown, pluginId: string, scope: SessionScope): 
     && event.revision === scope.revision
 }
 
-function stateFingerprint(state: ScopedAgentSessionState | null): string {
-  return state === null ? 'missing' : JSON.stringify(state)
-}
-
 function subscribeToChanges(
   pluginId: string,
   scope: SessionScope,
   handler: ChangeHandler,
-  coverSetupOutput = true,
+  coverSetupGap = true,
 ): Disposable {
   const key = scopeKey(pluginId, scope)
   let observer = changeObservers.get(key)
@@ -81,11 +73,8 @@ function subscribeToChanges(
     observer = {
       disposed: false,
       ready: false,
-      polling: false,
-      previous: '',
       handlers: new Set(),
-      setupCoverageHandlers: new Set(),
-      interval: 0,
+      setupGapHandlers: new Set(),
       unsubscribers: [],
     }
     const sharedObserver = observer
@@ -98,48 +87,30 @@ function subscribeToChanges(
     sharedObserver.unsubscribers.push(subscribeToPluginHostEvent(pluginId, 'scoped-agent-session-changed', (payload) => {
       if (matchesScope(payload, pluginId, scope)) emit()
     }))
+    sharedObserver.unsubscribers.push(subscribeToPluginHostEvent(pluginId, 'openforge-app-events-gap', emit))
     void createScopedAgentSessionKey(scope).then(async (terminalKey) => {
       if (sharedObserver.disposed) return
-      const terminalEvents = [`pty-output-${terminalKey}`, `pty-exit-${terminalKey}`]
-      for (const event of terminalEvents) {
-        sharedObserver.unsubscribers.push(subscribeToPluginHostEvent(pluginId, event, emit))
-      }
-      await Promise.all(terminalEvents.map(waitForPluginHostEventSubscription))
+      const exitEvent = `pty-exit-${terminalKey}`
+      sharedObserver.unsubscribers.push(subscribeToPluginHostEvent(pluginId, exitEvent, emit))
+      await Promise.all(['scoped-agent-session-changed', exitEvent].map(waitForPluginHostEventSubscription))
       if (sharedObserver.disposed) return
       sharedObserver.ready = true
       const event = { ...scope }
-      for (const setupHandler of [...sharedObserver.setupCoverageHandlers]) setupHandler(event)
-      sharedObserver.setupCoverageHandlers.clear()
+      for (const setupHandler of [...sharedObserver.setupGapHandlers]) setupHandler(event)
+      sharedObserver.setupGapHandlers.clear()
     })
-    const poll = async () => {
-      if (sharedObserver.disposed || sharedObserver.polling) return
-      sharedObserver.polling = true
-      try {
-        const next = stateFingerprint(await callScoped(() => getScopedAgentSessionStatus(pluginId, scope)))
-        if (sharedObserver.disposed) return
-        if (sharedObserver.previous && next !== sharedObserver.previous) emit()
-        sharedObserver.previous = next
-      } catch {
-        // The direct operation surfaces the error; polling only provides invalidation.
-      } finally {
-        sharedObserver.polling = false
-      }
-    }
-    void poll()
-    sharedObserver.interval = window.setInterval(() => { void poll() }, 1_000)
   }
   observer.handlers.add(handler)
-  if (coverSetupOutput && !observer.ready) observer.setupCoverageHandlers.add(handler)
+  if (coverSetupGap && !observer.ready) observer.setupGapHandlers.add(handler)
   let disposed = false
   return {
     dispose() {
       if (disposed) return
       disposed = true
       observer.handlers.delete(handler)
-      observer.setupCoverageHandlers.delete(handler)
+      observer.setupGapHandlers.delete(handler)
       if (observer.handlers.size > 0) return
       observer.disposed = true
-      window.clearInterval(observer.interval)
       observer.unsubscribers.splice(0).forEach(unsubscribe => unsubscribe())
       changeObservers.delete(key)
     },

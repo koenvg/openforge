@@ -11,12 +11,15 @@ mod notification_journal;
 #[cfg(test)]
 mod notification_journal_tests;
 mod output;
+mod own_processes;
 mod process;
 mod process_native;
 mod quiescence;
 mod recovery_cli;
 mod replacement;
 mod server;
+mod subscription;
+mod wake;
 
 // Compile the existing domain-free authority and supervision code in the PTY owner.
 // Both adapters use the same implementation during this migration slice.

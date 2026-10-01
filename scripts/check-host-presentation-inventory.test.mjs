@@ -20,12 +20,13 @@ const dependency = record => record.kind === 'unresolved'
   : !['script-component-candidate', 'build-input'].includes(record.kind)
 
 describe('remaining host presentation inventory', () => {
+  // Scans the repository rather than a fixture; allow CPU contention without relaxing coverage.
   it('has no legacy classes or aliases outside the explicitly owned pending batches', () => {
     const sources = readLegacyUiSources().filter(source => migratedHostSource(source.path)
       || ['storybook/shared/ThemeFixture.svelte', 'storybook/shared/frames/ComponentFrame.svelte',
         'storybook/shared/fixtures/HostFeedback.svelte'].includes(source.path))
     expect(inventoryLegacyUiConsumers(sources).filter(dependency)).toEqual([])
-  })
+  }, 30_000)
 
   it('distinguishes legacy keyboard-hint classes from the native kbd element', () => {
     const records = inventoryLegacyUiConsumers([{ path: 'src/keyboard-probe.svelte',

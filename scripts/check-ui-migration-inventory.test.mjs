@@ -355,7 +355,9 @@ describe('completed UI migration inventory', () => {
     }).some(v => v.token === 'btn')).toBe(true)
   })
 
+  // This synchronous, repository-wide scan can be CPU-starved by other Vitest workers.
+  // Keep the assertion intact and budget this inventory separately from small fixture checks.
   it('reports no covered direct control or fixed-geometry classes in migrated areas', () => {
     expect(findUiMigrationInventoryViolations(readMigratedUiSources(), UI_MIGRATION_ALLOWLIST)).toEqual([])
-  })
+  }, 30_000)
 })

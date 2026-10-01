@@ -129,7 +129,7 @@
 
 <div
   data-testid="resizable-panel"
-  class="relative flex shrink-0 h-full overflow-hidden"
+  class="of-resizable-panel"
   style="width: {effectiveWidth}px"
   bind:this={panelEl}
 >
@@ -138,7 +138,7 @@
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       data-testid="resize-handle"
-      class="absolute left-0 top-0 bottom-0 z-10 w-1 hover:bg-primary/30 transition-colors {isDragging ? 'bg-primary/40' : ''} focus-visible:bg-primary/40 focus-visible:outline-none"
+      class="resize-handle left" class:dragging={isDragging}
       style="cursor: col-resize"
       role="separator"
       aria-orientation="vertical"
@@ -152,7 +152,7 @@
       onkeydown={onKeyDown}
     ></div>
   {/if}
-  <div class="flex-1 overflow-hidden">
+  <div class="panel-content">
     {@render children?.()}
   </div>
   {#if resizable && side === 'left'}
@@ -160,7 +160,7 @@
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       data-testid="resize-handle"
-      class="absolute right-0 top-0 bottom-0 z-10 w-1 hover:bg-primary/30 transition-colors {isDragging ? 'bg-primary/40' : ''} focus-visible:bg-primary/40 focus-visible:outline-none"
+      class="resize-handle right" class:dragging={isDragging}
       style="cursor: col-resize"
       role="separator"
       aria-orientation="vertical"
@@ -175,3 +175,15 @@
     ></div>
   {/if}
 </div>
+
+<style>
+  .of-resizable-panel { position: relative; display: flex; height: 100%; flex-shrink: 0; overflow: hidden; }
+  .panel-content { flex: 1; overflow: hidden; }
+  .resize-handle { position: absolute; top: 0; bottom: 0; z-index: 10; width: .25rem; transition: background-color 150ms; }
+  .resize-handle.left { left: 0; }
+  .resize-handle.right { right: 0; }
+  .resize-handle:hover { background: color-mix(in oklab, var(--of-accent) 30%, transparent); }
+  .resize-handle.dragging, .resize-handle:focus-visible { background: color-mix(in oklab, var(--of-accent) 40%, transparent); }
+  .resize-handle:focus-visible { outline: none; box-shadow: inset 0 0 0 var(--of-focus-width) var(--of-accent); }
+  @media (prefers-reduced-motion: reduce) { .resize-handle { transition: none; } }
+</style>

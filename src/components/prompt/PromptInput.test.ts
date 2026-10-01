@@ -115,6 +115,15 @@ describe('PromptInput', () => {
     expect(stopPropagation).not.toHaveBeenCalled()
   })
 
+  it('calls onCancel on Escape when autocomplete is inactive', async () => {
+    const onCancel = vi.fn()
+    render(PromptInput, { props: { ...baseProps, onCancel } })
+    const textarea = screen.getByPlaceholderText('Describe what you want to implement...')
+
+    await fireEvent.keyDown(textarea, { key: 'Escape' })
+
+    expect(onCancel).toHaveBeenCalledTimes(1)
+  })
 
   it('does not submit empty text', async () => {
     const onSubmit = vi.fn()

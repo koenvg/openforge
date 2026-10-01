@@ -94,8 +94,8 @@ pub use task_workspaces::TaskWorkspaceRow;
 pub use task_dependencies::TaskDependencyPersistenceError;
 pub(crate) use tasks::TaskDetailRelationshipRow;
 pub use tasks::{
-    ActiveTasks, CompactTaskRow, CompletedTaskPage, CompletedTaskQuery, TaskDetail,
-    TaskInitialPromptUpdateError, TaskRead, TaskReadError, TaskRow,
+    ActiveTasks, CompletedTaskPage, CompletedTaskQuery, TaskDetail, TaskInitialPromptUpdateError,
+    TaskRead, TaskReadError, TaskRow,
 };
 pub use worktrees::WorktreeRow;
 

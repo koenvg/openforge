@@ -15,7 +15,7 @@ fn bundle() -> tempfile::TempDir {
     fs::write(bundle.path().join("hook.js"), b"hook").unwrap();
     fs::write(bundle.path().join("manifest.json"), serde_json::to_vec(&serde_json::json!({
         "format": 1, "architecture": std::env::consts::ARCH,
-        "protocol": 4, "stateFormat": 1,
+        "protocol": 6, "stateFormat": 1,
         "files": [
             {"path": "openforge-session-daemon", "sha256": "f77b12a53ece5f6b7050800bbdbf8cc5ebe87f1b1387cf739f243e43e2ce886b", "executable": true},
             {"path": "hook.js", "sha256": "0648298b48be031996277ae472115a46e7964d2ac3882e61b84351f3c3f8a547", "executable": false}
@@ -221,23 +221,23 @@ fn published_staging_rejects_a_manifest_signed_by_an_untrusted_publisher() {
 fn published_staging_accepts_an_independently_signed_manifest_without_enabling_replacement() {
     use openforge_session_client::releases::PublisherTrust;
 
-    // Node's crypto.sign generated these protocol-4 Ed25519 vectors with test seed [7; 32].
+    // Node's crypto.sign generated these protocol-6 Ed25519 vectors with test seed [7; 32].
     // The signed JSON uses recursively sorted object keys, matching serde_json::Value.
     // These keys are fixtures, never installed publisher configuration.
     assert_eq!(
         openforge_session_protocol::VERSION,
-        4,
+        6,
         "regenerate the independent signed vectors after a protocol change"
     );
     let public_key = hex_bytes("ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c");
     let (signature, expected_id) = match std::env::consts::ARCH {
         "aarch64" => (
-            "0c0efbc0f3dae2db163109fded4a372cff3ae55c822b14772a4f2122115caed66b80e8352ea8bd80aacf033b68e4943354fc09c911cde1bc2ed30eb3ae83e104",
-            "3cf6431b18b6c370700dc1c5b0468db784bdf5fbae83f505736fc95bf7575bc1",
+            "ae7bd6ed9457c59bd4ff4ac5db63ec9a87cb53fb870c46510bc6405c3c9a71ceb7d4b74f93dec700a9503578d7cb35b2178704a4b0c472e5bc9ea868de502a06",
+            "0611770462a5ce340e0ae3369bf9404bc622d63b03cee1d1a722880f6af4e6c8",
         ),
         "x86_64" => (
-            "de399f7364b1a1e4502cac5172bded18efc5fde021d45132d209b221937798117242d3ab2923027c4fe40b55373e9787e3502daa85f815b6305c29438b8acf0f",
-            "0b68364a5fdaaf2368405993f87854c329be55346c64c23a6fcaed7e1e7c3496",
+            "a0047d97c5bdd81513a5eb9cee330933f3744a5f4b87d0fdc5301f26fdb7c60b252699239f27a112816eec50d51ae8fccbcaafd488d96758756fd77fcb9ce005",
+            "c12b6285b274ab98a6cf24304d36a0b27b00e45a3535ee3d3060b1429773f2bf",
         ),
         _ => return,
     };

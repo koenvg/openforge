@@ -2,7 +2,7 @@ use super::{
     migrations::TASK_QUERY_INDEXES_SQL,
     task_persistence_test_support::{seed_project_task_history, COMPLETED_TASK_HISTORY_SIZE},
     test_helpers::make_test_db,
-    Database,
+    CompletedTaskQuery, Database,
 };
 use std::{
     hint::black_box,
@@ -12,13 +12,16 @@ use std::{
 const SAMPLE_COUNT: usize = 9;
 const DROP_TASK_QUERY_INDEXES_SQL: &str = "DROP INDEX IF EXISTS idx_tasks_project_updated_at;
      DROP INDEX IF EXISTS idx_tasks_project_active_updated_at;
-     DROP INDEX IF EXISTS idx_tasks_project_completed_updated_at;";
+     DROP INDEX IF EXISTS idx_tasks_project_completed_updated_at;
+     DROP INDEX IF EXISTS idx_tasks_completed_keyset;";
+const CREATE_COMPLETED_KEYSET_INDEX_SQL: &str =
+    "CREATE INDEX IF NOT EXISTS idx_tasks_completed_keyset
+     ON tasks(project_id, updated_at DESC, id DESC) WHERE status = 'done';";
 
 #[derive(Debug)]
 struct RefreshTimings {
     active: Duration,
     completed: Duration,
-    relationships: Duration,
 }
 
 fn set_task_query_indexes(db: &Database, enabled: bool) {
@@ -30,36 +33,31 @@ fn set_task_query_indexes(db: &Database, enabled: bool) {
         DROP_TASK_QUERY_INDEXES_SQL
     })
     .expect("toggle task query indexes");
+    if enabled {
+        conn.execute_batch(CREATE_COMPLETED_KEYSET_INDEX_SQL)
+            .expect("restore completed keyset index");
+    }
     conn.execute_batch("ANALYZE tasks;")
         .expect("analyze task indexes");
 }
 
 fn measure_refreshes(db: &Database, project_id: &str) -> RefreshTimings {
     let active_started = Instant::now();
-    let active = db
-        .get_compact_tasks_for_project_excluding_state(project_id, "done")
-        .expect("refresh active tasks");
+    let active = db.tasks().active(project_id).expect("refresh active tasks");
     let active_elapsed = active_started.elapsed();
-    black_box(active.len());
+    black_box(active.tasks.len());
 
     let completed_started = Instant::now();
     let completed = db
-        .get_compact_tasks_for_project_by_state(project_id, "done")
+        .tasks()
+        .completed(project_id, CompletedTaskQuery::default())
         .expect("refresh completed tasks");
     let completed_elapsed = completed_started.elapsed();
-    black_box(completed.len());
-
-    let relationships_started = Instant::now();
-    let relationships = db
-        .get_task_relationship_references_for_project(project_id)
-        .expect("refresh relationship references");
-    let relationships_elapsed = relationships_started.elapsed();
-    black_box(relationships.len());
+    black_box(completed.tasks.len());
 
     RefreshTimings {
         active: active_elapsed,
         completed: completed_elapsed,
-        relationships: relationships_elapsed,
     }
 }
 
@@ -101,13 +99,11 @@ fn measure_project_refreshes_with_large_completed_history() {
     eprintln!(
         "median of {SAMPLE_COUNT} warmed, interleaved samples with \
          {COMPLETED_TASK_HISTORY_SIZE} completed tasks:\n\
-         indexed active={:?}, completed={:?}, relationships={:?}\n\
-         no indexes active={:?}, completed={:?}, relationships={:?}",
+         indexed active={:?}, completed={:?}\n\
+         no indexes active={:?}, completed={:?}",
         median(&indexed_samples, |sample| sample.active),
         median(&indexed_samples, |sample| sample.completed),
-        median(&indexed_samples, |sample| sample.relationships),
         median(&unindexed_samples, |sample| sample.active),
         median(&unindexed_samples, |sample| sample.completed),
-        median(&unindexed_samples, |sample| sample.relationships),
     );
 }

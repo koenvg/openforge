@@ -151,7 +151,7 @@
   })
 </script>
 
-<header data-testid="task-workbench-toolbar" class="of-task-workbench-toolbar">
+<header data-testid="task-workbench-toolbar" class="of-task-workbench-toolbar of-window-drag">
   <div class="toolbar-content">
     <Button type="button" size="md" variant="ghost" class="toolbar-back-button" aria-label="Back to task board" onclick={onBack}>
       <ArrowLeft size={16} aria-hidden="true" />

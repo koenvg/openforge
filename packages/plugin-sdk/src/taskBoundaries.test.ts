@@ -84,6 +84,12 @@ function task(
 }
 
 describe('Task read contract', () => {
+  it('does not expose version 1 list/get reads in the SDK fake', () => {
+    const tasks = createMockFrontendOpenForgeApi().tasks
+    expect(tasks).not.toHaveProperty('list')
+    expect(tasks).not.toHaveProperty('get')
+  })
+
   it('uses bounded camelCase projections', () => {
     expect(active.tasks[0].prompt).toBe('Canonical authoring prompt')
     expect(completed.tasks[0]).not.toHaveProperty('prompt')
@@ -201,30 +207,6 @@ describe('Task read contract', () => {
     ])
   })
 
-  it('keeps published legacy list and get behavior during deprecation', async () => {
-    const completedTasks = Array.from({ length: 75 }, (_, index) => task(`T-done-${index}`, 'done'))
-    const otherProjectTask = task('T-other', 'backlog')
-    otherProjectTask.project_id = 'P-2'
-    const api = createMockFrontendOpenForgeApi({
-      tasks: [task('T-active', 'backlog'), ...completedTasks, otherProjectTask],
-    })
-
-    const unscoped = await api.tasks.list()
-    expect(unscoped).toHaveLength(77)
-    expect(unscoped.map(item => item.id)).toEqual([
-      'T-active',
-      ...completedTasks.map(item => item.id),
-      'T-other',
-    ])
-    await expect(api.tasks.list({ projectId: 'P-1' })).resolves.toMatchObject([{ id: 'T-active' }])
-    await expect(api.tasks.list({ projectId: 'P-1', includeDone: true })).resolves.toHaveLength(76)
-    await expect(api.tasks.get('T-done-0')).resolves.toMatchObject({
-      id: 'T-done-0',
-      initial_prompt: 'T-done-0 authoring prompt',
-      prompt: 'T-done-0 execution override',
-    })
-    await expect(api.tasks.get(taskReadContract.missingTaskId)).resolves.toBeNull()
-  })
   it('returns known completion dates and coverage even for an empty interval', async () => {
     const known = Object.assign(task('T-known', 'done', 10), { completed_at: taskReadContract.knownCompletedAt })
     const unknown = task('T-unknown', 'done', 11)

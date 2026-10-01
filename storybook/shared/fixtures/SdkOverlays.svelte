@@ -52,7 +52,7 @@
         {#snippet header()}
           <div class="min-w-0 flex-1">
             <h2 id="edit-report-title" class="m-0 text-lg font-semibold tracking-tight">Edit report</h2>
-            <p id="edit-report-description" class="m-0 mt-1 text-sm leading-relaxed text-base-content/65">Update the name shown in the project sidebar.</p>
+            <p id="edit-report-description" class="m-0 mt-1 text-sm leading-relaxed text-of-text/65">Update the name shown in the project sidebar.</p>
           </div>
         {/snippet}
         <form id="edit-report-form" class="flex flex-col gap-5 p-5" onsubmit={saveReport}>

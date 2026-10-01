@@ -2,6 +2,7 @@ const OPENFORGE_INVOKE_CHANNEL = 'openforge:invoke'
 const OPENFORGE_EVENT_CHANNEL = 'openforge:event'
 const OPENFORGE_EVENT_SUBSCRIPTION_CHANNEL = 'openforge:event-subscription'
 const OPENFORGE_APP_EVENTS_RECONNECTED_EVENT = 'openforge-app-events-reconnected'
+const OPENFORGE_WINDOW_CHROME_ARGUMENT_PREFIX = '--openforge-window-chrome='
 
 function isEventEnvelope(value) {
   return typeof value === 'object'
@@ -9,6 +10,11 @@ function isEventEnvelope(value) {
     && 'eventName' in value
     && typeof value.eventName === 'string'
     && 'payload' in value
+}
+
+function readWindowChromeArgument(argv) {
+  const argument = argv.find(value => value.startsWith(OPENFORGE_WINDOW_CHROME_ARGUMENT_PREFIX))
+  return argument?.slice(OPENFORGE_WINDOW_CHROME_ARGUMENT_PREFIX.length) === 'inset' ? 'inset' : 'native'
 }
 
 function createOpenForgePreloadApi(ipcRenderer) {
@@ -120,4 +126,6 @@ module.exports = {
   OPENFORGE_EVENT_CHANNEL,
   OPENFORGE_APP_EVENTS_RECONNECTED_EVENT,
   createOpenForgePreloadApi,
+  OPENFORGE_WINDOW_CHROME_ARGUMENT_PREFIX,
+  readWindowChromeArgument,
 }

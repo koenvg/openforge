@@ -539,6 +539,20 @@ impl super::Database {
         Ok(rows)
     }
 
+    pub(crate) fn queued_scoped_agent_sessions(
+        &self,
+    ) -> Result<Vec<ScopedAgentSessionRow>, ScopedAgentSessionStoreError> {
+        let conn = self.lock_conn()?;
+        let mut statement = conn.prepare(&format!(
+            "SELECT {SELECT_COLUMNS} FROM scoped_agent_sessions
+             WHERE status = 'queued' ORDER BY queue_sequence"
+        ))?;
+        let rows = statement
+            .query_map([], from_row)?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
     pub(crate) fn scoped_agent_queue_position(
         &self,
         id: &str,

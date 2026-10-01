@@ -22,18 +22,17 @@ pub use hook_routes::{
 pub use models::{
     AddTaskDependencyRequest, AddTaskLabelRequest, AddTaskLabelResponse,
     AgentLifecycleNotificationPayload, ClaudeHookPayload, ClaudeHookQuery, CreateTaskRequest,
-    CreateTaskResponse, DeleteTaskRequest, DeleteTaskResponse, GetTaskInfoResponse, GrokHookQuery,
-    LinkTaskChainRequest, LinkTaskChainResponse, OpenCodePluginEventPayload,
-    PiAgentLifecyclePayload, RemoveTaskLabelRequest, SetTaskDependenciesRequest, StartTaskRequest,
-    TaskDependencyLink, TaskLabelsResponse, TaskListRow, TasksQuery, UpdateTaskRequest,
-    UpdateTaskResponse,
+    CreateTaskResponse, DeleteTaskRequest, DeleteTaskResponse, GrokHookQuery, LinkTaskChainRequest,
+    LinkTaskChainResponse, OpenCodePluginEventPayload, PiAgentLifecyclePayload,
+    RemoveTaskLabelRequest, SetTaskDependenciesRequest, StartTaskRequest, TaskDependencyLink,
+    TaskLabelsResponse, UpdateTaskRequest, UpdateTaskResponse,
 };
 pub use task_routes::{
     add_task_dependency_handler, add_task_label_handler, create_task_handler, delete_task_handler,
     get_project_attention_handler, get_project_task_labels_handler, get_projects_handler,
-    get_task_info_handler, get_tasks_handler, hard_delete_task_handler, link_task_chain_handler,
-    list_task_labels_handler, remove_task_dependency_handler, remove_task_label_handler,
-    set_task_dependencies_handler, start_task_handler, update_task_handler,
+    hard_delete_task_handler, link_task_chain_handler, list_task_labels_handler,
+    remove_task_dependency_handler, remove_task_label_handler, set_task_dependencies_handler,
+    start_task_handler, update_task_handler,
 };
 
 #[cfg(test)]
@@ -68,10 +67,8 @@ pub(super) fn router() -> Router<AppState> {
         .route("/task/:id/labels", get(list_task_labels_handler))
         .route("/add_task_label", post(add_task_label_handler))
         .route("/remove_task_label", post(remove_task_label_handler))
-        .route("/task/:id", get(get_task_info_handler))
         .route("/projects", get(get_projects_handler))
         .route("/project/:id/labels", get(get_project_task_labels_handler))
-        .route("/tasks", get(get_tasks_handler))
         .route(
             "/v2/projects/:project_id/tasks/active",
             get(task_read_routes::active_tasks_handler),

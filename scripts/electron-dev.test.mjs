@@ -129,6 +129,23 @@ describe('electron dev script environment', () => {
     expect(env.OPENFORGE_ELECTRON_SIDECAR).toBe('1')
   })
 
+  it('uses the Session Daemon built beside the sidecar when only a daemon root is configured', () => {
+    const env = buildElectronDevEnv(
+      { OPENFORGE_SESSION_DAEMON_ROOT: '/tmp/run/app-data/session-daemon' },
+      '/cargo/debug/openforge',
+    )
+
+    expect(env.OPENFORGE_SESSION_DAEMON_PATH).toBe('/cargo/debug/openforge-session-daemon')
+  })
+
+  it('keeps an explicit Session Daemon path and adds none without a daemon root', () => {
+    expect(buildElectronDevEnv({
+      OPENFORGE_SESSION_DAEMON_ROOT: '/tmp/root',
+      OPENFORGE_SESSION_DAEMON_PATH: '/custom/daemon',
+    }, '/cargo/debug/openforge').OPENFORGE_SESSION_DAEMON_PATH).toBe('/custom/daemon')
+    expect(buildElectronDevEnv({}, '/cargo/debug/openforge').OPENFORGE_SESSION_DAEMON_PATH).toBeUndefined()
+  })
+
   it('enables sidecar mode when the dev launcher supplies a built Rust sidecar path', () => {
     const env = buildElectronDevEnv({ PATH: '/usr/bin' }, '/tmp/openforge-sidecar')
 

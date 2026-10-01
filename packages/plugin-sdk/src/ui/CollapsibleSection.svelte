@@ -28,52 +28,40 @@
   let contentId = $derived(`info-section-${sectionKey}`)
 </script>
 
-<!-- `--section-inset` is the distance from the card edge to the caret. Hosts override it
-     per surface (the task inspector pushes it out to 1.5rem); the header and the body
-     both read it so they can never drift apart. `--section-caret-column` is the caret
-     plus the gap after it, so body content lines up with the icon and title rather than
-     starting under the caret. Keep it equal to the caret's `w-3` plus the header `gap-2`. -->
+<!-- Hosts may override the section inset without changing the public interface. -->
 <section
   data-task-info-card={cardId ?? sectionKey}
   data-card-sizing="natural"
-  class="rounded-lg border border-base-300/70 bg-base-100 overflow-hidden shrink-0 [--section-inset:0.75rem] [--section-caret-column:1.25rem]"
+  class="of-collapsible-section"
   aria-label={label ?? title}
   aria-live={ariaLive}
 >
-  <div class="flex items-stretch {collapsed ? '' : 'border-b border-base-300/70'}">
-    <h3 class="m-0 min-w-0 flex-1">
-      <button
-        type="button"
-        class="flex w-full items-center gap-2 px-[var(--section-inset)] py-2 text-left text-sm font-semibold text-base-content hover:bg-base-200/40 focus-visible:ring-2 focus-visible:ring-primary rounded"
-        aria-expanded={!collapsed}
-        aria-controls={contentId}
-        onclick={() => toggleSection(sectionKey)}
-      >
-        <!-- Fixed-width caret column so every section title starts at the same x,
-             including the single-row cards that render a blank column instead. -->
-        <span
-          class="w-3 shrink-0 text-center text-[0.7rem] leading-none text-base-content/40 transition-transform duration-150 {collapsed ? '-rotate-90' : ''}"
-          aria-hidden="true"
-        >▾</span>
-        {#if icon}
-          <span class="flex shrink-0 items-center text-base-content/50" aria-hidden="true">{@render icon()}</span>
-        {/if}
-        <span class="truncate">{title}</span>
+  <div class="section-header" class:expanded={!collapsed}>
+    <h3>
+      <button type="button" aria-expanded={!collapsed} aria-controls={contentId} onclick={() => toggleSection(sectionKey)}>
+        <span class="caret" class:collapsed aria-hidden="true">▾</span>
+        {#if icon}<span class="section-icon" aria-hidden="true">{@render icon()}</span>{/if}
+        <span class="section-title">{title}</span>
       </button>
     </h3>
-    {#if actions}
-      <div class="flex shrink-0 items-center gap-2 pr-2">
-        {@render actions()}
-      </div>
-    {/if}
+    {#if actions}<div class="section-actions">{@render actions()}</div>{/if}
   </div>
-
-  {#if !collapsed}
-    <div
-      id={contentId}
-      class="pl-[calc(var(--section-inset)_+_var(--section-caret-column))] pr-[var(--section-inset)]"
-    >
-      {@render children()}
-    </div>
-  {/if}
+  {#if !collapsed}<div id={contentId} class="section-content">{@render children()}</div>{/if}
 </section>
+
+<style>
+  section { --section-inset: .75rem; --section-caret-column: 1.25rem; flex-shrink: 0; overflow: hidden; border: var(--of-border-width) solid color-mix(in oklab, var(--of-border) 70%, transparent); border-radius: var(--of-radius-control); background: var(--of-surface); }
+  .section-header { display: flex; align-items: stretch; }
+  .section-header.expanded { border-bottom: var(--of-border-width) solid color-mix(in oklab, var(--of-border) 70%, transparent); }
+  h3 { margin: 0; min-width: 0; flex: 1; }
+  button { display: flex; width: 100%; align-items: center; gap: var(--of-space4); border: 0; border-radius: calc(var(--of-radius-control) / 2); background: transparent; padding: var(--of-space4) var(--section-inset); color: var(--of-text); text-align: left; font-size: var(--of-text-md); font-weight: 600; line-height: 1.25rem; cursor: pointer; }
+  button:hover { background: color-mix(in oklab, var(--of-surface-subtle) 40%, transparent); }
+  button:focus-visible { outline: var(--of-focus-width) solid var(--of-focus-ring); outline-offset: var(--of-space1); box-shadow: 0 0 0 2px var(--of-accent); }
+  .caret { width: .75rem; flex-shrink: 0; text-align: center; color: color-mix(in oklab, var(--of-text) 40%, transparent); font-size: .7rem; line-height: 1; transition: transform 150ms; }
+  .caret.collapsed { transform: rotate(-90deg); }
+  .section-icon { display: flex; flex-shrink: 0; align-items: center; color: color-mix(in oklab, var(--of-text) 50%, transparent); }
+  .section-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .section-actions { display: flex; flex-shrink: 0; align-items: center; gap: var(--of-space4); padding-right: var(--of-space4); }
+  .section-content { padding-left: calc(var(--section-inset) + var(--section-caret-column)); padding-right: var(--section-inset); }
+  @media (prefers-reduced-motion: reduce) { .caret { transition: none; } }
+</style>

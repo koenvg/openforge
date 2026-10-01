@@ -1,5 +1,8 @@
 use super::*;
-use axum::{routing::post, Json, Router};
+use axum::{
+    routing::{get, post},
+    Json, Router,
+};
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
@@ -238,6 +241,46 @@ async fn a_rejected_reply_leaves_the_thread_unaddressed() {
         events.try_recv(),
         Err(tokio::sync::broadcast::error::TryRecvError::Empty)
     ));
+}
+
+#[tokio::test]
+async fn get_pr_head_sha_reads_only_the_requested_pull_request() {
+    let (mut state, _temp_dir) = test_state("app_invoke_get_pr_head_sha");
+    let router = Router::new().route(
+        "/repos/acme/widgets/pulls/7",
+        get(|| async {
+            Json(json!({
+                "number": 7,
+                "title": "Head test",
+                "state": "open",
+                "html_url": "https://github.com/acme/widgets/pull/7",
+                "user": { "login": "author" },
+                "head": { "ref": "feature", "sha": "head-sha-7" },
+                "draft": false
+            }))
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+        .await
+        .expect("bind fake GitHub API");
+    let address = listener.local_addr().expect("read fake GitHub address");
+    tokio::spawn(async move {
+        axum::serve(listener, router)
+            .await
+            .expect("serve fake GitHub API");
+    });
+    state.github_client =
+        crate::github_client::GitHubClient::with_test_token(Ok(Some("token".to_string())))
+            .with_test_api_base_url(format!("http://{address}"));
+
+    let head_sha = invoke_ok(
+        &state,
+        "get_pr_head_sha",
+        json!({ "owner": "acme", "repo": "widgets", "prNumber": 7 }),
+    )
+    .await;
+
+    assert_eq!(head_sha, json!("head-sha-7"));
 }
 
 #[tokio::test]

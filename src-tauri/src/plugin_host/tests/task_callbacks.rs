@@ -118,13 +118,9 @@ async fn plugin_host_bounded_task_reads_match_shared_contract() {
         .await
         .expect_err("invalid Completed Task cursor");
     assert!(error.contains("cursor"));
-
-    let legacy = host
-        .handle_host_callback("openforge.tasks.list", &json!({}))
-        .await
-        .expect("legacy list callback");
-    assert!(legacy.as_array().expect("legacy tasks").len() >= 3);
-    assert!(legacy[0].get("initial_prompt").is_some());
+    for method in ["openforge.tasks.list", "openforge.tasks.get"] {
+        assert!(host.handle_host_callback(method, &json!({})).await.is_err());
+    }
 }
 
 #[tokio::test]
@@ -404,39 +400,50 @@ async fn plugin_host_task_callbacks_create_start_and_read_state() {
     assert_eq!(created_event.event_name, "task-changed");
     assert_eq!(created_event.payload["task_id"], task_id);
     assert_eq!(created_event.payload["project_id"], project.id);
-    let project_tasks = host
-        .handle_host_callback("openforge.tasks.list", &json!({ "projectId": project.id }))
-        .await
-        .expect("task list callback");
-    let project_tasks = project_tasks.as_array().expect("project tasks");
-    assert!(project_tasks.iter().any(|task| task["id"] == task_id));
-    assert!(!project_tasks.iter().any(|task| task["id"] == dependency.id));
-
-    let project_tasks_with_done = host
+    let active = host
         .handle_host_callback(
-            "openforge.tasks.list",
-            &json!({ "projectId": project.id, "includeDone": true }),
+            "openforge.tasks.active",
+            &json!({ "projectId": project.id }),
         )
         .await
-        .expect("task list including done callback");
-    assert!(project_tasks_with_done
+        .expect("active tasks callback");
+    assert!(active["tasks"]
         .as_array()
-        .expect("project tasks including done")
+        .expect("active tasks")
+        .iter()
+        .any(|task| task["id"] == task_id));
+    assert!(!active["tasks"]
+        .as_array()
+        .expect("active tasks")
         .iter()
         .any(|task| task["id"] == dependency.id));
-
+    let completed = host
+        .handle_host_callback(
+            "openforge.tasks.completed",
+            &json!({ "projectId": project.id }),
+        )
+        .await
+        .expect("completed tasks callback");
+    assert!(completed["tasks"]
+        .as_array()
+        .expect("completed tasks")
+        .iter()
+        .any(|task| task["id"] == dependency.id));
     let fetched = host
-        .handle_host_callback("openforge.tasks.get", &json!({ "taskId": task_id }))
+        .handle_host_callback(
+            "openforge.tasks.detail",
+            &json!({ "projectId": project.id, "taskId": task_id }),
+        )
         .await
-        .expect("task get callback");
-    assert_eq!(fetched["id"], task_id);
-
-    // A missing Task resolves to null instead of rejecting, so plugins can tell a
-    // deleted/completed Task apart from a transient load failure.
+        .expect("task detail callback");
+    assert_eq!(fetched["task"]["id"], task_id);
     let missing = host
-        .handle_host_callback("openforge.tasks.get", &json!({ "taskId": "T-missing" }))
+        .handle_host_callback(
+            "openforge.tasks.detail",
+            &json!({ "projectId": project.id, "taskId": "T-missing" }),
+        )
         .await
-        .expect("missing task get callback");
+        .expect("missing task detail callback");
     assert_eq!(missing, Value::Null);
 
     assert_eq!(

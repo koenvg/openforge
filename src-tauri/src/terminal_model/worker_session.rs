@@ -568,14 +568,23 @@ fn run_worker(
 
     let mut bytes_since_checkpoint = 0usize;
     let mut checkpoint_due = true;
+    let mut idle_checkpoint_armed = true;
     #[cfg(test)]
     let mut first_command = true;
     loop {
         if shutdown_requested.load(Ordering::Acquire) {
             return;
         }
-        let command = match rx.recv_timeout(CHECKPOINT_IDLE_INTERVAL) {
-            Ok(command) => command,
+        let received = if checkpoint_due && idle_checkpoint_armed {
+            rx.recv_timeout(CHECKPOINT_IDLE_INTERVAL)
+        } else {
+            rx.recv().map_err(|_| mpsc::RecvTimeoutError::Disconnected)
+        };
+        let command = match received {
+            Ok(command) => {
+                idle_checkpoint_armed = true;
+                command
+            }
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 if checkpoint_due {
                     match validate_checkpoint(&model) {
@@ -585,6 +594,7 @@ fn run_worker(
                         }
                         Err(TerminalModelError::ContinuationUnavailable) => {
                             // Retry after later input returns the parser to a snapshotable state.
+                            idle_checkpoint_armed = false;
                         }
                         Err(error) => {
                             state.disable(

@@ -204,7 +204,6 @@ pub(super) async fn handle(
                 })
                 .await
                 .map_err(map_scoped_error)?;
-            publish_scoped_changed(state, &payload.plugin_id, &payload.scope);
             json_value(result)
         }
         "get_scoped_agent_session_status" => {
@@ -221,7 +220,6 @@ pub(super) async fn handle(
                 .input(&payload.plugin_id, &payload.scope, &payload.input)
                 .await
                 .map_err(map_scoped_error)?;
-            publish_scoped_changed(state, &payload.plugin_id, &payload.scope);
             json_value(result)
         }
         "abort_scoped_agent_session" => {
@@ -230,7 +228,6 @@ pub(super) async fn handle(
                 .abort(&payload.plugin_id, &payload.scope)
                 .await
                 .map_err(map_scoped_error)?;
-            publish_scoped_changed(state, &payload.plugin_id, &payload.scope);
             json_value(result)
         }
         "release_scoped_agent_session" => {
@@ -239,7 +236,6 @@ pub(super) async fn handle(
                 .release(&payload.plugin_id, &payload.scope)
                 .await
                 .map_err(map_scoped_error)?;
-            publish_scoped_changed(state, &payload.plugin_id, &payload.scope);
             json_value(())
         }
         "finalize_agent_session" => finalize_agent_session(state, request),
@@ -298,20 +294,6 @@ fn map_scoped_error(error: ScopedAgentSessionError) -> (StatusCode, String) {
         }
     };
     (status, format!("{code}: {error}"))
-}
-
-fn publish_scoped_changed(state: &AppState, plugin_id: &str, scope: &OwnedSessionScope) {
-    publish_app_event_to_runtime(
-        state.app.as_ref(),
-        &state.app_event_tx,
-        "scoped-agent-session-changed",
-        &serde_json::json!({
-            "pluginId": plugin_id,
-            "namespace": scope.namespace,
-            "targetKey": scope.target_key,
-            "revision": scope.revision,
-        }),
-    );
 }
 
 fn finalize_agent_session(
