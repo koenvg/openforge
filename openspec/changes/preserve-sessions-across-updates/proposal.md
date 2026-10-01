@@ -13,6 +13,12 @@ Updating or restarting OpenForge currently stops its Rust Sidecar and live PTYs,
 - Route supported update/install and explicit restart entry points through this protocol. Do not broaden this change into release discovery, a new update feed, or new release channels.
 - **BREAKING internal lifecycle change:** Electron and the Sidecar no longer exclusively own the lifetime of PTYs. Installers, process cleanup, desktop test ownership, and shutdown contracts must distinguish replacement from normal Quit. Preserve public plugin and renderer terminal operations where possible.
 
+## Disabled implementation checkpoint
+
+The owner approved landing KVG-5206 as groundwork with update entry points disabled. This checkpoint includes authenticated helper, startup/readiness and recovery infrastructure, atomic app publication, source-parent-loss preservation, and local package integrity sealing. It does not complete the behavior required by the delta specs.
+
+Before activation, complete original source identity and preparation/Installed recovery, required fault coverage, safe update UX, and KVG-4730 packaged continuity/restoration acceptance. Published signing/notarization remains a separate KVG-1789 gate; legacy adoption and source-installer integration remain disabled. See [current evidence and remaining gates](../../../docs/update-helper-transaction.md).
+
 ## Capabilities
 
 ### New Capabilities

@@ -255,6 +255,7 @@ export function prepareRustDependencies({ runCommand = run } = {}) {
   const manifests = [
     layout.manifestPath,
     layout.sessionCrates.daemon.manifestPath,
+    layout.updateHelper.manifestPath,
     join(layout.backendCrateRootPath, 'ghostty-compat', 'Cargo.toml'),
   ]
   const options = {

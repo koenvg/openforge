@@ -1,6 +1,9 @@
 //! Installation-owned, content-addressed daemon releases. Integrity is not publisher trust.
 mod files;
 mod retention;
+mod trust;
+
+pub use trust::PublisherTrust;
 
 use crate::runtime::{io_error, RuntimeDirectory};
 use files::{digest, private_directory, read, write_new};
@@ -137,16 +140,20 @@ impl ReleaseStore {
     /// # Errors
     /// Refuses incompatible manifests, symlinks, altered artifacts and unsafe destinations.
     pub fn stage(&self, source: &Path) -> Result<StagedRelease, Error> {
+        let bytes = read(source, MANIFEST, 64 * 1024, false)?;
+        self.stage_manifest(source, &bytes)
+    }
+
+    fn stage_manifest(&self, source: &Path, bytes: &[u8]) -> Result<StagedRelease, Error> {
         if read(&self.directory, "owner", 128, true)? != self.installation.as_bytes() {
             return Err(Error::ForeignInstallation);
         }
         let _lock = files::lock(&self.directory.join("store.lock"))?;
-        let bytes = read(source, MANIFEST, 64 * 1024, false)?;
-        let manifest = Manifest::parse(&bytes)?;
-        let id = digest(&bytes);
+        let manifest = Manifest::parse(bytes)?;
+        let id = digest(bytes);
         let directory = self.directory.join(&id);
         if directory.try_exists().map_err(io_error)? {
-            self.verify(&directory, &manifest, &bytes)?;
+            self.verify(&directory, &manifest, bytes)?;
             return StagedRelease::open(directory, id);
         }
         let temporary = self
@@ -171,7 +178,7 @@ impl ReleaseStore {
                     if artifact.executable { 0o500 } else { 0o400 },
                 )?;
             }
-            write_new(&temporary, MANIFEST, &bytes, 0o400)?;
+            write_new(&temporary, MANIFEST, bytes, 0o400)?;
             files::sync_directory(&temporary)?;
             fs::rename(&temporary, &directory).map_err(io_error)?;
             files::sync_directory(&self.directory)?;

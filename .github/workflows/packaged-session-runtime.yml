@@ -90,7 +90,7 @@ jobs:
           appendFileSync(process.env.GITHUB_ENV, [
             `DAEMON_MANIFEST=${layout.sessionCrates.daemon.manifestPath}`,
             `DAEMON_TARGET_DIR=${layout.defaultCargoTargetDir}`,
-            `OPENFORGE_PACKAGED_RUNTIME=${join(layout.electronAppPath, 'Contents', 'MacOS', 'session-runtime')}`,
+            `OPENFORGE_PACKAGED_RUNTIME=${join(layout.electronAppPath, 'Contents', 'Resources', 'session-runtime')}`,
           ].join('\n') + '\n')
           NODE
 

@@ -1,6 +1,5 @@
-import { createHash } from 'node:crypto'
 import { join } from 'node:path'
-import { RestartOperation } from './restartOperation.js'
+import { RestartOperation, restartInstallationId } from './restartOperation.js'
 import { RestartWorkspaceIpc } from './restartWorkspaceIpc.js'
 import { RestartWorkspaceStore } from './restartWorkspaceStore.js'
 import type { RestartTerminalInventory } from './restartWorkspace.js'
@@ -11,6 +10,8 @@ export interface RestartBackend {
   cancel(operationId: string): Promise<void>
   detach(operationId: string): Promise<void>
   commit(operationId: string): Promise<void>
+  /** Resolve only after the owned Sidecar's exit, after authenticated detach. */
+  stopForUpdate?(operationId: string): Promise<void>
 }
 
 export async function createControlledRestartHost(options: {
@@ -25,7 +26,7 @@ export async function createControlledRestartHost(options: {
   if (options.intent === 'update') requireUpdateDriver(options.update)
   const initial = await options.inventory()
   const daemonInstallation = initial.controller.installation
-  const installationId = createHash('sha256').update(JSON.stringify([options.root, daemonInstallation])).digest('hex')
+  const installationId = restartInstallationId(options.root, daemonInstallation)
   const store = new RestartWorkspaceStore(join(options.root, 'restart-workspace.json'), installationId)
   const operation = new RestartOperation(join(options.root, 'restart-operation.json'), installationId)
   async function validateCompletion(): Promise<void> {
@@ -46,20 +47,41 @@ export async function createControlledRestartHost(options: {
     }
   }
   const pending = await operation.status()
+  if (pending?.intent === 'update' && pending.phase === 'prepared') {
+    throw new Error('Prepared update requires authenticated recovery')
+  }
+  async function commitUpdate(operationId: string): Promise<void> {
+    const record = await operation.status()
+    if (record?.operationId !== operationId) throw new Error('Stale update completion')
+    if (record?.intent === 'update') {
+      if (!record.updateTarget) throw new Error('Update target is missing')
+      await requireUpdateDriver(options.update).commit(parseUpdateTarget(record.updateTarget))
+    }
+  }
   if (!options.operationId && pending?.phase === 'prepared'
     && initial.controller.generation > pending.controller.generation) {
     await options.backend?.cancel(pending.operationId)
     await operation.cancel(pending.operationId)
   }
-  const acknowledged = options.operationId && await store.allWindowsAcknowledged(options.operationId)
+  let acknowledged = options.operationId && await store.allWindowsAcknowledged(options.operationId)
+  if (options.operationId && pending?.operationId === options.operationId
+    && pending.intent === 'update' && pending.phase === 'reconnecting') {
+    if (acknowledged) await validateCompletion()
+    // The production boot gate authenticates this app before creating the host.
+    // Its predecessor's windows are gone; restore them again before native commit.
+    await store.restartRestoration(options.operationId)
+    acknowledged = false
+  }
   if (options.operationId && (await store.load(options.operationId) || acknowledged)) {
     if (!acknowledged || await operation.shutdownIntent() !== 'quit') await operation.reconnect(options.operationId, initial.controller)
     if (acknowledged) {
       await validateCompletion()
+      await commitUpdate(options.operationId)
       await options.backend?.commit(options.operationId)
       await operation.commit(options.operationId)
     }
   }
+  let backendPreparationOperation: string | null = null
   return new RestartWorkspaceIpc(
     store,
     options.operationId,
@@ -80,31 +102,50 @@ export async function createControlledRestartHost(options: {
       const record = await operation.status()
       if (record?.intent === 'update') {
         if (!record.updateTarget) throw new Error('Update target is missing')
+        if (!options.backend?.stopForUpdate) throw new Error('Update requires owned Sidecar exit verification')
+        await options.backend.stopForUpdate(operationId)
+        assertCurrent()
         await requireUpdateDriver(options.update).replace(record.updateTarget)
       } else {
         await options.replace(operationId)
       }
     },
     {
-      prepare: async operationId => {
-        const intent = options.intent ?? 'restart'
+      prepare: async (operationId, requestedIntent) => {
+        const intent = options.intent ?? requestedIntent
+        if (intent === 'update' && !options.backend?.stopForUpdate) throw new Error('Update requires owned Sidecar exit verification')
         const target = intent === 'update'
           ? parseUpdateTarget(await requireUpdateDriver(options.update).preflight({ installationId, operationId }))
           : undefined
-        await operation.prepare(operationId, initial.controller, intent, initial.daemonRoot, target)
+        try {
+          await operation.prepare(operationId, initial.controller, intent, initial.daemonRoot, target)
+        } catch (error) {
+          if (target) await requireUpdateDriver(options.update).cancel(target)
+          throw error
+        }
+        // A crash during native preparation must still gate the next app's startup.
+        if (target) await requireUpdateDriver(options.update).prepare(target)
+        backendPreparationOperation = operationId
         await options.backend?.prepare(operationId, intent)
       },
       cancel: async operationId => {
         // A failed relaunch must never turn an authorized replacement into Quit.
         const record = await operation.status()
         if (record?.operationId === operationId && record.phase === 'prepared') {
-          await options.backend?.cancel(operationId)
+          try {
+            if (backendPreparationOperation === operationId) await options.backend?.cancel(operationId)
+          } finally {
+            if (record.intent === 'update' && record.updateTarget) await requireUpdateDriver(options.update).cancel(record.updateTarget)
+          }
           await operation.cancel(operationId)
+          backendPreparationOperation = null
         }
       },
       validateCompletion,
       complete: async operationId => {
         await validateCompletion()
+        // Keep the Sidecar's preservation intent while native commit is unconfirmed.
+        await commitUpdate(operationId)
         await options.backend?.commit(operationId)
         await operation.commit(operationId)
       },

@@ -1,6 +1,117 @@
 use super::*;
 
 #[test]
+fn updater_preflight_borrows_controller_without_fencing_the_live_sidecar() {
+    let (fixture, sidecar) = Fixture::new();
+    let original = sidecar.controller().clone();
+    let maintenance =
+        openforge_session_client::MaintenanceClient::attach(fixture.root.path(), original.clone())
+            .unwrap();
+    assert_eq!(maintenance.inventory().unwrap().controller, original);
+    assert_eq!(sidecar.inventory().unwrap().controller, original);
+    assert_eq!(
+        maintenance.capabilities().unwrap().pid,
+        sidecar.capabilities().unwrap().pid
+    );
+
+    let mut foreign = original.clone();
+    foreign.installation = InstallationId::parse("foreign-installation").unwrap();
+    assert!(matches!(
+        openforge_session_client::MaintenanceClient::attach(fixture.root.path(), foreign),
+        Err(Error::ForeignInstallation)
+    ));
+    assert_eq!(sidecar.inventory().unwrap().controller, original);
+
+    let next = Client::connect(fixture.root.path()).unwrap();
+    assert!(matches!(
+        maintenance.inventory(),
+        Err(Error::StaleController)
+    ));
+    assert!(matches!(
+        openforge_session_client::MaintenanceClient::attach(fixture.root.path(), original),
+        Err(Error::StaleController)
+    ));
+    assert!(next.inventory().is_ok());
+}
+
+#[test]
+fn updater_maintenance_activates_a_distinct_image_without_replacing_the_pty_owner() {
+    let (mut fixture, sidecar) = Fixture::new();
+    let command = ShellCommand {
+        owner: TerminalOwner::Shell {
+            task_id: "updater".into(),
+            index: Some(0),
+        },
+        command: PreparedCommand {
+            program: "/bin/cat".into(),
+            args: vec![],
+            cwd: fixture.root.path().into(),
+            env: BTreeMap::new(),
+        },
+        columns: 80,
+        rows: 24,
+        image_protocol: None,
+    };
+    let session = sidecar.spawn("updater-shell", &command).unwrap();
+    fixture
+        .tracked
+        .push(managed_process::ManagedProcessIdentity::capture(session.pid).unwrap());
+    let maintenance = openforge_session_client::MaintenanceClient::attach(
+        fixture.root.path(),
+        sidecar.controller().clone(),
+    )
+    .unwrap();
+    let before = maintenance.capabilities().unwrap();
+    let operation = OperationId::parse("updater-activation").unwrap();
+    let prepared = maintenance
+        .prepare(
+            operation.clone(),
+            Path::new(env!("CARGO_BIN_EXE_openforge-session-daemon-fixture-v2")),
+        )
+        .unwrap();
+    assert_eq!(prepared.state, ReplacementState::Prepared);
+    assert_eq!(sidecar.inventory().unwrap().sessions[0].pid, session.pid);
+    assert_ne!(
+        prepared.target_version.as_ref().unwrap(),
+        &before.image_version
+    );
+    let activated = maintenance.activate(operation.clone()).unwrap();
+    assert_eq!(activated.state, ReplacementState::Activated);
+    assert_eq!(
+        Some(&activated.actual_version),
+        prepared.target_version.as_ref()
+    );
+    let next = Client::connect(fixture.root.path()).unwrap();
+    let observation = openforge_session_client::MaintenanceClient::observe_replacement(
+        fixture.root.path(),
+        &sidecar.controller().installation,
+        &operation,
+    )
+    .unwrap();
+    assert_eq!(observation.0.pid, before.pid);
+    assert_eq!(observation.0.image_version, activated.actual_version);
+    assert_eq!(observation.1.operation, operation);
+    assert_eq!(observation.1.state, ReplacementState::Activated);
+    assert_eq!(next.inventory().unwrap().controller, *next.controller());
+    assert!(matches!(sidecar.inventory(), Err(Error::StaleController)));
+    assert!(matches!(
+        openforge_session_client::MaintenanceClient::observe_replacement(
+            fixture.root.path(),
+            &InstallationId::parse("foreign-installation").unwrap(),
+            &operation,
+        ),
+        Err(Error::ForeignInstallation)
+    ));
+    assert_eq!(next.controller().lifetime, sidecar.controller().lifetime);
+    assert_eq!(next.capabilities().unwrap().pid, before.pid);
+    assert_eq!(next.inventory().unwrap().sessions[0].pty, session.pty);
+    assert_eq!(next.inventory().unwrap().sessions[0].pid, session.pid);
+    next.write("after-update", &session.pty, 1, b"updater-kept-pty\n")
+        .unwrap();
+    wait_text(&next, &session.pty, "updater-kept-pty");
+}
+
+#[test]
 fn supported_large_image_keeps_replacement_available() {
     // The image contract accepts up to 128 MiB, including non-code file contents.
     // Trailing zeroes leave the signed Mach-O code identity unchanged.

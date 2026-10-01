@@ -1,6 +1,8 @@
 //! Authenticated installation-scoped Session Daemon client.
 //! Blocking calls belong on the Sidecar's blocking pool, never its async executor.
 mod host;
+mod maintenance;
+pub use maintenance::MaintenanceClient;
 mod operation_window;
 mod operations;
 mod output;

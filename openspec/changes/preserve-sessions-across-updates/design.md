@@ -155,6 +155,22 @@ A successful exec destroys the old userspace image. SIGKILL, a loader failure th
 
 Do not automatically relaunch an older domain Sidecar after new database migrations. Daemon-only fallback is isolated from SQLite; app rollback remains a separate verified compatibility decision.
 
+### Artifact trust policy approved during KVG-5200
+
+Published releases require a publisher signature anchored in keys pinned by the installed host. A checksum or a public key supplied alongside the download is not publisher authority. Local source builds require separate explicit user authorization bound to immutable artifact identities and the installation/update operation. A missing or invalid publisher signature must never fall back to local-build authorization automatically.
+
+The runtime staging prerequisite uses Ed25519 signatures over `openforge-session-release-v1\0` followed by the exact runtime manifest bytes. The manifest binds the runtime files; staging verifies their hashes and permissions before publication. This runtime signature does not authorize replacement of the entire app or prove daemon transition compatibility. Production enablement still requires full-target authorization, a verified helper, and isolated continuity evidence.
+
+The installed publisher key set must be supplied through the trusted release process, not artifact metadata, IPC, or runtime environment overrides. The owner-approved key is pinned in `src/electron/updatePublisher.json` and embedded in the Rust verifier. Local-build authorization must be issued only after explicit trusted-host approval; it is not a caller-supplied boolean or an environment switch. Complete-app authorization now reaches the packaged helper and local driver, but update entry points and the source installer remain disabled.
+
+### Disabled checkpoint boundary
+
+The owner approved an implementation checkpoint, not update activation. The helper uses atomic app exchange, a durable execution gate, process-bound startup/admission/readiness and native-first commit. Replacement app lifetimes must restore their own windows before committing. macOS Electron-owned source Sidecars also exit through the kernel parent watcher without Quit cleanup; the armed-guard capability is not original source birth or exit proof.
+
+Local updates remain blocked pending original source identity/exit attestation, authenticated preparation-loss and Installed/no-launch recovery, remaining crash/lost-acknowledgement coverage, update UX inspection and KVG-4730 packaged acceptance. Cold relaunch without a retained live-runtime plan refuses. Publication, legacy adoption and source installation remain separate disabled paths. These checkpoints do not waive the delta specs or mark the complete change implemented.
+
+Packaged runtime and plugin-host resources now live under `Contents/Resources`. Local ad-hoc sealing establishes integrity without changing publisher trust. [The checkpoint report](../../../docs/update-helper-transaction.md) distinguishes the rebuilt app's ordinary-startup evidence from full packaged update continuity.
+
 ## Risks / Trade-offs
 
 - [Reexec support in PTY/terminal libraries is incomplete] -> Prove raw descriptor reconstruction, state transfer, protocol replies, and cleanup behavior in the first stage; block production work on failure.

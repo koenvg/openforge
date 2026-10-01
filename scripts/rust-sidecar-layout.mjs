@@ -80,6 +80,10 @@ export function resolveRustSidecarLayout({
         ...(kind === 'daemon' ? { binaryPath: join(root, 'target', 'debug', platformBinaryName('openforge-session-daemon', platform)) } : {}),
       }]
     })),
+    updateHelper: {
+      root: join(backendCrateRootPath, 'crates', 'update-helper'),
+      manifestPath: join(backendCrateRootPath, 'crates', 'update-helper', 'Cargo.toml'),
+    },
     backendCrateRoot,
     backendCrateRootPath,
     manifestPath: pathFromRepoRoot(normalizedRepoRoot, manifestPath),
@@ -103,6 +107,7 @@ function printCliValue(field) {
     'backend-crate-root': layout.backendCrateRoot,
     'backend-crate-root-path': layout.backendCrateRootPath,
     'manifest-path': layout.manifestPath,
+    'update-helper-manifest-path': layout.updateHelper.manifestPath,
     'session-daemon-manifest-path': layout.sessionCrates.daemon.manifestPath,
     'session-client-manifest-path': layout.sessionCrates.client.manifestPath,
     'session-protocol-manifest-path': layout.sessionCrates.protocol.manifestPath,

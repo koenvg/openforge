@@ -6,7 +6,7 @@ import type { ShutdownIntent } from './restartOperation.js'
 import type { RestartWorkspaceStore } from './restartWorkspaceStore.js'
 
 interface RestartLifecycle {
-  prepare(operationId: string): Promise<void>
+  prepare(operationId: string, intent: 'restart' | 'update'): Promise<void>
   cancel(operationId: string): Promise<void>
   validateCompletion(): Promise<void>
   complete(operationId: string): Promise<void>
@@ -70,28 +70,36 @@ export class RestartWorkspaceIpc {
     }
   }
 
+  /** Native-menu entry point. Renderer commands cannot select update intent. */
+  requestUpdate(rendererId: number): Promise<void> {
+    return this.begin(rendererId, 'update')
+  }
+
+  private async begin(rendererId: number, intent: 'restart' | 'update'): Promise<void> {
+    if (!this.windows.has(rendererId)) throw new Error('Unregistered restart workspace renderer')
+    if (this.captureOperation) throw new Error('Controlled restart already preparing')
+    const operationId = randomUUID()
+    this.captureOperation = operationId
+    try {
+      await this.lifecycle?.prepare(operationId, intent)
+      await this.coordinator.restart(operationId, assertCurrent => this.replace(operationId, assertCurrent))
+    } catch (error) {
+      await this.lifecycle?.cancel(operationId)
+      this.captureOperation = null
+      throw error
+    } finally {
+      for (const pending of this.pending.values()) pending.reject(new Error('Workspace capture cancelled'))
+    }
+  }
+
   async handle(rendererId: number, command: string, payload: unknown): Promise<unknown> {
     const windowId = this.windows.get(rendererId)
     if (!windowId) throw new Error('Unregistered restart workspace renderer')
     const input = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {}
     switch (command) {
       case 'restart_app':
-      case 'controlled_restart': {
-        if (this.captureOperation) throw new Error('Controlled restart already preparing')
-        const operationId = randomUUID()
-        this.captureOperation = operationId
-        try {
-          await this.lifecycle?.prepare(operationId)
-          await this.coordinator.restart(operationId, assertCurrent => this.replace(operationId, assertCurrent))
-        } catch (error) {
-          await this.lifecycle?.cancel(operationId)
-          this.captureOperation = null
-          throw error
-        } finally {
-          for (const pending of this.pending.values()) pending.reject(new Error('Workspace capture cancelled'))
-        }
-        return
-      }
+      case 'controlled_restart':
+        return this.begin(rendererId, 'restart')
       case 'capture_restart_workspace': {
         const pending = this.pending.get(rendererId)
         if (!pending || input.operationId !== pending.operationId) throw new Error('Stale workspace capture')

@@ -10,18 +10,18 @@ import { createControlledRestartHost } from './controlledRestartHost'
 
 const roots: string[] = []
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))) })
-async function fixture(detach = true) {
+async function fixture(detach = true, intent: 'restart' | 'update' = 'restart') {
   const root = await mkdtemp(join(tmpdir(), 'of-recovery-'))
   roots.push(root)
   const controller = { installation: 'installation', lifetime: 'daemon', generation: 1 }
   const identity = createHash('sha256').update(JSON.stringify([root, controller.installation])).digest('hex')
   const operation = new RestartOperation(join(root, 'restart-operation.json'), identity)
-  await operation.prepare('operation', controller, 'update', '/isolated/daemon')
+  await operation.prepare('operation', controller, intent, '/isolated/daemon')
   if (detach) await operation.detach('operation')
   return { root, operation, controller }
 }
 
-it('reports failed activation durably and serializes retries without completing the update', async () => {
+it('reports failed activation durably and serializes retries without completing the restart', async () => {
   const { root, operation } = await fixture()
   const retry = vi.fn(async () => {})
   const terminate = vi.fn(async () => {})
@@ -31,11 +31,11 @@ it('reports failed activation durably and serializes retries without completing 
   expect(retry).toHaveBeenCalledExactlyOnceWith('operation')
   expect(terminate).not.toHaveBeenCalled()
   expect(prompt.mock.calls[0][0].failure).toBe('activation-failed')
-  expect(await operation.shutdownIntent()).toBe('update')
+  expect(await operation.shutdownIntent()).toBe('restart')
   await expect((await RestartOperation.open(root))?.status()).resolves.toMatchObject({ phase: 'detached', failure: 'activation-failed' })
 })
 
-it('normal Quit authenticates cleanup without Sidecar and records termination, not update success', async () => {
+it('normal Quit authenticates cleanup without Sidecar and records termination, not restart success', async () => {
   const { root, operation, controller } = await fixture()
   const terminate = vi.fn(async () => {})
   const exit = vi.fn()
@@ -71,7 +71,7 @@ it('does not replay recovery if workspace completion arrives while the dialog is
   expect(await operation.status()).toMatchObject({ phase: 'committed' })
 })
 
-it('marks interrupted preparation failed on a later healthy launch instead of blocking future restarts', async () => {
+it('cancels interrupted ordinary restart preparation on a later healthy launch', async () => {
   const { root, operation, controller } = await fixture(false)
   const cancel = vi.fn(async () => {})
   const host = await createControlledRestartHost({ root, operationId: null, replace: async () => {},
@@ -92,7 +92,7 @@ it('keeps cold process loss distinct from interface failure and never claims liv
   await recovery.recover('interface-restoration-incomplete')
   expect(prompt.mock.calls[0][0].failure).toBe('cold-process-loss')
   expect(retry).not.toHaveBeenCalled()
-  expect(await operation.shutdownIntent()).toBe('update')
+  expect(await operation.shutdownIntent()).toBe('restart')
 })
 
 it('classifies a failed preparation before detach separately from a delayed relaunch', async () => {
@@ -101,4 +101,16 @@ it('classifies a failed preparation before detach separately from a delayed rela
   await new RestartRecovery({ root, prompt, retry: vi.fn(), terminate: vi.fn(), exit: vi.fn() }).recover('relaunch-delayed')
   expect(await operation.status()).toMatchObject({ phase: 'prepared', failure: 'preparation-failed' })
   expect(prompt.mock.calls[0][0].failure).toBe('preparation-failed')
+})
+
+it('never handles update retry or Quit through ordinary restart recovery', async () => {
+  const { root, operation } = await fixture(true, 'update')
+  const prompt = vi.fn(async () => 'wait' as const)
+  const terminate = vi.fn(async () => {})
+  const recovery = new RestartRecovery({ root, prompt, terminate, retry: vi.fn(), exit: vi.fn() })
+  expect(await recovery.recover('activation-failed')).toBe(false)
+  expect(await recovery.quit()).toBe(false)
+  expect(prompt).not.toHaveBeenCalled()
+  expect(terminate).not.toHaveBeenCalled()
+  expect(await operation.status()).toMatchObject({ intent: 'update', phase: 'detached' })
 })

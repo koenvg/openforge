@@ -1,6 +1,6 @@
 # Packaged Session Daemon releases
 
-Packaged macOS builds contain `Contents/MacOS/session-runtime/manifest.json`, the daemon, and the packaged CLI runtime files. Packaging checks Electron, Sidecar, and daemon architectures for both explicit Rust targets and native builds. The manifest declares artifact hashes, architecture, protocol, and checkpoint format.
+Packaged macOS builds contain `Contents/Resources/session-runtime/manifest.json`, the retained daemon, and the packaged CLI runtime files. Packaging checks Electron, Sidecar, daemon and updater-helper architectures for both explicit Rust targets and native builds. The manifest declares artifact hashes, architecture, protocol and checkpoint format. The plugin host lives under `Contents/Resources/plugin-host`. Local ad-hoc code sealing preserves retained daemon bytes and supplies integrity, not publisher authentication.
 
 The release Sidecar selects this packaged runtime. The Session Client first attempts authenticated reattachment. If a daemon must be launched, it copies the manifest's files into the installation's `session-v1/releases/<manifest-sha256>/` directory and launches that copy. Reattachment does not require the old app bundle to remain present. Development builds continue to use their separately built daemon.
 
@@ -10,7 +10,7 @@ Staging validates hashes and compatibility before publishing a directory by atom
 
 This is artifact integrity verification, **not publisher authentication**. Initial launch uses the payload of the app the user installed. `ReleaseStore::preflight` checks installation identity and both staged target and fallback artifacts, then refuses replacement because production release trust verification is unavailable. It does not execute the target, pause a daemon, or acquire a controller generation. There is no environment-variable trust bypass. The existing production live-replacement gate remains closed. Release signing work is tracked separately in KVG-1789.
 
-No release feed, download, discovery, updater UI, or automatic app rollback is introduced. Manifest compatibility is not proof that an arbitrary new executable can restore a live checkpoint. Production activation still requires publisher verification and the daemon's isolated image/state probe before destructive exec.
+No release feed, download, discovery or automatic app rollback is introduced. Manifest compatibility is not proof that an arbitrary new executable can restore a live checkpoint. Published activation requires publisher verification; a locally built target instead requires explicit complete-app approval bound to its immutable bytes and operation. Both require the daemon's isolated image/state probe before destructive exec. Update entry points remain disabled pending [the recovery and packaged acceptance gates](update-helper-transaction.md).
 
 ## Capacity and replacement at scale
 
@@ -18,7 +18,7 @@ A fresh Session Daemon allows up to 896 live PTYs within 1,024 retained records;
 
 In the macOS arm64 replacement fixture, 33 live PTYs produced a 234,856-byte checkpoint and 37 inherited FDs with a 385 ms pause. At 256 PTYs, the checkpoint was 1,793,059 bytes with 260 inherited FDs and a 2,133 ms pause. The backend allows four seconds for coordinated checkpoint capture. It refuses an over-budget or timed-out checkpoint before exec, reopens paused readers, and keeps the old daemon serving. Fixture tests also write to PTYs after refusal. These measurements are not a production update benchmark.
 
-If admission fails, inspect the resource in the typed `capacityExceeded` error and compare it with `inventory.capacity.resources`. The host retires settled entries automatically when history fills; ending live sessions releases descriptors and process slots. Do not kill the daemon to work around a limit while it owns PTYs. If a replacement fails at `checkpoint`, keep using the old daemon and investigate checkpoint size, pause time, and available memory before retrying. Production trusted activation remains closed pending KVG-5206 and publisher verification in KVG-1789. Recheck packaged-update compatibility with the shipped updater when that work lands.
+If admission fails, inspect the resource in the typed `capacityExceeded` error and compare it with `inventory.capacity.resources`. The host retires settled entries automatically when history fills; ending live sessions releases descriptors and process slots. Do not kill the daemon to work around a limit while it owns PTYs. If a replacement fails at `checkpoint`, keep using the old daemon and investigate checkpoint size, pause time, and available memory before retrying. App update activation remains closed pending KVG-5206 recovery and packaged acceptance; published updates additionally require KVG-1789 publisher verification. Recheck packaged-update compatibility with the shipped updater when that work lands.
 
 Compatibility is deliberately narrow while the production update gate is closed:
 
@@ -28,7 +28,7 @@ Compatibility is deliberately narrow while the production update gate is closed:
 | Validated 32-live-session ledger into this daemon | Unit tests preserve the PTY identity and operation receipts while expanding limits. An installed legacy binary has not been exercised. |
 | This daemon into a 32-session image | Unsupported. The future updater must reject the downgrade before exec; do not use a fixture success as evidence otherwise. |
 | Unknown checkpoint format or altered descriptors | Rejected by image validation. No compatibility promise for older formats. |
-| Packaged production update | Disabled until KVG-5206 supplies trusted activation and KVG-1789 supplies publisher verification. |
+| Packaged app update | Disabled. Local macOS arm64 activation needs KVG-5206 recovery and KVG-4730 acceptance; published updates additionally need KVG-1789 publisher verification. |
 
 The operation window exposes retained receipt counts and limits separately from PTY capacity. A client may retire observed receipts; a refusal does not authorize replaying an uncertain mutation. A blocked replacement reports its failed stage and keeps the old image serving if it has not crossed exec.
 
@@ -61,7 +61,7 @@ cargo test --manifest-path src-tauri/crates/session-client/Cargo.toml --test rel
 cargo test --manifest-path src-tauri/crates/session-daemon/Cargo.toml --test packaged_release
 ```
 
-The daemon integration test uses the actual packaging manifest writer by default. Set `OPENFORGE_PACKAGED_RUNTIME` to an existing `.app/Contents/MacOS/session-runtime` to test the payload copied from that app instead; CI uses this path. The test launches a staged daemon with a live shell, deletes its temporary source bundle, verifies stable daemon lifetime and shell PID/PTY identity after refusal, sends further input, and exercises authenticated registry cleanup. Store tests cover corrupt and incompatible manifests, symlinks, executable permissions, foreign ownership, leases, durable references, and unknown artifacts.
+The daemon integration test uses the actual packaging manifest writer by default. Set `OPENFORGE_PACKAGED_RUNTIME` to an existing `.app/Contents/Resources/session-runtime` to test the payload copied from that app instead; CI uses this path. The test launches a staged daemon with a live shell, deletes its temporary source bundle, verifies stable daemon lifetime and shell PID/PTY identity after refusal, sends further input, and exercises authenticated registry cleanup. Store tests cover corrupt and incompatible manifests, symlinks, executable permissions, foreign ownership, leases, durable references, and unknown artifacts.
 
 KVG-4728 has native macOS arm64 package and packaged-smoke evidence locally, plus native Intel x64 evidence from [CI run 35535077246](https://github.com/koenvg/openforge/actions/runs/35535077246), job `Packaged Session Runtime (x64)`. That job passed packaging, staged launch/bundle-removal/refusal/cleanup, and packaged Electron smoke on an Intel Core i7-8700B with translation disabled. The `packaged-session-runtime-x64` artifact records the architecture, manifest, daemon SHA-256 (`7c16ab7096c7a3a360b01f856a76e43c9824bb8a49eee2cba1d497dc0472ce25`), and test logs. Production trusted replacement remains deliberately disabled.
 

@@ -68,7 +68,7 @@ describe('Ghostty dependency preparation', () => {
         if (options.env.CARGO_NET_OFFLINE !== 'false') throw new Error('network still disabled')
       })
       expect(() => prepareRustDependencies({ runCommand })).not.toThrow()
-      expect(runCommand).toHaveBeenCalledTimes(6)
+      expect(runCommand).toHaveBeenCalledTimes(8)
       expect(process.env.CARGO_NET_OFFLINE).toBe('true')
     } finally {
       vi.unstubAllEnvs()
@@ -78,7 +78,7 @@ describe('Ghostty dependency preparation', () => {
   it('never requests an online fetch when all lockfiles are cached', () => {
     const runCommand = vi.fn()
     prepareRustDependencies({ runCommand })
-    expect(runCommand).toHaveBeenCalledTimes(3)
+    expect(runCommand).toHaveBeenCalledTimes(4)
     for (const [, args] of runCommand.mock.calls) expect(args).toContain('--offline')
   })
 
@@ -88,12 +88,14 @@ describe('Ghostty dependency preparation', () => {
     })
     prepareRustDependencies({ runCommand })
     const layout = resolveRustSidecarLayout()
+    const commands = runCommand.mock.calls.map(([command, args]) => [command, args])
     for (const manifest of [
       layout.manifestPath,
       layout.sessionCrates.daemon.manifestPath,
+      layout.updateHelper.manifestPath,
       join(layout.backendCrateRootPath, 'ghostty-compat', 'Cargo.toml'),
     ]) {
-      expect(runCommand).toHaveBeenCalledWith('cargo', ['fetch', '--locked', '--manifest-path', manifest], expect.any(Object))
+      expect(commands).toContainEqual(['cargo', ['fetch', '--locked', '--manifest-path', manifest]])
     }
   })
 

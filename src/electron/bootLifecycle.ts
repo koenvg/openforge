@@ -52,6 +52,8 @@ export interface BootLifecycleAdapter {
   exit(exitCode?: number): void
   waitForAppReady(): Promise<void>
   preflightUpdateLaunch?(): Promise<void>
+  /** On failed authenticated update startup, retire the owned child without Quit cleanup. */
+  retireFailedUpdateLaunch?(): Promise<void>
   resolveSidecarPath(): string | null
   createSidecarLaunchConfig(sidecarPath: string): SidecarLaunchConfig
   startSidecar(config: SidecarLaunchConfig): Promise<SidecarReadinessHandle>
@@ -109,15 +111,22 @@ export async function bootOpenForgeDesktop(
   let mainWindow: unknown | null = null
 
   let recoveryFailure: RecoveryFailure = 'activation-failed'
+  let bootFailed = false
+  const sidecarShutdown = new RustSidecarShutdownAdapter({
+    sidecar: () => sidecar,
+    process: () => adapter.getSidecarLaunchProcess(),
+    stopOptions: { graceMs: RUST_SIDECAR_SIGTERM_GRACE_MS },
+    deadlineMs: RUST_SIDECAR_SHUTDOWN_COORDINATOR_DEADLINE_MS,
+  })
   const shutdownCoordinator = new ShutdownCoordinator({
-    adapters: [
-      new RustSidecarShutdownAdapter({
-        sidecar: () => sidecar,
-        process: () => adapter.getSidecarLaunchProcess(),
-        stopOptions: { graceMs: RUST_SIDECAR_SIGTERM_GRACE_MS },
-        deadlineMs: RUST_SIDECAR_SHUTDOWN_COORDINATOR_DEADLINE_MS,
-      }),
-    ],
+    adapters: [{
+      name: sidecarShutdown.name, deadlineMs: sidecarShutdown.deadlineMs,
+      shutdown: async () => {
+        // Failure must not fall back to SIGTERM if update retirement is unconfirmed.
+        if (bootFailed) await adapter.retireFailedUpdateLaunch?.()
+        return sidecarShutdown.shutdown()
+      },
+    }],
     logger,
     failureReporter: options.failureReporter,
   })
@@ -132,6 +141,7 @@ export async function bootOpenForgeDesktop(
   })
 
   const cleanupStartedResources = async (): Promise<void> => {
+    bootFailed = true
     await shutdownCoordinator.shutdown()
   }
 

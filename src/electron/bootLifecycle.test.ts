@@ -15,6 +15,28 @@ import type {
 } from './bootLifecycle'
 import type { SidecarLaunchConfig, SidecarReadinessHandle, SidecarReadinessSnapshot } from './sidecar'
 
+it.each([false, true])('retires update startup before ordinary cleanup and never falls back on retirement failure: %s', async retirementFails => {
+  const adapter = new FakeBootLifecycleAdapter()
+  const events: string[] = []
+  adapter.mainWindowFailure = new Error('workspace restoration failed')
+  Object.assign(adapter, {
+    retireFailedUpdateLaunch: async () => {
+      events.push('retire-update')
+      if (retirementFails) throw new Error('Owned update Sidecar exit was not observed')
+    },
+    recoverRestart: async () => true,
+  })
+  adapter.sidecar.stop.mockImplementation(async () => {
+    events.push('ordinary-stop')
+    return { status: 'terminated', signal: 'SIGTERM', timedOut: false, error: null }
+  })
+  expect(await bootOpenForgeDesktop(adapter, bootOptions())).toMatchObject({ recovery: true })
+  expect(events).toEqual(retirementFails ? ['retire-update'] : ['retire-update', 'ordinary-stop'])
+  adapter.beforeQuitHandler?.({ preventDefault: () => {} })
+  await vi.waitFor(() => expect(adapter.exit).toHaveBeenCalled())
+  expect(events).toEqual(retirementFails ? ['retire-update'] : ['retire-update', 'ordinary-stop'])
+})
+
 function sidecarConfig(): SidecarLaunchConfig {
   return {
     command: 'openforge-sidecar',

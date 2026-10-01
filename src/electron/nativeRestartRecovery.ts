@@ -7,6 +7,7 @@ import type { RecoveryFailure } from './restartOperation.js'
 import { RestartRecovery } from './restartRecovery.js'
 import type { RestartTerminalController } from './restartWorkspace.js'
 import { resolveElectronSidecarPath } from './sidecarPath.js'
+import { NativeUpdateRecovery, type UpdateRecoveryActions } from './nativeUpdateRecovery.js'
 
 const messages: Record<RecoveryFailure, string> = {
   'update-verification-unavailable': 'Update launch verification is unavailable. The Sidecar was not started, so it cannot change the database. A trusted compatible update is required.',
@@ -22,16 +23,20 @@ interface Options {
   currentDir: string
   relaunch(operationId: string | null): void
   quit(): void
+  update: UpdateRecoveryActions
 }
 
 /** Owns native dialogs and the authenticated local CLI, never an older Sidecar. */
 export class NativeRestartRecovery {
   private readonly recovery: RestartRecovery
+  private readonly updateRecovery: NativeUpdateRecovery
   constructor(private readonly options: Options) {
+    this.updateRecovery = new NativeUpdateRecovery({ root: options.root, ...options.update })
     this.recovery = new RestartRecovery({
       root: options.root,
       retry: async operationId => {
         const record = await (await RestartOperation.open(options.root))?.status()
+        if (!record || record.intent !== 'restart' || record.operationId !== operationId) throw new Error('Restart operation changed during recovery')
         options.relaunch(record?.phase === 'prepared' ? null : operationId)
       },
       terminate: async target => {
@@ -53,15 +58,21 @@ export class NativeRestartRecovery {
     })
   }
 
-  recover(failure: RecoveryFailure): Promise<boolean> { return this.recovery.recover(failure) }
-  quit(): Promise<boolean> { return this.recovery.quit() }
+  async recover(failure: RecoveryFailure): Promise<boolean> {
+    return await this.updateRecovery.recover(failure) || this.recovery.recover(failure)
+  }
+
+  async quit(): Promise<boolean> {
+    return await this.updateRecovery.recover() || this.recovery.quit()
+  }
 
   async recoverBoot(failure: RecoveryFailure): Promise<boolean> {
+    if (await this.updateRecovery.recover(failure)) return true
     // Boot has stopped its failed Sidecar before probing. Reauthentication here
     // cannot steal the controller from a healthy Sidecar in this Electron process.
     const record = await (await RestartOperation.open(this.options.root))?.status()
     let error: string | undefined
-    if (record?.daemonRoot && !['committed', 'cancelled', 'terminated'].includes(record.phase)) {
+    if (record?.intent === 'restart' && record.daemonRoot && !['committed', 'cancelled', 'terminated'].includes(record.phase)) {
       try {
         const result = await this.command('--recovery-status', { root: record.daemonRoot, controller: record.controller })
         if (JSON.parse(result.stdout).state === 'cold-process-loss') failure = 'cold-process-loss'
@@ -70,7 +81,9 @@ export class NativeRestartRecovery {
     return this.recovery.recover(failure, error)
   }
 
-  private command(mode: '--terminate-sessions' | '--recovery-status', target: { root: string; controller: RestartTerminalController }) {
+  private async command(mode: '--terminate-sessions' | '--recovery-status', target: { root: string; controller: RestartTerminalController }) {
+    const record = await (await RestartOperation.open(this.options.root))?.status()
+    if (record?.intent === 'update') throw new Error('Update recovery cannot use the ordinary restart CLI')
     const sidecar = resolveElectronSidecarPath(this.options.env, this.options.currentDir)
     const executable = this.options.env.OPENFORGE_SESSION_DAEMON_PATH || (sidecar
       ? join(dirname(sidecar), 'openforge-session-daemon')
