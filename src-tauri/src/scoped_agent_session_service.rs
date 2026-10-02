@@ -901,3 +901,7 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 #[cfg(test)]
 #[path = "scoped_agent_session_service_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "scoped_agent_session_notification_tests.rs"]
+mod notification_tests;
