@@ -126,6 +126,8 @@ export default defineConfig({
 })
 ```
 
+`CollapsibleSection` spacing is plugin-safe starting in SDK 0.3.9. Its scoped CSS supplies the header inset and body padding without host Tailwind scanning. Upgrade the SDK and rebuild your plugin; updating the desktop app alone does not change an installed plugin's bundle. Keep the emitted CSS in `frontendStyles`. The task inspector can still override `--section-inset` on the section element.
+
 Svelte library builds emit CSS separately. List each emitted CSS file in `openforge.frontendStyles`; otherwise OpenForge will not load it.
 
 ## Backend entry point
