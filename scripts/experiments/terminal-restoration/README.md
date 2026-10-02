@@ -116,6 +116,16 @@ A future go decision requires a supported renderer contract that can append olde
 
 Use an existing Arc debugging session. The scripts open and close only their own tabs. They never start another browser or close Arc. The small CDP client avoids attaching to unrelated suspended Arc tabs, which caused Playwright's browser-wide CDP attachment to time out during setup.
 
+`openArcPage()` has a shared 30-second initialization deadline. Failed setup and explicit `close()` close only the target ID returned by that call's `Target.createTarget`. Cleanup allows 5 seconds for CDP, then 5 seconds for the target-specific HTTP close endpoint if CDP fails. It always closes its socket and rejects outstanding requests. Cleanup failures retain the original setup error and report the cleanup error too.
+
+If Arc creates a target but disconnects or times out before returning its ID, safe target cleanup is unavailable. The helper releases its connection without guessing an ID or enumerating user tabs. If both target-close attempts fail, it reports the failure rather than claiming the tab was closed.
+
+Run the helper's failure-path tests without a live browser:
+
+```sh
+pnpm exec vitest run --project node scripts/experiments/terminal-restoration/arc-cdp.test.mjs
+```
+
 ```sh
 pnpm i
 pnpm exec vite --config packages/terminal-runtime/conformance/vite.config.ts --port 5199
