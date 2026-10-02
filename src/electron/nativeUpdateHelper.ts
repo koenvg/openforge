@@ -25,6 +25,12 @@ export class NativeUpdateNotStarted extends Error {
   }
 }
 
+export interface NativeSourceOwner {
+  /** Captured from the exact owned ChildProcess handle, never inventory or renderer IPC. */
+  sidecarPid: number
+  key: string
+}
+
 /** Trusted main-process boundary. Not a renderer IPC endpoint or an update enablement switch. */
 export async function prepareNativeUpdateHandoff(options: {
   authorization: UpdateAuthorizationStore
@@ -32,10 +38,12 @@ export async function prepareNativeUpdateHandoff(options: {
   target: UpdateTarget
   recoveryRoot: string
   controller?: RestartTerminalController
+  source?: NativeSourceOwner
 }): Promise<NativeUpdateHandoff> {
   let requested = false
   let helper: UpdateHelperProcess | undefined
   let executable: string | undefined
+  const source = options.source ? Object.freeze({ ...options.source }) : undefined
   try {
     const target = parseUpdateTarget(options.target)
     const controller = options.controller ? Object.freeze({ ...options.controller }) : undefined
@@ -57,7 +65,8 @@ export async function prepareNativeUpdateHandoff(options: {
     await copyVerifiedHelper(join(staged.bundlePath, 'Contents/MacOS/openforge-update-helper'), executable, target.images.helper)
     helper = new UpdateHelperProcess(executable)
     const challenge = handoffChallenge(await helper.receive(10_000), 'install')
-    const proof = (action: 'prepare' | 'install' | 'cancel') => store.helperProof(target.operationId, challenge, action, root, target.manifestSha256, controller)
+    if (!source || !Number.isSafeInteger(source.sidecarPid) || source.sidecarPid <= 1 || !/^[a-f0-9]{64}$/.test(source.key)) throw new Error('Missing owned original source attestation')
+    const proof = (action: 'prepare' | 'install' | 'cancel') => store.helperProof(target.operationId, challenge, action, root, target.manifestSha256, controller, undefined, action === 'prepare' ? { key: source.key, sidecarPid: source.sidecarPid } : undefined)
     const request = await proof('prepare')
     // A failed write may still deliver authority. Only failures before this point are unsent.
     requested = true
@@ -93,10 +102,11 @@ export async function prepareNativeUpdateRelaunch(options: Omit<InstalledUpdateO
 }
 
 function handoffChallenge(hello: Record<string, unknown>, purpose: 'install' | 'relaunch'): string {
-  if (hello.version !== 2) throw new Error('Unsupported update helper protocol')
+  if (hello.version !== 3) throw new Error('Unsupported update helper protocol')
   if (!Array.isArray(hello.capabilities) || !hello.capabilities.includes('relaunch')) throw new Error('Update helper does not support authenticated relaunch')
   if (!hello.capabilities.includes('launch-gate')) throw new Error('Update helper does not support a durable launch gate')
   if (purpose === 'install' && !hello.capabilities.includes('atomic-replace')) throw new Error('Update helper does not support atomic app replacement')
+  if (!hello.capabilities.includes('original-source-v1')) throw new Error('Update helper does not support original source attestation')
   if (typeof hello.challenge !== 'string' || !/^[a-f0-9]{64}$/.test(hello.challenge)) throw new Error('Invalid helper challenge')
   return hello.challenge
 }
@@ -177,9 +187,8 @@ async function runInstalledHelper(options: InstalledUpdateOptions, action: 'comm
       helper = new UpdateHelperProcess(executable)
       const hello = await helper.receive(firstProbe ? 10_000 : 2_000)
       firstProbe = false
-      if (hello.version !== 2) throw new Error('Unsupported update helper protocol')
-      if (typeof hello.challenge !== 'string') throw new Error('Invalid helper challenge')
-      await helper.send(await options.authorization.helperProof(target.operationId, hello.challenge, action, root, target.manifestSha256, controller, sidecarPid))
+      const challenge = handoffChallenge(hello, 'relaunch')
+      await helper.send(await options.authorization.helperProof(target.operationId, challenge, action, root, target.manifestSha256, controller, sidecarPid))
       const result = await helper.receive()
       if (action === 'verify-launch' && result.status === 'launch-pending' && result.operation === target.operationId) {
         await helper.stop()

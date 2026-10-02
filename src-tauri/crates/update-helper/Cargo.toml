@@ -36,3 +36,8 @@ required-features = ["test-fixtures"]
 name = "openforge-update-target-fixture"
 path = "tests/fixtures/target.rs"
 required-features = ["test-fixtures"]
+
+[[bin]]
+name = "openforge-update-source-fixture"
+path = "tests/fixtures/source.rs"
+required-features = ["test-fixtures"]

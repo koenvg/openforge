@@ -31,6 +31,8 @@ export interface RestartTerminalInventory {
   hasLegacySessions?: boolean
   /** Armed in this Sidecar process. This is not process-exit proof. */
   parentExitGuardArmed?: boolean
+  /** Native startup evidence retained in this source Sidecar's memory. Guard-only sources are ineligible. */
+  sourceAttestationVersion?: number
   daemonRoot?: string
   appDataRoot?: string
 }

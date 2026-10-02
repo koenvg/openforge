@@ -102,7 +102,7 @@ fn unauthenticated_handoff_cannot_acquire_or_change_an_installation() {
     let fixture = common::Fixture::new();
     let mut helper = Helper::start();
     let hello = helper.response(10);
-    assert_eq!(hello["version"], 2);
+    assert_eq!(hello["version"], 3);
     assert_eq!(hello["challenge"].as_str().unwrap().len(), 64);
     helper.send(json!({"payload":request(&fixture, &hello["challenge"]), "mac":"00".repeat(32)}));
     assert_eq!(helper.response(5)["status"], "refused");
@@ -132,40 +132,17 @@ fn signed(payload: String) -> Value {
     let mac: String = tag.as_ref().iter().map(|b| format!("{b:02x}")).collect();
     json!({"payload":payload,"mac":mac})
 }
-
 #[test]
-fn authenticated_install_waits_for_its_live_host_and_retains_recovery_if_killed() {
+fn authenticated_guard_only_source_cannot_begin_disruptive_preparation() {
     let fixture = common::Fixture::with_target_bytes(
         &fs::read(env!("CARGO_BIN_EXE_openforge-update-helper")).unwrap(),
     );
     let mut helper = Helper::start();
     let hello = helper.response(10);
     helper.send(signed(request(&fixture, &hello["challenge"])));
-    // Full integrity/ownership preparation has the transaction budget, not a probe budget.
-    assert_eq!(helper.response(60)["status"], "prepared");
-    helper.send(signed(
-        json!({"version":1,"challenge":hello["challenge"],
-        "action":"install","operation":"operation-one"})
-        .to_string(),
-    ));
-    assert_eq!(helper.response(5)["status"], "armed");
-    assert!(helper.child.try_wait().unwrap().is_none());
+    assert_eq!(helper.response(60)["status"], "refused");
+    assert!(!fixture.state.join("current.json").exists());
     assert!(fixture.bundle.exists());
-    assert_eq!(
-        fs::read_to_string(fixture.destination.join("Contents/MacOS/openforge-sidecar")).unwrap(),
-        "old"
-    );
-    drop(helper);
-    let mut recovery = openforge_update_helper::InstallTransaction::open(
-        &fixture.state,
-        "installation-one",
-        &fixture.destination,
-    )
-    .unwrap();
-    assert_eq!(
-        recovery.recover("operation-one").unwrap(),
-        openforge_update_helper::Phase::RolledBack
-    );
 }
 
 #[test]
@@ -180,31 +157,6 @@ fn signed_commands_from_another_helper_instance_are_not_replayable() {
     second.send(signed(request(&fixture, &old["challenge"])));
     assert_eq!(second.response(5)["status"], "refused");
     assert!(!fixture.state.exists());
-}
-
-#[test]
-fn losing_the_pipe_before_install_authority_cancels_without_replacement() {
-    let fixture = common::Fixture::with_target_bytes(
-        &fs::read(env!("CARGO_BIN_EXE_openforge-update-helper")).unwrap(),
-    );
-    let mut helper = Helper::start();
-    let hello = helper.response(10);
-    helper.send(signed(request(&fixture, &hello["challenge"])));
-    assert_eq!(helper.response(60)["status"], "prepared");
-    drop(helper.child.stdin.take());
-    assert_eq!(helper.response(5)["status"], "refused");
-    drop(helper);
-    let mut recovery = openforge_update_helper::InstallTransaction::open(
-        &fixture.state,
-        "installation-one",
-        &fixture.destination,
-    )
-    .unwrap();
-    assert_eq!(
-        recovery.recover("operation-one").unwrap(),
-        openforge_update_helper::Phase::RolledBack
-    );
-    assert!(fixture.bundle.exists());
 }
 
 #[test]

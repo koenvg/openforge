@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { afterEach, expect, it } from 'vitest'
 import { coldRecoveryHelper } from './cold-install/recovery.mjs'
 
@@ -79,9 +80,22 @@ it('refuses forged recovery state before returning a retained helper', async () 
   roots.push(root)
   const profile = join(root, 'profile')
   const native = join(profile, 'updates/native')
+  const installDir = join(root, 'Applications')
+  const platformFixture = join(root, 'platform.mjs')
   await mkdir(native, { recursive: true, mode: 0o700 })
+  await mkdir(installDir)
+  await writeFile(platformFixture, `
+    Object.defineProperty(process, 'platform', { value: 'darwin' })
+    Object.defineProperty(process, 'arch', { value: 'arm64' })
+  `)
   await writeFile(join(native, 'journal.key'), Buffer.alloc(32, 42), { mode: 0o600 })
   await writeFile(join(native, 'current.json'), JSON.stringify({ payload: '{}', mac: '00'.repeat(32) }), { mode: 0o600 })
   await expect(coldRecoveryHelper(profile, join(root, 'Open Forge.app')))
     .rejects.toThrow('Invalid cold recovery authentication')
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OPENFORGE_')))
+  const result = await run('/bin/bash', [join(import.meta.dirname, 'install-electron-mac.sh'), '--cold', '--recover', '--profile', profile, '--install-dir', installDir], {
+    ...env, HOME: root, NODE_OPTIONS: `--import=${pathToFileURL(platformFixture).href}`,
+  })
+  expect(result.status).not.toBe(0)
+  expect(result.stderr).toContain('Invalid cold recovery authentication')
 })

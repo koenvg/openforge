@@ -58,6 +58,12 @@ pub(super) async fn handle(
             inventory["hasLegacySessions"] = serde_json::json!(has_legacy_sessions);
             inventory["parentExitGuardArmed"] =
                 serde_json::json!(openforge_update_helper::parent_exit_guard_armed());
+            inventory["sourceAttestationVersion"] =
+                if openforge_update_helper::source_attestation_available() {
+                    serde_json::json!(1)
+                } else {
+                    serde_json::Value::Null
+                };
             if let Some(app) = &state.app {
                 inventory["appDataRoot"] =
                     serde_json::json!(app.path().app_data_dir().map_err(error)?);

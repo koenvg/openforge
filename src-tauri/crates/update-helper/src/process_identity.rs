@@ -17,6 +17,9 @@ impl ProcessIdentity {
     pub fn running(&self) -> Result<bool, String> {
         Ok(snapshot(self.pid)?.map(|(identity, _)| identity) == Some(*self))
     }
+    pub fn pid_absent(&self) -> Result<bool, String> {
+        Ok(snapshot(self.pid)?.is_none())
+    }
 
     pub fn observe(pid: u32) -> Result<Self, String> {
         snapshot(pid)?

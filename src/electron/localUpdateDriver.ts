@@ -17,6 +17,7 @@ interface Options {
   chooseBundle(): Promise<string | null>
   quit(): void
   confirmLocalBuild?(request: Readonly<UpdateAuthorization>): Promise<'approve' | 'cancel'>
+  source?(): nativeUpdate.NativeSourceOwner
   native?: NativeUpdateOperations
   platform?: NodeJS.Platform
   architecture?: string
@@ -27,6 +28,7 @@ type Selection = {
   target: UpdateTarget
   controller: RestartTerminalInventory['controller']
   launch: UpdateLaunchContext
+  source: nativeUpdate.NativeSourceOwner
 } & ({ state: 'authorized' | 'uncertain' } | { state: 'prepared'; handoff: Handoff })
 
 /** One host-owned entry point. No downloads, publisher fallback or legacy interruption. */
@@ -54,6 +56,8 @@ export class LocalUpdateDriver implements AppUpdateDriver {
       const inventory = structuredClone(await this.options.inventory())
       const launch = this.launchContext(inventory)
       if (inventory.parentExitGuardArmed !== true) throw new Error('Local updates require parent-loss preservation for the source Sidecar')
+      if (inventory.sourceAttestationVersion !== 1 || !this.options.source) throw new Error('Local updates require original source attestation')
+      const source = Object.freeze({ ...this.options.source() })
       if (restartInstallationId(this.options.root, inventory.controller.installation) !== request.installationId) throw new Error('Update installation changed')
       const candidate = await this.options.chooseBundle()
       if (!candidate) throw new Error('Local update cancelled')
@@ -69,7 +73,7 @@ export class LocalUpdateDriver implements AppUpdateDriver {
       const target = parseUpdateTarget({ ...request, manifestSha256: staged.manifestSha256, images: staged.images })
       Object.freeze(target.images)
       Object.freeze(target)
-      this.selection = { target, launch, controller: Object.freeze(inventory.controller), state: 'authorized' }
+      this.selection = { target, launch, source, controller: Object.freeze(inventory.controller), state: 'authorized' }
       return parseUpdateTarget(target)
     } finally { this.preparing = false }
   }
@@ -94,6 +98,7 @@ export class LocalUpdateDriver implements AppUpdateDriver {
       const handoff = await this.native.prepareNativeUpdateHandoff({
         authorization: this.authorization(selected.target.installationId, selected.launch),
         bundles: this.bundles, target: selected.target, controller: selected.controller, recoveryRoot: this.recoveryRoot,
+        source: selected.source,
       })
       this.selection = { ...selected, state: 'prepared', handoff }
     } catch (error) {

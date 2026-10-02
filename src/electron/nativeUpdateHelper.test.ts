@@ -27,10 +27,12 @@ it('rejects changed helper bytes before starting any helper process', async () =
 
 it.skipIf(process.platform === 'win32').each([
   { version: 1, capabilities: [], refusal: 'helper protocol', sent: false },
-  { version: 2, capabilities: [], refusal: 'authenticated relaunch', sent: false },
-  { version: 2, capabilities: ['relaunch'], refusal: 'durable launch gate', sent: false },
-  { version: 2, capabilities: ['relaunch', 'launch-gate'], refusal: 'atomic app replacement', sent: false },
-  { version: 2, capabilities: ['relaunch', 'launch-gate', 'atomic-replace'], refusal: 'acknowledge prepared', sent: true },
+  { version: 2, capabilities: ['relaunch', 'launch-gate', 'atomic-replace'], refusal: 'helper protocol', sent: false },
+  { version: 3, capabilities: [], refusal: 'authenticated relaunch', sent: false },
+  { version: 3, capabilities: ['relaunch'], refusal: 'durable launch gate', sent: false },
+  { version: 3, capabilities: ['relaunch', 'launch-gate'], refusal: 'atomic app replacement', sent: false },
+  { version: 3, capabilities: ['relaunch', 'launch-gate', 'atomic-replace'], refusal: 'original source attestation', sent: false },
+  { version: 3, capabilities: ['relaunch', 'launch-gate', 'atomic-replace', 'original-source-v1'], refusal: 'acknowledge prepared', sent: true },
 ])('distinguishes an unsent preparation from an uncertain rejection: $refusal', async ({ version, capabilities, refusal, sent }) => {
   const { root, source, store } = await updateBundleFixture()
   const destination = join(root, 'Installed.app')
@@ -50,6 +52,7 @@ require('node:readline').createInterface({input: process.stdin}).on('line', line
   await authorization.authorizeLocal(staged, 'operation-one')
   await expect(prepareNativeUpdateHandoff({
     authorization, bundles: store, recoveryRoot: join(root, 'recovery'),
+    source: { sidecarPid: 123, key: 'a'.repeat(64) },
     target: { installationId: 'installation-one', operationId: 'operation-one', manifestSha256: staged.manifestSha256, images: staged.images },
   }).then(async handoff => { await handoff.cancel(); throw new Error('A refusing helper was accepted') })).rejects.toMatchObject({
     name: sent ? 'Error' : 'NativeUpdateNotStarted', message: expect.stringContaining(refusal),

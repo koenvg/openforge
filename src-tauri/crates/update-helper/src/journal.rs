@@ -58,6 +58,8 @@ pub(crate) struct Record {
     pub exchange_path: Option<PathBuf>,
     pub launched: Option<crate::process_identity::ProcessIdentity>,
     pub sidecar: Option<crate::process_identity::ProcessIdentity>,
+    #[serde(default)]
+    pub source: Option<crate::source_attestation::Evidence>,
 }
 
 #[derive(Serialize, Deserialize)]
