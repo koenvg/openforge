@@ -3,6 +3,7 @@ import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
+import { coldRecoveryHelper } from './cold-install/recovery.mjs'
 
 const roots = []
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))) })
@@ -67,7 +68,13 @@ it('rejects a caller-supplied approval switch before touching an installation', 
   expect(result.stderr).toContain('Unknown cold-install option')
 })
 
-it('refuses forged recovery state before executing a retained helper', async () => {
+it.runIf(process.platform !== 'darwin' || process.arch !== 'arm64')('refuses cold recovery on unsupported platforms', async () => {
+  const result = await run('/bin/bash', [join(import.meta.dirname, 'install-electron-mac.sh'), '--cold', '--recover'], process.env)
+  expect(result.status).not.toBe(0)
+  expect(result.stderr).toContain('Cold installation supports macOS arm64 only')
+})
+
+it('refuses forged recovery state before returning a retained helper', async () => {
   const root = await mkdtemp(join(tmpdir(), 'openforge-cold-recovery-'))
   roots.push(root)
   const profile = join(root, 'profile')
@@ -75,7 +82,6 @@ it('refuses forged recovery state before executing a retained helper', async () 
   await mkdir(native, { recursive: true, mode: 0o700 })
   await writeFile(join(native, 'journal.key'), Buffer.alloc(32, 42), { mode: 0o600 })
   await writeFile(join(native, 'current.json'), JSON.stringify({ payload: '{}', mac: '00'.repeat(32) }), { mode: 0o600 })
-  const result = await run('/bin/bash', [join(import.meta.dirname, 'install-electron-mac.sh'), '--cold', '--recover', '--profile', profile], process.env)
-  expect(result.status).not.toBe(0)
-  expect(result.stderr).toContain('Invalid cold recovery authentication')
+  await expect(coldRecoveryHelper(profile, join(root, 'Open Forge.app')))
+    .rejects.toThrow('Invalid cold recovery authentication')
 })
