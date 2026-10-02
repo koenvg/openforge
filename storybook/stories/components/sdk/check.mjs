@@ -52,9 +52,24 @@ try {
     await finished(id)
   }
   await finished(ids[0])
+  const frame = page.frameLocator('iframe')
+  await frame.locator('body').evaluate(() => { window.sdkDocumentMarker = true })
+  // Switch directly from a still-open dialog. Do not wait for teardown before selecting Menu:
+  // its play function must wait for interactive readiness inside the same document.
+  for (let repeat = 0; repeat < 3; repeat++) {
+    await select('components-plugin-sdk-tooltips--dialog')
+    assert.equal(await frame.getByRole('dialog', { name: 'Tooltip example' }).isVisible(), true)
+    assert.equal(await frame.locator('body').evaluate(element => getComputedStyle(element).pointerEvents), 'none')
+    await select('components-plugin-sdk-tooltips--menu')
+    assert.equal(await frame.locator('body').evaluate(() => window.sdkDocumentMarker), true, 'Tooltip switching replaced the iframe document')
+    assert.equal(await frame.getByRole('dialog').count(), 0, 'The dialog survived the story switch')
+    assert.notEqual(await frame.getByRole('button', { name: 'More actions' }).evaluate(element => getComputedStyle(element).pointerEvents), 'none')
+    assert.equal(await frame.getByRole('tooltip', { name: 'More actions' }).isVisible(), true)
+    assert.equal(await frame.getByLabel('Action count').textContent(), '0')
+  }
+  console.log('PASS repeated same-document dialog-to-menu switching')
   for (const id of ids.slice(1)) { await select(id); console.log(`PASS ${id}`) }
   // Keep the iframe document alive while replacing scenarios and rerunning interactions.
-  const frame = page.frameLocator('iframe')
   await select('components-plugin-sdk-fields--default')
   await frame.getByRole('textbox', { name: 'Project name' }).fill('Mutated')
   await frame.locator('body').evaluate(() => {
