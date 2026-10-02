@@ -11,6 +11,9 @@ impl InstallTransaction {
         if record.phase != Phase::Prepared {
             return Err("stale update replacement".into());
         }
+        if let Some(source) = &record.source {
+            source.verify_exits()?;
+        }
         let authority = authorization::read(
             &record.authorization,
             operation,
@@ -79,6 +82,13 @@ impl InstallTransaction {
                 return Err("recovered installation changed".into());
             }
             return Ok(record.phase);
+        }
+        if let Some(source) = &record.source {
+            if record.phase == Phase::Prepared {
+                source.verify_live().or_else(|_| source.verify_exits())?;
+            } else {
+                source.verify_exits()?;
+            }
         }
         let backup = self.root.join(format!("previous-{operation}.app"));
         if let Some(path) = &record.exchange_path {

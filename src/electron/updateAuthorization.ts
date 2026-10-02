@@ -122,7 +122,7 @@ export class UpdateAuthorizationStore {
   }
 
   /** Main-process capability. A fresh helper challenge binds each proof to one live pipe. */
-  async helperProof(operationId: string, challenge: string, action: 'prepare' | 'install' | 'cancel' | 'commit' | 'verify-launch' | 'verify-ready' | 'register-sidecar' | 'prepare-relaunch' | 'relaunch', recoveryRoot: string, manifestSha256: string, controller?: RestartTerminalController, sidecarPid?: number): Promise<{ payload: string; mac: string }> {
+  async helperProof(operationId: string, challenge: string, action: 'prepare' | 'install' | 'cancel' | 'commit' | 'verify-launch' | 'verify-ready' | 'register-sidecar' | 'prepare-relaunch' | 'relaunch', recoveryRoot: string, manifestSha256: string, controller?: RestartTerminalController, sidecarPid?: number, source?: unknown): Promise<{ payload: string; mac: string }> {
     if (!/^[a-f0-9]{64}$/.test(challenge) || !['prepare', 'install', 'cancel', 'commit', 'verify-launch', 'verify-ready', 'register-sidecar', 'prepare-relaunch', 'relaunch'].includes(action)
       || !isAbsolute(recoveryRoot) || resolve(recoveryRoot) !== recoveryRoot) throw new Error('Invalid helper handoff request')
     const authorization = await this.read(operationId)
@@ -136,6 +136,7 @@ export class UpdateAuthorizationStore {
       installation: authorization.installationId, operation: operationId,
       ...(controller ? { controller: { installation: controller.installation, lifetime: controller.lifetime, generation: controller.generation } } : {}),
       ...(sidecarPid === undefined ? {} : { sidecarPid }),
+      ...(source === undefined ? {} : { source }),
     } : { version: 1, challenge, action, operation: operationId })
     return { payload, mac: createHmac('sha256', key).update('openforge-update-handoff-v1\0').update(payload).digest('hex') }
   }

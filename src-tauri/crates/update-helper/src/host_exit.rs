@@ -14,11 +14,20 @@ mod platform {
 
     impl HostExit {
         pub fn watch() -> Result<Self, String> {
-            // SAFETY: getppid and kqueue have no pointer arguments.
-            let parent = unsafe { libc::getppid() };
-            if parent <= 1 {
-                return Err("updater must be spawned by its live host".into());
-            }
+            // SAFETY: getppid has no pointer arguments.
+            let parent =
+                u32::try_from(unsafe { libc::getppid() }).map_err(|_| "invalid host pid")?;
+            let identity = crate::process_identity::ProcessIdentity::observe(parent)?;
+            let watch = Self::watch_process(identity)?;
+            watch.parent_pid()?;
+            Ok(watch)
+        }
+
+        pub fn watch_process(
+            identity: crate::process_identity::ProcessIdentity,
+        ) -> Result<Self, String> {
+            identity.verify(identity.pid())?;
+            // SAFETY: kqueue has no arguments and returns a new descriptor.
             let fd = unsafe { libc::kqueue() };
             if fd < 0 {
                 return Err(io::Error::last_os_error().to_string());
@@ -30,27 +39,68 @@ mod platform {
                 return Err(io::Error::last_os_error().to_string());
             }
             let change = libc::kevent {
-                ident: usize::try_from(parent).map_err(|_| "invalid host pid")?,
+                ident: identity
+                    .pid()
+                    .try_into()
+                    .map_err(|_| "invalid watched pid")?,
                 filter: libc::EVFILT_PROC,
                 flags: libc::EV_ADD | libc::EV_ONESHOT,
-                fflags: libc::NOTE_EXIT,
+                fflags: libc::NOTE_EXIT | libc::NOTE_EXEC,
                 data: 0,
                 udata: std::ptr::null_mut(),
             };
-            // SAFETY: change points to one initialized event; no output buffer is requested.
+            // SAFETY: change is one initialized event; no output buffer is requested.
             if unsafe { libc::kevent(fd, &change, 1, std::ptr::null_mut(), 0, std::ptr::null()) }
                 < 0
             {
                 return Err(io::Error::last_os_error().to_string());
             }
-            // SAFETY: getppid has no pointer arguments. Refuse a host lost during registration.
-            if unsafe { libc::getppid() } != parent {
-                return Err("host exited before handoff".into());
-            }
+            identity.verify(identity.pid())?;
             Ok(Self {
                 queue,
-                parent: parent.try_into().map_err(|_| "invalid host pid")?,
+                parent: identity.pid(),
             })
+        }
+
+        pub fn poll_exit(&self) -> Result<bool, String> {
+            // SAFETY: a zeroed kevent is valid writable output storage.
+            let mut event: libc::kevent = unsafe { std::mem::zeroed() };
+            let timeout = libc::timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            };
+            // SAFETY: the queue, event output and zero timeout are valid.
+            let count = unsafe {
+                libc::kevent(
+                    self.queue.as_raw_fd(),
+                    std::ptr::null(),
+                    0,
+                    &mut event,
+                    1,
+                    &timeout,
+                )
+            };
+            if count < 0 {
+                return Err(io::Error::last_os_error().to_string());
+            }
+            if count == 0 {
+                return Ok(false);
+            }
+            self.verify_event(&event).map(|()| true)
+        }
+
+        fn verify_event(&self, event: &libc::kevent) -> Result<(), String> {
+            if event.ident != self.parent as usize
+                || event.filter != libc::EVFILT_PROC
+                || event.flags & libc::EV_ERROR != 0
+                || event.fflags & libc::NOTE_EXEC != 0
+                || event.fflags & libc::NOTE_EXIT == 0
+            {
+                return Err(
+                    "watched process exit is unknown or its loaded lifetime changed".into(),
+                );
+            }
+            Ok(())
         }
 
         pub fn parent_pid(&self) -> Result<u32, String> {
@@ -109,11 +159,8 @@ mod platform {
                     }
                     return Err(error.to_string());
                 }
-                if count == 1
-                    && event.flags & libc::EV_ERROR == 0
-                    && event.fflags & libc::NOTE_EXIT != 0
-                {
-                    return Ok(());
+                if count == 1 {
+                    return self.verify_event(&event);
                 }
                 return Err("host exit was not observed".into());
             }
@@ -127,6 +174,14 @@ mod platform {
     impl HostExit {
         pub fn parent_pid(&self) -> Result<u32, String> {
             Err("updater handoff requires macOS".into())
+        }
+        pub fn watch_process(
+            _identity: crate::process_identity::ProcessIdentity,
+        ) -> Result<Self, String> {
+            Err("updater observation requires macOS".into())
+        }
+        pub fn poll_exit(&self) -> Result<bool, String> {
+            Err("updater observation requires macOS".into())
         }
         pub fn watch() -> Result<Self, String> {
             Err("updater handoff requires macOS".into())

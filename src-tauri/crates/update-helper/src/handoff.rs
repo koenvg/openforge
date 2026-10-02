@@ -38,6 +38,7 @@ struct Prepare {
     controller: Option<openforge_session_protocol::Controller>,
     #[serde(rename = "sidecarPid")]
     sidecar_pid: Option<u32>,
+    source: Option<crate::source_attestation::Authority>,
 }
 
 #[derive(Deserialize)]
@@ -102,9 +103,9 @@ fn run() -> Result<(), String> {
         .fill(&mut random)
         .map_err(|_| "cannot generate handoff challenge")?;
     let challenge: String = random.iter().map(|b| format!("{b:02x}")).collect();
-    // Handshake v2 requires process-bound readiness/commit. Signed record formats stay v1.
+    // Handshake v3 requires native original-source evidence. Signed record formats stay v1.
     emit(
-        &json!({"version":2,"challenge":challenge,"capabilities":["relaunch","launch-gate","atomic-replace"]}),
+        &json!({"version":3,"challenge":challenge,"capabilities":["relaunch","launch-gate","atomic-replace","original-source-v1"]}),
     )?;
     let mut input = std::io::BufReader::new(crate::handoff_input::HandoffInput::new());
     let envelope = frame(&mut input)?;
@@ -120,6 +121,7 @@ fn run() -> Result<(), String> {
                 | "verify-ready"
                 | "register-sidecar"
                 | "prepare-relaunch"
+                | "recover-preparation"
         )
         || (request.action == "register-sidecar") != request.sidecar_pid.is_some()
         || (request.action == "prepare-relaunch" && request.controller.is_some())
@@ -176,6 +178,17 @@ fn run() -> Result<(), String> {
         }
         Err(error) => return Err(error),
     };
+    if request.action == "recover-preparation" {
+        let recovered = transaction.recover_preparation(
+            &request.operation,
+            host.parent_pid()?,
+            request.source,
+            &challenge,
+        )?;
+        return emit(
+            &json!({"status":if recovered { "preparation-recovered" } else { "not-preparation" },"operation":request.operation}),
+        );
+    }
     if request.action == "verify-launch" {
         transaction.verify_launch(&request.operation, host.parent_pid()?)?;
         return emit(&json!({"status":"launch-verified","operation":request.operation}));
@@ -228,6 +241,22 @@ fn run() -> Result<(), String> {
         return Ok(());
     }
     // Refuse an unsealed target while the source app and Sidecar are still running.
+    let source = request
+        .source
+        .ok_or("original source attestation is required before preparation")?
+        .authenticate(
+            &crate::source_attestation::Binding {
+                challenge: challenge.clone(),
+                installation: request.installation.clone(),
+                operation: request.operation.clone(),
+                manifest_sha256: request.manifest_sha256.clone(),
+                recovery_root: request.root.clone(),
+                controller: request.controller.clone(),
+            },
+            &authority,
+            host.parent_pid()?,
+        )?;
+    let source_watch = crate::source_attestation::Watch::new(&source)?;
     crate::native_image::verify_integrity(&authority.bundle_path)?;
     let cold_runtime = if request.controller.is_none() {
         Some(crate::runtime_update::ColdRuntime::reserve(
@@ -237,6 +266,13 @@ fn run() -> Result<(), String> {
         None
     };
     transaction.prepare(&request.authorization, &request.staging, &request.operation)?;
+    source.verify_live()?;
+    let mut record = transaction.require(&request.operation)?;
+    if record.previous_hash != source.proof.birth.bundle_hash {
+        return Err("source measurement changed before preparation".into());
+    }
+    record.source = Some(source);
+    crate::journal::write(&transaction.root, &record)?;
     if let Some(cold) = &cold_runtime {
         let mut record = transaction.require(&request.operation)?;
         record.cold_installation = Some(cold.installation.clone());
@@ -256,6 +292,7 @@ fn run() -> Result<(), String> {
     if let Some(runtime) = &mut runtime {
         let prepared = (|| {
             transaction.record_runtime(&request.operation, runtime.plan.clone())?;
+            source_watch.verify_live(&transaction, &request.operation)?;
             runtime.prepare(&request.operation)?;
             transaction.record_runtime(&request.operation, runtime.plan.clone())
         })();
@@ -265,19 +302,26 @@ fn run() -> Result<(), String> {
             return Err(error);
         }
     }
+    source_watch.verify_live(&transaction, &request.operation)?;
     let decision: Result<String, String> = (|| {
         let action = await_decision(&mut input, &key, &challenge, &request.operation)?;
         match action.as_str() {
-            "cancel" => Ok(action),
+            "cancel" => {
+                source_watch.verify_live(&transaction, &request.operation)?;
+                Ok(action)
+            }
             "install" => {
+                source_watch.confirm_sidecar_exit(&mut transaction, &request.operation)?;
                 emit(&json!({"status":"armed","operation":request.operation}))?;
                 host.wait()?;
+                source_watch.confirm_app_exit(&mut transaction, &request.operation)?;
                 Ok(action)
             }
             _ => Err("unsupported handoff decision".into()),
         }
     })();
     if decision.as_deref() != Ok("install") {
+        source_watch.verify_live(&transaction, &request.operation)?;
         if let Some(runtime) = &runtime {
             runtime.cancel(&request.operation)?;
         }

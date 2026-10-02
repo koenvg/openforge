@@ -49,6 +49,39 @@ pub(crate) struct RuntimePlan {
 }
 
 impl RuntimePlan {
+    pub fn cancel_preparation(
+        &self,
+        root: &Path,
+        operation: &str,
+        source: &Path,
+    ) -> Result<(), String> {
+        let client = MaintenanceClient::attach(root, self.controller.clone()).map_err(message)?;
+        let capabilities = client.capabilities().map_err(message)?;
+        let status = client.status(&operation_id(operation)?).map_err(message)?;
+        if capabilities.pid != self.pid
+            || capabilities.image_version != self.source_version
+            || status.from_version != self.source_version
+            || status.actual_version != self.source_version
+            || self
+                .target_version
+                .as_ref()
+                .is_some_and(|v| status.target_version.as_ref() != Some(v))
+        {
+            return Err("source runtime preparation outcome is unknown".into());
+        }
+        crate::native_image::verify(
+            self.pid,
+            &source.join("Contents/MacOS/openforge-session-daemon"),
+        )?;
+        match status.state {
+            ReplacementState::Prepared => {
+                client.abort(operation_id(operation)?).map_err(message)?;
+            }
+            ReplacementState::Aborted | ReplacementState::Failed { .. } => {}
+            _ => return Err("source runtime preparation cannot be cancelled".into()),
+        }
+        self.verify_source(root, operation, source)
+    }
     /// A failed or lost activation reply cannot authorize restoring the source app.
     /// Borrow the original controller and verify a terminal receipt plus the loaded source image.
     pub fn verify_source(&self, root: &Path, operation: &str, source: &Path) -> Result<(), String> {

@@ -20,7 +20,7 @@ async function fixture() {
   const appData = join(root, 'app-data')
   const daemonRoot = join(root, 'daemon-data')
   for (const path of [userData, appData, daemonRoot]) await mkdir(path, { mode: 0o700 })
-  const inventory = { controller: { installation: 'private-installation', lifetime: 'private-daemon', generation: 1 }, sessions: [], hasLegacySessions: false, parentExitGuardArmed: true as boolean | undefined, daemonRoot, appDataRoot: appData }
+  const inventory = { controller: { installation: 'private-installation', lifetime: 'private-daemon', generation: 1 }, sessions: [], hasLegacySessions: false, parentExitGuardArmed: true as boolean | undefined, sourceAttestationVersion: 1 as number | undefined, daemonRoot, appDataRoot: appData }
   const identity = { installationId: createHash('sha256').update(JSON.stringify([userData, inventory.controller.installation])).digest('hex'), operationId: 'local-operation' }
   const events: string[] = []
   const preparationRecords: (RestartOperationRecord | null)[] = []
@@ -59,6 +59,7 @@ async function fixture() {
   }
   const driver = new LocalUpdateDriver({
     root: userData, installedBundlePath: installed, platform: 'darwin', architecture: 'arm64', native,
+    source: () => ({ sidecarPid: 123, key: 'a'.repeat(64) }),
     inventory: async () => { if (backendUnavailable) throw new Error('Backend is not running'); return inventory },
     chooseBundle: async () => { events.push('selected'); return source },
     confirmLocalBuild: async () => { events.push('approved'); return 'approve' },
@@ -98,6 +99,13 @@ it('refuses legacy sessions before selecting or approving a local bundle', async
   await expect(driver.preflight(identity)).rejects.toThrow('daemon-aware')
   expect(events).toEqual([])
 })
+it('refuses a guard-only source without original native attestation', async () => {
+  const { driver, identity, inventory, events } = await fixture()
+  inventory.sourceAttestationVersion = undefined
+  await expect(driver.preflight(identity)).rejects.toThrow('original source attestation')
+  expect(events).toEqual([])
+})
+
 
 it.each([false, undefined])('refuses a source without confirmed parent-loss preservation: %s', async armed => {
   const { driver, identity, inventory, events } = await fixture()

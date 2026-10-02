@@ -18,6 +18,9 @@ mod readiness;
 mod replacement;
 mod runtime_update;
 mod sidecar_startup;
+mod source_attestation;
+mod source_recovery;
+mod source_server;
 mod startup;
 pub use bundle::cold_source_sha256;
 pub use cold_command::{run_cold_install, run_cold_recovery, run_cold_startup};
@@ -30,6 +33,9 @@ pub use host_exit::{exit_with_host, parent_exit_guard_armed};
 pub use journal::Phase;
 pub use launch_gate::{run_app_bootstrap, APP_BOOTSTRAP_ARGUMENT};
 pub use sidecar_startup::{authorize_sidecar_startup, SidecarAdmission, SIDECAR_STARTUP_ARGUMENT};
+pub use source_attestation::{
+    initialize_source_attestation, source_attestation, source_attestation_available,
+};
 
 use std::{
     fs::File,
@@ -214,6 +220,7 @@ impl InstallTransaction {
                 exchange_path: None,
                 launched: None,
                 sidecar: None,
+                source: None,
             },
         )
     }
@@ -315,6 +322,9 @@ impl InstallTransaction {
                 return Err("foreign update recovery record".into());
             }
             authorization::identity(&record.operation)?;
+            if let Some(source) = &record.source {
+                source.verify_binding(record, &self.root)?;
+            }
         }
         Ok(record)
     }

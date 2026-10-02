@@ -243,6 +243,31 @@ fn sidecar_resource_dir() -> Result<PathBuf, String> {
 
 fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
     let app_data_dir = sidecar_app_data_dir().map_err(std::io::Error::other)?;
+    if cfg!(all(target_os = "macos", target_arch = "aarch64"))
+        && openforge_update_helper::parent_exit_guard_armed()
+    {
+        let root = std::env::var_os("OPENFORGE_ELECTRON_USER_DATA_DIR").map(PathBuf::from);
+        let daemon_root = std::env::var_os("OPENFORGE_SESSION_DAEMON_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| app_data_dir.join("session-daemon"));
+        if let Some(root) = root {
+            use std::os::unix::fs::DirBuilderExt;
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(&daemon_root)?;
+            let token = std::env::var("OPENFORGE_BACKEND_TOKEN").unwrap_or_default();
+            if let Err(error) = openforge_update_helper::initialize_source_attestation(
+                &root,
+                &app_data_dir,
+                &daemon_root,
+                &token,
+            ) {
+                // Ordinary startup stays available; this source is ineligible for updates.
+                eprintln!("[source-attestation] unavailable: {error}");
+            }
+        }
+    }
     let resource_dir = sidecar_resource_dir().map_err(std::io::Error::other)?;
     let database = initialize_database(&app_data_dir);
     let stale_running_session_cutoff = unix_timestamp::seconds(std::time::SystemTime::now())?;

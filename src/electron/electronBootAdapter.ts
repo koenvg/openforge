@@ -133,6 +133,13 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     localUpdate ??= new LocalUpdateDriver({
       root: app.getPath('userData'), installedBundlePath: resolve(dirname(process.execPath), '..', '..'),
       inventory: terminalInventory,
+      source: () => {
+        const sidecar = ownedSidecar
+        if (!sidecar?.process.pid || !backendInvokeContext) throw new Error('Original owned Sidecar is unavailable')
+        return {
+          sidecarPid: sidecar.process.pid, key: sidecar.config.token,
+        }
+      },
       chooseBundle: async () => {
         const result = await dialog.showOpenDialog({
           title: 'Install a local OpenForge build', buttonLabel: 'Select build',
@@ -536,6 +543,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
         port: resolveSidecarPort(options.env),
         processEnv: {
           ...options.env,
+          OPENFORGE_ELECTRON_USER_DATA_DIR: app.getPath('userData'),
           OPENFORGE_RESTART_OPERATION: launchOperation ?? undefined,
         },
       })

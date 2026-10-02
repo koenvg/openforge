@@ -4,6 +4,30 @@ KVG-5206 is an implementation checkpoint, not an enabled session-preserving upda
 
 The intended first update path is explicit local approval between compatible, daemon-aware macOS arm64 installations. A source must report an armed parent-exit guard and supply its actual data roots and authenticated daemon controller. The guard capability is not proof of the original app or Sidecar's identity or exit. Other architectures and platforms are not update acceptance targets for this checkpoint.
 
+## KVG-5296 work in progress
+
+Original-source attestation is being added without enabling any update path. The minimum eligible source is a daemon-aware, integrity-sealed macOS arm64 build with the `original-source-v1` native startup service. An armed parent-exit guard or a reported capability alone is insufficient. KVG-5206 sources do not provide this service and are ineligible.
+
+The helper handshake is now version 3 and requires `relaunch`, `launch-gate`, `atomic-replace` and `original-source-v1`. There is no version-2 fallback. Signed grant and journal envelopes remain version 1. Source installation, legacy adoption, local initiation and publication remain disabled.
+
+### Original-source evidence
+
+Before domain startup, the source Sidecar captures its actual Electron parent and its own kernel birth identities, executable paths, loaded CDHashes, boot-session identity and a fresh startup nonce. It validates the complete sealed source bundle and captures the actual user-data, app-data and daemon roots. The source retains this evidence in native memory. Restored files cannot populate it.
+
+The native helper accepts neither caller-provided birth evidence nor a caller-provided PID alone. It checks app-child ownership and the Sidecar's loaded image before connecting to the private source service. Kernel peer PID and UID verification binds the connection to that exact Sidecar. A fresh challenge and domain-separated HMAC authenticate the in-memory response using the original app/Sidecar launch credential. The response binds the source to the authorized operation, installation, destination, target digest, recovery root, data/runtime roots and supplied controller. The launch credential is not written to the journal or exposed through renderer IPC.
+
+Before runtime preparation, the helper seals the original-source evidence into the authenticated journal. Separate kernel watches observe the original app and exact original Sidecar. Arming requires a Sidecar exit event; publication additionally requires the app exit event. `NOTE_EXEC` invalidates a watched lifetime. EOF, restored bytes, a shutdown report and PID absence do not create exit evidence.
+
+Preparation-loss recovery can reauthenticate a still-running original source through its native service and matching startup nonce. Alternatively, both original exit observations must already be recorded. An older journal with no original-source evidence, an unavailable source service, a stale boot/lifetime, reused PID or incomplete exit observation remains unknown. Runtime cancellation borrows the recorded controller only after source verification; inspection does not acquire a controller or launch a daemon.
+
+### Evidence and remaining work
+
+Current native public-boundary tests cover eligible preparation/cancellation, pre-authority EOF, exact Sidecar exit before arming, helper loss, guard-only sources, caller-supplied proofs, wrong keys/processes, changed loaded images across `exec`, tampering and stale/replayed recovery evidence. They use owned native fixtures, private roots and cleared environments. They are not proof of a complete packaged Electron update with live agents and tools.
+
+Helper default/all-feature suites, strict helper Clippy, the focused Electron driver/helper tests, TypeScript checks and the backend all-target/all-feature compile check pass. Logs are `/tmp/KVG-5296-helper-default.log`, `/tmp/KVG-5296-helper-all.log`, `/tmp/KVG-5296-helper-clippy.log`, `/tmp/KVG-5296-focused.log`, `/tmp/KVG-5296-types.log` and `/tmp/KVG-5296-backend-check.log`.
+
+This is not a completed checkpoint. Electron preparation-recovery integration, migration of native Electron contracts to genuinely eligible original sources, live daemon-owned agent/tool/shell refusal coverage, full affected-system validation and the single completion review remain pending. Existing update activation and packaged acceptance gates remain in force.
+
 ## Implemented boundaries
 
 ### Authorization and preparation
