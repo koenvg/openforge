@@ -14,23 +14,82 @@ No release feed, download, discovery or automatic app rollback is introduced. Ma
 
 ## Capacity and replacement at scale
 
-A fresh Session Daemon allows up to 896 live PTYs within 1,024 retained records; it keeps at most 128 settled exits. These are structural limits, not a promise that 896 PTYs will fit on every machine. Before spawn, the daemon checks file descriptors, process slots, and memory headroom. A refusal names the limiting resource and leaves existing PTYs alone. `inventory.capacity.resources` reports the sampled counts, reserve, and checkpoint byte limit. Do not raise `liveLimit` alone: the host ledger, inherited descriptors, and checkpoint must all fit.
+A fresh daemon admits at most 896 live PTYs within 1,024 retained session records and keeps the newest 128 settled exits. These are structural bounds, not a machine capacity guarantee. The isolated workload validates 256 concurrent agent and indexed-shell PTYs, not a new hard cap. Live and draining processes are never discarded to fit history.
 
-In the macOS arm64 replacement fixture, 33 live PTYs produced a 234,856-byte checkpoint and 37 inherited FDs with a 385 ms pause. At 256 PTYs, the checkpoint was 1,793,059 bytes with 260 inherited FDs and a 2,133 ms pause. The backend allows four seconds for coordinated checkpoint capture. It refuses an over-budget or timed-out checkpoint before exec, reopens paused readers, and keeps the old daemon serving. Fixture tests also write to PTYs after refusal. These measurements are not a production update benchmark.
+Before spawn, the daemon samples its open descriptors, the current user's process count, `RLIMIT_NOFILE`, `RLIMIT_NPROC`, and reclaimable system memory. For `N` live or draining PTYs after admission, it requires:
 
-If admission fails, inspect the resource in the typed `capacityExceeded` error and compare it with `inventory.capacity.resources`. The host retires settled entries automatically when history fills; ending live sessions releases descriptors and process slots. Do not kill the daemon to work around a limit while it owns PTYs. If a replacement fails at `checkpoint`, keep using the old daemon and investigate checkpoint size, pause time, and available memory before retrying. App update activation remains closed pending KVG-5206 recovery and packaged acceptance; published updates additionally require KVG-1789 publisher verification. Recheck packaged-update compatibility with the shipped updater when that work lands.
+- Open descriptors plus `3 * N + 64` to fit the descriptor limit. This reserves restore wrappers and control descriptors.
+- Occupied process slots plus one new process and 64 spare slots to fit the process limit.
+- At least `64 MiB + 2 MiB * N` of reclaimable memory. This is admission headroom, not a measured per-PTY footprint or a bound on later output growth.
 
-Compatibility is deliberately narrow while the production update gate is closed:
+Checkpoint preflight checks the same envelope against the existing live/draining set before pausing it. Admission cannot guarantee that future terminal output will still fit a checkpoint.
 
-| Direction | Current status |
+### Diagnostics and refusals
+
+`inventory.capacity` separates `liveSessions` / `liveLimit`, `retainedSessions` / `sessionLimit`, `operationReceipts` / `operationLimit`, `cleanupReceipts` / `cleanupLimit`, and `retainedRequestBytes` / `requestByteLimit`. Its optional `resources` object contains:
+
+| Wire field | Meaning |
 | --- | --- |
-| Fresh launch with this daemon | Uses the resource checks and limits above. |
-| Validated 32-live-session ledger into this daemon | Unit tests preserve the PTY identity and operation receipts while expanding limits. An installed legacy binary has not been exercised. |
-| This daemon into a 32-session image | Unsupported. The future updater must reject the downgrade before exec; do not use a fixture success as evidence otherwise. |
-| Unknown checkpoint format or altered descriptors | Rejected by image validation. No compatibility promise for older formats. |
-| Packaged app update | Disabled. Local macOS arm64 activation needs KVG-5206 recovery and KVG-4730 acceptance; published updates additionally need KVG-1789 publisher verification. |
+| `openDescriptors`, `descriptorLimit` | Sampled daemon descriptors and soft OS limit. |
+| `occupiedProcesses`, `processLimit` | Sampled process count for the current user and soft OS limit. |
+| `availableMemoryBytes`, `spawnMemoryReserveBytes` | Reclaimable memory estimate and reserve for the next PTY. |
+| `checkpointByteLimit` | Backend retained-state budget, normally 33,554,432 bytes. Not the combined encoded-file budget. |
 
-The operation window exposes retained receipt counts and limits separately from PTY capacity. A client may retire observed receipts; a refusal does not authorize replaying an uncertain mutation. A blocked replacement reports its failed stage and keeps the old image serving if it has not crossed exec.
+A failed resource sample can omit `resources`; omission is not proof of spare capacity. Diagnostics contain counts and bounds, not terminal contents, environments, credentials, or recovery payloads.
+
+Typed errors use `{"capacityExceeded":"fileDescriptors"}` and the corresponding `processSlots`, `memoryHeadroom`, `ptyDevices`, `checkpointBytes`, or `checkpointTime` value. Host-side pressure can instead name `sessions`, `retainedHistory`, `operationReceipts`, or `requestBytes`. Some older/error paths return generic `capacity`. Do not classify every capacity error as receipt pressure.
+
+A replacement refusal records a failed stage such as `preflight` or `checkpoint`. Before exec, dropping the pause guards reopens the original readers and ingress. Keep using the old daemon; do not kill it or start a second owner to bypass a refusal. A lost reply is not an abort receipt. Reconcile the replacement status and actual running image before retrying or rolling back.
+
+### Checkpoint envelope and measured evidence
+
+| Budget | Current bound |
+| --- | --- |
+| Backend retained terminal state | 32 MiB across live models and final recovery state. |
+| Shared host ledger | 16 MiB, with saved limits and identity/receipt validation. |
+| Encoded replacement body | 64 MiB, independently bounded during serialization. |
+| Encoded header | 8 KiB, including descriptor inventory and notification checkpoint metadata. |
+| Inherited descriptors | At most 1,024 PTY masters plus four root/checkpoint descriptors; all must be unique and validated. |
+| Backend capture time | Four-second deadline checked between reader/model captures. Not the whole transaction. |
+
+These are separate ceilings, not additive allocations or a promise that every maximally sized component fits simultaneously. Dense output, notification state, serialization overhead, or restore headroom can refuse a handoff even when the PTY count fits. Fixture-only byte/time overrides lower budgets to exercise refusal; they do not configure production capacity.
+
+The four-second backend budget is **not an end-to-end pause guarantee**. Ingress quiescence has a separate 32-second wait, and ledger serialization, image/state probes, and checkpoint file synchronization occur outside the backend timer. The 256-PTY test asserts an observed pause below ten seconds, not a production deadline. KVG-5326 tracks the missing complete-transaction deadline.
+
+KVG-5263 reran the isolated fixture on native macOS arm64 against baseline `3a78e2309`:
+
+| Live PTYs | Encoded checkpoint bytes | Inherited FDs | Observed pause |
+| --- | --- | --- | --- |
+| 33 | 240,009 | 37 | 380 ms |
+| 256 | 1,829,216 | 260 | 2,163 ms |
+
+At 256, this run sampled 1,295 open descriptors out of 1,048,576 and 786 process slots out of 5,333. Reclaimable memory was 9,776,906,240 bytes versus a 606,076,928-byte next-spawn reserve. These are fixture measurements on one provisioned host, not minimum OS settings, production update benchmarks, or native x64 replacement evidence. KVG-5236's earlier 256-PTY checkpoint was 1,793,059 bytes with a 2,133 ms pause; variation does not establish a worst-case bound. The tests check unchanged daemon/shell PID and PTY identity, ordered output and usable input/recovery after success, and usable old PTYs after forced byte/time refusal.
+
+### Upgrade and downgrade support
+
+The current Session Protocol is version 6 and the daemon replacement envelope is format 1. Shared-host ledger formats 1 and 2 are distinct from that envelope; format 2 carries the ordered operation window. Accepting a ledger format alone does not establish compatibility of an old daemon executable. The image probe checks protocol, envelope format, architecture, authority codec and state digest, then validates the complete checkpoint in both target and fallback images before destructive exec.
+
+| Transition | Support and evidence |
+| --- | --- |
+| Fresh launch with the current packaged daemon on native macOS arm64 or x64 | Supported ordinary launch/reattachment with the admission policy above. Packaged launch/refusal evidence does not prove live update support. |
+| Current compatible image to another current compatible image on macOS arm64 | Real exec continuity is tested only with `replacement-fixtures`. Ordinary production builds do not advertise live replacement. |
+| Validated legacy 32-session ledger restored by current host code | The host test restores a ledger with a 32-session limit and one mocked session, asserts expansion to 896 live / 1,024 retained sessions, retains the PTY identity and receipt count across a checkpoint round trip, and rejects limit contraction. It does not test post-restore spawning or admission beyond 32. This is not an old-binary/updater handoff. |
+| Actual legacy 32-session daemon to the current daemon | Not demonstrated or production-supported. No validated legacy image is available for this task, and trusted live activation remains disabled. OpenSpec task 3.4 stays pending. |
+| Expanded daemon to a 32-session image | Unsupported. A compatible target and fallback must validate the actual enlarged checkpoint before exec. There is no demonstrated actual-legacy downgrade refusal through the trusted updater; do not infer it from unit tests or a generic incompatible-probe fixture. |
+| Incompatible protocol, unknown replacement envelope, or corrupt/duplicate descriptors | Current validators reject these inputs before destructive daemon exec. Fixtures demonstrate incompatible probes and duplicate/invalid FD rejection, not actual legacy-format/updater acceptance. No arbitrary old-format migration is promised. |
+| Complete packaged app update | Not supported yet. KVG-5206 landed a disabled checkpoint; KVG-5296 through KVG-5299, KVG-4730 packaged acceptance and KVG-5300 activation remain gates. Published updates also require KVG-1789 publisher verification. |
+
+If an existing daemon lacks the supported replacement protocol, leave it serving its PTYs and report `unsupportedReplacement` or the protocol incompatibility. App configuration cannot change its persisted 32-session admission limits. Do not rewrite its checkpoint, restart its live PTYs, launch a second daemon owner, or advertise rollback into an image that cannot restore its state. Pre-daemon first adoption is a separate interruption/approval path, not a session-preserving handoff. The separate [cold source installer](cold-source-install.md) does not establish live-update compatibility.
+
+Recheck task 3.4 only when an identified, validated 32-session source image and the actual compatible trusted updater are available. Required evidence includes pre-commit refusal/rollback with old PTYs and receipts still usable, successful limit expansion and new PTY admission without PID/PTY changes, old-format/downgrade refusal before exec, and packaged-update continuity. Do not replace these with the isolated replacement fixture or host restore test.
+
+### Exit history and operation expiry
+
+Settled exits keep final recovery until the newest-128 history bound displaces them. This is count-based retention after output drain, not a wall-clock TTL or a guarantee that a disconnected consumer will receive every old exit. Live/draining records remain owned. Expired recovery returns `stalePty` or unavailable state; journal consumers must handle an explicit `gap` and reconcile inventory rather than substitute another PTY's history.
+
+Operation receipts have their own bounded retry window: normally 1,024 ordinary receipts, 4 MiB of retained requests, and a separate 128-receipt termination reserve. The ordered client retires definitive results in batches and schedules an idle acknowledgement after 100 ms. That scheduling delay is not a receipt TTL; failed acknowledgements remain pending. Explicit `flush_operation_receipts()` retires only results observed definitively.
+
+Acknowledging an ordered stream advances `retiredThrough`. A retry at or below that watermark, or from a fenced older stream, returns `operationExpired` without executing again. Opening a new controller stream fences old receipts; it is not permission to replay uncertain mutations. Unknown outcomes block ordered traffic and cannot be acknowledged as settled. Receipt expiry and exited-history expiry are separate from resource admission and must not reset PTY or input-sequence identities.
 
 ## Retention and cleanup
 
@@ -74,3 +133,13 @@ Validation scope was the scripts, Electron desktop shell, Rust Sidecar, and sess
 - The accepted sockets explicitly use blocking reads; the response fixture collects complete headers rather than assuming one read contains them. The gateway suite passed in all three concurrent full contract copies. Two complete copies passed; the third timed out waiting for provider CLI receipts in separate Sidecar fixtures, tracked by KVG-5151. No suite serialization was added.
 - Earlier follow-up full scripts runs exceeded unchanged inventory/Storybook five-second deadlines (KVG-5153). The latest full scripts run passes all 668 tests, including delayed-drain cleanup, deadline expiry, unknown/stale refusals, and credential-safe protocol diagnostics. Earlier failed runs remain recorded rather than counted as passes.
 - Existing ignored tests remain ignored except the cross-boundary fixtures explicitly selected by the contract command. Trusted live replacement and the separate updater/source-install transaction were not validated. Native x64 launch evidence is now present; the updated arm64 CI lane still needs a passing run.
+
+### KVG-5263 documentation validation
+
+Only this guide and the capacity change's task checklist changed; daemon, updater and backend behavior were not modified. Against baseline `3a78e2309`, host/protocol/client default and all-feature suites passed with 17/19/20 tests respectively. The all-feature daemon suite passed serially with 334 reported cases, including repeated fixture-binary unit tests, and five ignored cases. Its replacement suite passed 27 cases with three ignored; capacity scaling passed all three. Serialization avoids the earlier load-dependent parallel replacement preflight timeout; it does not prove that timeout fixed.
+
+All four session crates passed all-target/all-feature check, build and Clippy. Host/client/daemon formatting passed. Protocol formatting still fails at unchanged `src/notification.rs:126`, tracked by KVG-5291. The normal default daemon run stopped on `continuity::output_overflow_reports_a_gap_and_keeps_authority_recovery_available` with `RecoveryUnavailable`, after 88 passing cases. Serial all-feature continuity passed unchanged; KVG-5328 tracks the unresolved discrepancy, not a waived failure.
+
+The default run left one new daemon at `/tmp/of-pty-N2f0qv` after fixture teardown removed its runtime root and credentials. Authenticated cleanup is unavailable, so no observed orphan PID was signalled. Process observation found no other new daemon survivors across the subsequent serial workload. Cleanup is not fully verified; KVG-5328 coordinates with KVG-5313's fixture ownership work.
+
+The packaging/manifest and ownership script contracts passed 28 tests; the desktop IPC registry check passed. `packaged_release` passed using the current debug daemon and the actual manifest writer, not an assembled production `.app`. No installed application was touched. No native x64 execution, full packaged-update/legacy acceptance, backend-wide suite, renderer/workspace-wide suite or production package rebuild was run for this documentation-only diff. Those omissions do not establish production compatibility. The strict OpenSpec and whitespace checks passed. Local logs and receipts are in `/tmp/KVG-5263-validation/`.
