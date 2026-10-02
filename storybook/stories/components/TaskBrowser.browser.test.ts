@@ -2,6 +2,7 @@
 import { mkdir } from 'node:fs/promises'
 import { chromium, type Browser, type Locator } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { measureBrowserLayout } from '../../shared/browserLayout'
 
 // STORYBOOK_URL=http://localhost:6007 pnpm test storybook/stories/components/TaskBrowser.browser.test.ts
 const storybookUrl = process.env.STORYBOOK_URL
@@ -13,32 +14,14 @@ beforeAll(async () => {
 afterAll(async () => { await browser?.close() })
 
 async function expectUnclipped(element: Locator) {
-  const geometry = await element.evaluate(node => {
-    const rect = node.getBoundingClientRect()
-    let left = 0
-    let right = window.innerWidth
-    for (let parent = node.parentElement; parent; parent = parent.parentElement) {
-      if (getComputedStyle(parent).overflowX !== 'visible') {
-        const bounds = parent.getBoundingClientRect()
-        left = Math.max(left, bounds.left)
-        right = Math.min(right, bounds.right)
-      }
-    }
-    return {
-      label: node.getAttribute('aria-label') ?? node.textContent,
-      left: rect.left, right: rect.right, width: rect.width, height: rect.height,
-      clipLeft: left, clipRight: right,
-      clientWidth: node.clientWidth, scrollWidth: node.scrollWidth,
-      top: rect.top, bottom: rect.bottom, viewportHeight: window.innerHeight,
-    }
-  })
+  const geometry = await element.evaluate(measureBrowserLayout)
   expect(geometry.width, JSON.stringify(geometry)).toBeGreaterThan(0)
   expect(geometry.height, JSON.stringify(geometry)).toBeGreaterThan(0)
   expect(geometry.left, JSON.stringify(geometry)).toBeGreaterThanOrEqual(geometry.clipLeft)
   expect(geometry.right, JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.clipRight)
   expect(geometry.scrollWidth, JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.clientWidth)
-  expect(geometry.top, JSON.stringify(geometry)).toBeGreaterThanOrEqual(0)
-  expect(geometry.bottom, JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.viewportHeight)
+  expect(geometry.top, JSON.stringify(geometry)).toBeGreaterThanOrEqual(geometry.clipTop)
+  expect(geometry.bottom, JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.clipBottom)
 }
 
 describe.skipIf(!storybookUrl)('Visual feedback header', () => {

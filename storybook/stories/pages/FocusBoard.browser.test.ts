@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { chromium, type Browser, type Locator } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { measureBrowserLayout } from '../../shared/browserLayout'
 
 // Run against the existing pages Storybook, independently of screenshot tooling:
 // pnpm storybook:pages --ci
@@ -14,29 +15,10 @@ beforeAll(async () => {
 afterAll(async () => { await browser?.close() })
 
 async function expectUnclipped(control: Locator) {
-  const geometry = await control.evaluate((element) => {
-    const rect = element.getBoundingClientRect()
-    let left = 0
-    let right = window.innerWidth
-    let top = 0
-    let bottom = window.innerHeight
-    for (let parent = element.parentElement; parent; parent = parent.parentElement) {
-      const style = getComputedStyle(parent)
-      const bounds = parent.getBoundingClientRect()
-      if (style.overflowX !== 'visible') {
-        left = Math.max(left, bounds.left)
-        right = Math.min(right, bounds.right)
-      }
-      if (style.overflowY !== 'visible') {
-        top = Math.max(top, bounds.top)
-        bottom = Math.min(bottom, bounds.bottom)
-      }
-    }
-    return { label: element.textContent, x: rect.left, y: rect.top, right: rect.right, bottom: rect.bottom, left, top, clipRight: right, clipBottom: bottom }
-  })
-  expect(geometry.x, JSON.stringify(geometry)).toBeGreaterThanOrEqual(geometry.left)
+  const geometry = await control.evaluate(measureBrowserLayout)
+  expect(geometry.left, JSON.stringify(geometry)).toBeGreaterThanOrEqual(geometry.clipLeft)
   expect(geometry.right, JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.clipRight)
-  expect(geometry.y, JSON.stringify(geometry)).toBeGreaterThanOrEqual(geometry.top)
+  expect(geometry.top, JSON.stringify(geometry)).toBeGreaterThanOrEqual(geometry.clipTop)
   expect(geometry.bottom, JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.clipBottom)
 }
 

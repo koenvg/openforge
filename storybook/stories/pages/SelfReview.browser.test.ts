@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { chromium, type Browser, type Locator } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { measureBrowserLayout } from '../../shared/browserLayout'
 
 // STORYBOOK_URL=http://localhost:6006 pnpm test storybook/stories/pages/SelfReview.browser.test.ts
 const storybookUrl = process.env.STORYBOOK_URL
@@ -9,17 +10,7 @@ beforeAll(async () => { if (storybookUrl) browser = await chromium.launch({ head
 afterAll(async () => { await browser?.close() })
 
 async function expectReachable(element: Locator) {
-  const bounds = await element.evaluate((element) => {
-    const rect = element.getBoundingClientRect()
-    let left = 0, right = innerWidth, top = 0, bottom = innerHeight
-    for (let parent = element.parentElement; parent; parent = parent.parentElement) {
-      const style = getComputedStyle(parent)
-      const clip = parent.getBoundingClientRect()
-      if (style.overflowX !== 'visible') { left = Math.max(left, clip.left); right = Math.min(right, clip.right) }
-      if (style.overflowY !== 'visible') { top = Math.max(top, clip.top); bottom = Math.min(bottom, clip.bottom) }
-    }
-    return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, clipLeft: left, clipRight: right, clipTop: top, clipBottom: bottom }
-  })
+  const bounds = await element.evaluate(measureBrowserLayout)
   expect(bounds.right - bounds.left).toBeGreaterThan(0)
   expect(bounds.left).toBeGreaterThanOrEqual(bounds.clipLeft - 1)
   expect(bounds.right).toBeLessThanOrEqual(bounds.clipRight + 1)

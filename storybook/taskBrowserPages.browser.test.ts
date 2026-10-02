@@ -2,6 +2,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { chromium, type Browser } from 'playwright'
 import { serve } from '../scripts/storybook-visual/capture.mjs'
+import { measureBrowserLayout } from './shared/browserLayout'
 
 const states = [
   ['populated', 'Task implementation preview'],
@@ -51,24 +52,12 @@ describe.runIf(process.env.RUN_STORYBOOK_TASK_BROWSER === '1')('Task Browser pag
           await toolbar.waitFor()
           // Measure resting controls before clicking, so focus scrolling cannot hide clipping.
           for (const control of await toolbar.locator('button, input').all()) {
-            const bounds = await control.evaluate(element => {
-              const rect = element.getBoundingClientRect()
-              let left = 0
-              let right = innerWidth
-              for (let parent = element.parentElement; parent; parent = parent.parentElement) {
-                if (getComputedStyle(parent).overflowX !== 'visible') {
-                  const clip = parent.getBoundingClientRect()
-                  left = Math.max(left, clip.left)
-                  right = Math.min(right, clip.right)
-                }
-              }
-              return { x: rect.x, right: rect.right, width: rect.width, top: rect.top, bottom: rect.bottom, left, clipRight: right }
-            })
+            const bounds = await control.evaluate(measureBrowserLayout)
             expect(bounds.width, JSON.stringify(bounds)).toBeGreaterThan(0)
-            expect(bounds.x, JSON.stringify(bounds)).toBeGreaterThanOrEqual(bounds.left)
+            expect(bounds.left, JSON.stringify(bounds)).toBeGreaterThanOrEqual(bounds.clipLeft)
             expect(bounds.right, JSON.stringify(bounds)).toBeLessThanOrEqual(bounds.clipRight)
-            expect(bounds.top).toBeGreaterThanOrEqual(0)
-            expect(bounds.bottom).toBeLessThanOrEqual(900)
+            expect(bounds.top).toBeGreaterThanOrEqual(bounds.clipTop)
+            expect(bounds.bottom).toBeLessThanOrEqual(bounds.clipBottom)
           }
           expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
           if (state === 'loading') {
