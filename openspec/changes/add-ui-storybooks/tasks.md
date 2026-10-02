@@ -10,6 +10,10 @@ This ticket covers Task Schedules from 4.6 and 5.9, with its inventory entries, 
 
 This ticket adds the attention destination from 4.3, the host board/task-workspace/Self Review components from 5.7, and their inventory and baseline states. The broader checkboxes remain open for sibling tickets. Shared PR review and terminal package modules are not adopted here. See `docs/storybook-task-workspaces.md` for ownership, scenarios, and validation commands.
 
+## KVG-5284 state audit
+
+See `state-audit.md` for the per-checkbox state, host-context, adapter, interaction, and layout audit of 4.4–4.6 and 5.1–5.9. Inventory completeness does not close missing states. The 24 new Task Browser page browser checks and unchanged 432-case Linux visual matrix pass, but all twelve audited requirements remain unchecked for documented gaps. 4.6 still needs feedback sending, persistence failure, and unavailable-background states in the page host. KVG-5332 tracks the SDK tooltip switching failure. No historical screenshot inventory or approved baseline is changed.
+
 ## 1. Catalog foundations
 
 - [x] 1.1 Add the compatible Svelte Storybook dependency set and root scripts for independent page and component development servers, then verify `pnpm install --frozen-lockfile` succeeds and each help/start command resolves its own configuration.
