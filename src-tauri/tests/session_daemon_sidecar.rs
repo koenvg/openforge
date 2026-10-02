@@ -14,6 +14,9 @@ mod restart;
 #[cfg(target_os = "macos")]
 #[path = "session_daemon_sidecar/source_owner.rs"]
 mod source_owner;
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[path = "session_daemon_sidecar/startup.rs"]
+mod startup;
 use base64::Engine;
 use serde_json::{json, Value};
 use std::{

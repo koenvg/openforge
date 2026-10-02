@@ -21,6 +21,16 @@ impl Fixture {
             root.path(),
         )
         .unwrap();
+        if REPLACEMENT_FIXTURES {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+            while !client.capabilities().unwrap().supports_replacement {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "fixture bootstrap did not validate"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        }
         Self { root, client }
     }
     fn installation(&self) -> InstallationId {

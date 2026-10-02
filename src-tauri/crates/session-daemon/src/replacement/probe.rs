@@ -32,6 +32,8 @@ pub(super) struct Contract {
 }
 pub(super) fn describe(state: Option<&[u8]>) -> Result<(), Error> {
     if state.is_none() {
+        #[cfg(feature = "replacement-fixtures")]
+        super::fixture_startup::before_readiness()?;
         // stderr stays empty for state probes. The image marker separates
         // loader startup from the unchanged bounded contract computation.
         std::io::stderr()
@@ -50,6 +52,16 @@ pub(super) fn describe(state: Option<&[u8]>) -> Result<(), Error> {
     serde_json::to_writer(std::io::stdout().lock(), &contract).map_err(|_| refused())
 }
 pub(super) fn run(path: &Path, state: Option<&[u8]>) -> Result<Contract, Error> {
+    run_cancellable(path, state, &std::sync::atomic::AtomicBool::new(false))
+}
+pub(super) fn run_cancellable(
+    path: &Path,
+    state: Option<&[u8]>,
+    cancelled: &std::sync::atomic::AtomicBool,
+) -> Result<Contract, Error> {
+    if cancelled.load(std::sync::atomic::Ordering::Acquire) {
+        return Err(refused());
+    }
     // Compute the descriptor ceiling before fork, outside the async-signal-safe section.
     let descriptor_limit = unsafe { libc::getdtablesize() };
     if !(3..=1_048_576).contains(&descriptor_limit) {
@@ -103,15 +115,22 @@ pub(super) fn run(path: &Path, state: Option<&[u8]>) -> Result<Contract, Error> 
         refused()
     })?));
     let child = helper.0.as_mut().ok_or_else(refused)?;
-    let result = probe_child(child, state);
+    let result = probe_child(child, state, cancelled);
     helper.finish()?;
     result
 }
-fn probe_child(child: &mut std::process::Child, state: Option<&[u8]>) -> Result<Contract, Error> {
+fn probe_child(
+    child: &mut std::process::Child,
+    state: Option<&[u8]>,
+    cancelled: &std::sync::atomic::AtomicBool,
+) -> Result<Contract, Error> {
     let mut pipes = ProbePipes::new(child, state.unwrap_or_default())?;
     let expected_digest = state.map(|bytes| format!("{:x}", Sha256::digest(bytes)));
     let mut deadlines = ProbeDeadlines::new(state.is_some());
     loop {
+        if cancelled.load(std::sync::atomic::Ordering::Acquire) {
+            return Err(refused());
+        }
         pipes.send_input()?;
         pipes.read_readiness(&mut deadlines)?;
         pipes.read_output(&mut deadlines)?;

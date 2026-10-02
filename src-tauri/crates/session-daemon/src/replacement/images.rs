@@ -70,12 +70,16 @@ pub(super) fn clean(directory: &Path, keep: &[&Path]) -> Result<(), Error> {
     }
     Ok(())
 }
-pub(super) fn bootstrap(runtime: &Path) -> Result<Image, Error> {
+pub(super) fn bootstrap(
+    runtime: &Path,
+    cancelled: &std::sync::atomic::AtomicBool,
+) -> Result<Image, Error> {
     let directory = directory(runtime)?;
     clean(&directory, &[])?;
     let image = copy(
         &directory,
         &std::env::current_exe().map_err(|_| Error::UnsupportedReplacement)?,
+        cancelled,
     )?;
     if image.version != version::current()? {
         eprintln!("image preflight retained source code identity mismatch");
@@ -86,9 +90,17 @@ pub(super) fn bootstrap(runtime: &Path) -> Result<Image, Error> {
 pub(super) fn prepare(directory: &Path, current: &Image, requested: &Path) -> Result<Image, Error> {
     verify(current, None)?;
     clean(directory, &[&current.path])?;
-    copy(directory, requested)
+    copy(
+        directory,
+        requested,
+        &std::sync::atomic::AtomicBool::new(false),
+    )
 }
-fn copy(directory: &Path, source: &Path) -> Result<Image, Error> {
+fn copy(
+    directory: &Path,
+    source: &Path,
+    cancelled: &std::sync::atomic::AtomicBool,
+) -> Result<Image, Error> {
     let mut source = open(source)?;
     let path = directory.join(format!("image-{}.bin", uuid::Uuid::new_v4()));
     let mut file = OpenOptions::new()
@@ -104,6 +116,9 @@ fn copy(directory: &Path, source: &Path) -> Result<Image, Error> {
     if copied > MAX_IMAGE_BYTES {
         return Err(Error::Capacity);
     }
+    if cancelled.load(std::sync::atomic::Ordering::Acquire) {
+        return Err(Error::UnsupportedReplacement);
+    }
     file.set_permissions(std::fs::Permissions::from_mode(0o500))
         .map_err(|_| Error::UnsupportedReplacement)?;
     file.sync_all().map_err(|_| Error::UnsupportedReplacement)?;
@@ -112,7 +127,7 @@ fn copy(directory: &Path, source: &Path) -> Result<Image, Error> {
         .and_then(|directory| directory.sync_all())
         .map_err(|_| Error::UnsupportedReplacement)?;
     let sha256 = digest(&path)?;
-    let contract = probe::run(&path, None)?;
+    let contract = probe::run_cancellable(&path, None, cancelled)?;
     if contract.sha256 != sha256 {
         eprintln!("image preflight copied byte identity mismatch");
         return Err(Error::UnsupportedReplacement);

@@ -1,6 +1,9 @@
 //! Single-owner image replacement. Preparation serves concurrently; commit alone quiesces.
+mod bootstrap;
 mod checkpoint;
 mod descriptors;
+#[cfg(feature = "replacement-fixtures")]
+mod fixture_startup;
 mod images;
 mod probe;
 mod resume;
@@ -129,6 +132,7 @@ struct Pending {
 }
 pub(crate) struct Manager {
     current: Option<images::Image>,
+    bootstrap: Option<bootstrap::Bootstrap>,
     running_version: String,
     jobs: Vec<Job>,
     pending: Option<Pending>,
@@ -150,14 +154,14 @@ pub(crate) struct Activation {
 }
 impl Manager {
     pub fn new(runtime: &RuntimeDirectory) -> Self {
-        // Keep ordinary production activation disabled until the live safety gates pass.
-        let current = if cfg!(all(
+        // Production activation stays disabled. Only explicit fixtures bootstrap an image.
+        let bootstrap = if cfg!(all(
             target_os = "macos",
             target_arch = "aarch64",
             feature = "replacement-fixtures"
         )) {
-            match images::bootstrap(runtime.path()) {
-                Ok(image) => Some(image),
+            match bootstrap::Bootstrap::start(runtime.path()) {
+                Ok(worker) => Some(worker),
                 Err(_) => {
                     eprintln!(
                         "live replacement unavailable; ordinary session serving remains enabled"
@@ -169,7 +173,8 @@ impl Manager {
             None
         };
         Self {
-            current,
+            current: None,
+            bootstrap,
             running_version: version::current().unwrap_or_else(|_| IMAGE_VERSION.into()),
             jobs: Vec::new(),
             pending: None,
@@ -177,6 +182,15 @@ impl Manager {
         }
     }
     pub fn poll(&mut self) {
+        if let Some(result) = self.bootstrap.as_mut().and_then(bootstrap::Bootstrap::poll) {
+            match result {
+                Ok(image) => self.current = Some(image),
+                Err(_) => eprintln!(
+                    "live replacement unavailable; ordinary session serving remains enabled"
+                ),
+            }
+            self.bootstrap = None;
+        }
         let Some(pending) = &self.pending else {
             return;
         };
@@ -439,6 +453,7 @@ impl Manager {
         };
         let mut manager = Self {
             current: Some(current),
+            bootstrap: None,
             running_version: version::current()?,
             jobs: snapshot.jobs,
             pending: None,

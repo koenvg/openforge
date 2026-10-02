@@ -133,7 +133,13 @@ impl Fixture {
         let deadline = Instant::now() + STARTUP_WAIT;
         loop {
             if let Ok(client) = Client::connect(fixture.root.path()) {
-                return (fixture, client);
+                // These tests require verified replacement, not just ordinary serving readiness.
+                if client
+                    .capabilities()
+                    .is_ok_and(|capabilities| capabilities.supports_replacement)
+                {
+                    return (fixture, client);
+                }
             }
             assert!(Instant::now() < deadline, "test daemon did not start");
             std::thread::sleep(Duration::from_millis(10));
