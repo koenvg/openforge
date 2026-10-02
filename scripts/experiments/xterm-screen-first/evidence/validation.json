@@ -1,6 +1,6 @@
 {
   "baseline": "5e652939c23c567e9d519f759402e3df0f4ad251",
-  "scope": "Complete isolated xterm-screen-first experiment, complete pinned patched xterm browser dependency graph, standalone native exporter crate, root script test discovery and existing installer CLI fixture",
+  "scope": "Complete isolated xterm-screen-first experiment, complete pinned patched xterm browser dependency graph, standalone native exporter crate, root script test discovery",
   "commands": [
     { "command": "pnpm i", "result": "passed before investigation" },
     { "command": "node scripts/experiments/xterm-screen-first/launch.mjs", "result": "passed, isolated install/build and tab opened in existing Arc at http://127.0.0.1:5251" },
@@ -34,9 +34,10 @@
   "ciFollowup": {
     "failedRun": "https://github.com/koenvg/openforge/actions/runs/36992831660",
     "failures": ["Root Vitest discovered three Arc-only node:test suites and reported no test suite found", "The installer authentication fixture reached the macOS-only platform guard on Linux before testing authentication"],
-    "fixes": ["Name Arc-only suites *.browser.mjs and retain all ten tests under the isolated Node runner", "Declare the supported macOS-arm64 target only in each installer fixture's Node child"],
-    "verification": ["Root Vitest discovery returns zero Arc suites", "All four installer tests from the GitHub merged snapshot pass, including a Linux child-platform simulation", "Isolated build, full patched-source checks and all ten Arc tests pass", "Installer fixture JavaScript syntax passes"],
+    "fixes": ["Name Arc-only suites *.browser.mjs and retain all ten tests under the isolated Node runner", "Keep native installer platform guards intact. Main now tests recovery authentication directly in c4a3401a6afac5046ccee64c6bc6e6d8b6dc742b; remove the temporary broad platform override and retain no installer-file changes"],
+    "verification": ["Root Vitest discovery returns zero Arc suites", "Latest merged installer snapshot: four tests pass and one platform-specific test skips on macOS; all five pass when the existing unsupported-platform case is exercised with a Linux child in a temporary preview", "Isolated build, full patched-source checks and all ten Arc tests pass", "Installer fixture JavaScript syntax passes"],
     "broaderLocalRun": "Merged Node project: 124 files passed, one skipped and two timed out. Both stdio transport cases pass in a focused one-worker rerun; the remaining macOS idle-resource sampler timeout is already tracked as KVG-5338. No unrelated source was changed.",
+    "integrationFollowup": "Run 37016672661 exposed the temporary platform override conflicting with main's new unsupported-platform test. The override was removed completely; scripts/coordinated-install.test.mjs is identical to the original feature branch. Authentication is now tested directly by main, and the unsupported-platform guard is preserved.",
     "review": "The task's single completion review already ran; no second pass launched"
   }
 }

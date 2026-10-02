@@ -7,16 +7,9 @@ import { afterEach, expect, it } from 'vitest'
 const roots = []
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))) })
 
-async function run(command, args, env) {
-  // Exercise the macOS-arm64 installer contract on every test host.
-  // The preload changes only the spawned Node process, never this runner.
-  const root = await mkdtemp(join(tmpdir(), 'openforge-install-platform-'))
-  roots.push(root)
-  const platform = join(root, 'platform.cjs')
-  await writeFile(platform, "Object.defineProperty(process, 'platform', { value: 'darwin' })\nObject.defineProperty(process, 'arch', { value: 'arm64' })\n")
-  const nodeOptions = `${env.NODE_OPTIONS ?? ''} --require=${JSON.stringify(platform)}`
+function run(command, args, env) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { env: { ...env, NODE_OPTIONS: nodeOptions }, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(command, args, { env, stdio: ['ignore', 'pipe', 'pipe'] })
     let stdout = ''
     let stderr = ''
     child.stdout.on('data', data => { stdout += data })
