@@ -21,6 +21,7 @@ pub fn agent_route_allowed(method: &str, path: &str) -> bool {
                 | "/hard_delete_task"
                 | "/set_task_dependencies"
                 | "/add_task_dependency"
+                | "/remove_task_dependency"
                 | "/link_task_chain"
                 | "/add_task_label"
                 | "/remove_task_label"
@@ -68,6 +69,24 @@ pub fn scoped_agent_route_allowed(method: &str, path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{agent_route_allowed, scoped_agent_route_allowed};
+
+    #[test]
+    fn task_agents_can_remove_a_dependency_only_through_the_named_post_route() {
+        assert!(agent_route_allowed("POST", "/remove_task_dependency"));
+        assert!(!scoped_agent_route_allowed(
+            "POST",
+            "/remove_task_dependency"
+        ));
+        for (method, path) in [
+            ("GET", "/remove_task_dependency"),
+            ("DELETE", "/remove_task_dependency"),
+            ("POST", "/remove_task_dependency/all"),
+            ("POST", "/remove_task_dependency/"),
+            ("POST", "/remove_task_dependencies"),
+        ] {
+            assert!(!agent_route_allowed(method, path), "{method} {path}");
+        }
+    }
 
     #[test]
     fn the_review_thread_write_and_read_routes_are_reachable_by_an_agent() {
