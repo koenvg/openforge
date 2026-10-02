@@ -69,7 +69,18 @@ describe('Rust sidecar backend layout Module', () => {
     expect(layout.sessionCrates.client.manifestPath).toBe('/repo/backend/crates/session-client/Cargo.toml')
     expect(layout.sessionCrates.protocol.manifestPath).toBe('/repo/backend/crates/session-protocol/Cargo.toml')
     expect(layout.sessionCrates.host.manifestPath).toBe('/repo/backend/crates/session-host/Cargo.toml')
-    expect(layout.sessionCrates.daemon.binaryPath).toBe('/repo/backend/crates/session-daemon/target/debug/openforge-session-daemon')
+    expect(layout.sessionCrates.daemon.binaryPath()).toBe('/repo/backend/crates/session-daemon/target/debug/openforge-session-daemon')
     expect(layout.updateHelper.manifestPath).toBe('/repo/backend/crates/update-helper/Cargo.toml')
+  })
+  it('resolves private daemon artifacts and gated binaries with platform naming', () => {
+    const layout = resolveRustSidecarLayout({ repoRoot: '/repo', config: currentLayoutConfig, platform: 'win32' })
+    expect(layout.sessionCrates.daemon.binaryPath({
+      cargoTargetDir: 'private-target',
+      cargoBuildTarget: 'x86_64-pc-windows-msvc',
+    })).toBe('/repo/private-target/x86_64-pc-windows-msvc/debug/openforge-session-daemon.exe')
+    expect(layout.sessionCrates.daemon.binaryPath({
+      cargoTargetDir: '/tmp/private-target',
+      binaryName: 'openforge-session-daemon-fixture-startup',
+    })).toBe('/tmp/private-target/debug/openforge-session-daemon-fixture-startup.exe')
   })
 })

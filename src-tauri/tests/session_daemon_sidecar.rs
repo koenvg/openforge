@@ -35,6 +35,18 @@ fn should_retry_startup(log: &str, attempts_remaining: usize) -> bool {
             .any(|line| line.contains("[electron-sidecar] failed: Address already in use"))
 }
 
+fn required_daemon_artifact(env_name: &str) -> PathBuf {
+    let path = std::env::var_os(env_name).map(PathBuf::from).unwrap_or_else(|| {
+        panic!("set {env_name} to the built daemon artifact or run node scripts/session-daemon-contract.mjs")
+    });
+    assert!(
+        path.is_file(),
+        "requested daemon artifact is missing: {} ({env_name}); build it before running Sidecar contracts",
+        path.display()
+    );
+    path
+}
+
 struct Fixture {
     root: tempfile::TempDir,
     default_daemon_root: bool,
@@ -117,8 +129,6 @@ impl Fixture {
         self.token = uuid::Uuid::new_v4().to_string();
         let log_path = self.root.path().join(format!("{stage}.log"));
         let log = fs::File::create(&log_path).unwrap();
-        let daemon = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("crates/session-daemon/target/debug/openforge-session-daemon");
         let mut command = Command::new(env!("CARGO_BIN_EXE_openforge"));
         command
             .args(["--host", "127.0.0.1", "--port", &self.port.to_string()])
@@ -139,7 +149,10 @@ impl Fixture {
         if std::env::var("OPENFORGE_SESSION_PROOF_DISABLE_DAEMON").as_deref() != Ok("1") {
             command
                 .env("OPENFORGE_SESSION_DAEMON_ROOT", self.root.path())
-                .env("OPENFORGE_SESSION_DAEMON_PATH", daemon)
+                .env(
+                    "OPENFORGE_SESSION_DAEMON_PATH",
+                    required_daemon_artifact("OPENFORGE_TEST_DAEMON"),
+                )
                 .env("OPENFORGE_SESSION_DAEMON_SHELL_KEY", &self.shell_key);
         }
         if let Some(key) = &self.pi_key {
