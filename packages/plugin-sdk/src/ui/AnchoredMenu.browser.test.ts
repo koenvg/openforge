@@ -46,6 +46,27 @@ afterAll(async () => {
   }
 })
 
+async function clickOutsideOnMutation(page: Page, selector: string) {
+  // Send the full mouse sequence at the public DOM boundary, before actionability waits.
+  await page.evaluate((selector) => {
+    const observer = new MutationObserver(() => {
+      if (!document.querySelector(selector)) return
+      observer.disconnect()
+      document.documentElement.dataset.outsideClickDispatched = 'true'
+      for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+        const EventType = type.startsWith('pointer') ? PointerEvent : MouseEvent
+        document.documentElement.dispatchEvent(new EventType(type, {
+          bubbles: true, composed: true, cancelable: true,
+          clientX: 900, clientY: 10, button: 0,
+          buttons: type.endsWith('down') ? 1 : 0,
+          pointerType: 'mouse',
+        }))
+      }
+    })
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true })
+  }, selector)
+}
+
 describe.each([
   { name: 'Standalone actions', fixture: 'split-button' },
   { name: 'More actions', fixture: 'split-button' },
@@ -65,67 +86,73 @@ describe.each([
     await page?.close()
   })
 
-  async function dispatchOutsideClick(duringOpening: boolean) {
-    // The public DOM marker pins the event to opening, independent of runner speed.
-    // Use a complete DOM mouse sequence, not Playwright's actionability wait.
-    await page.evaluate((duringOpening) => {
-      function click() {
-        for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
-          const EventType = type.startsWith('pointer') ? PointerEvent : MouseEvent
-          document.documentElement.dispatchEvent(new EventType(type, {
-            bubbles: true, composed: true, cancelable: true,
-            clientX: 900, clientY: 10, button: 0,
-            buttons: type.endsWith('down') ? 1 : 0,
-            pointerType: 'mouse',
-          }))
-        }
-      }
-      if (!duringOpening) {
-        click()
-        return
-      }
-      const observer = new MutationObserver(() => {
-        if (!document.querySelector('[role="menu"][data-starting-style]')) return
-        observer.disconnect()
-        document.documentElement.dataset.clickedDuringOpening = 'true'
-        click()
-      })
-      observer.observe(document.body, { childList: true, subtree: true, attributes: true })
-    }, duringOpening)
-  }
-
   async function clickOutsideDuringOpening() {
-    await dispatchOutsideClick(true)
+    await clickOutsideOnMutation(page, '[role="menu"][data-starting-style]')
     await trigger.click()
-    expect(await page.locator('html').getAttribute('data-clicked-during-opening')).toBe('true')
+    expect(await page.locator('html').getAttribute('data-outside-click-dispatched')).toBe('true')
     expect(await page.getByRole('status', { name: 'Selected action' }).textContent()).toBe('None')
     if (fixture === 'split-button') {
       expect(await page.getByRole('status', { name: 'Primary count' }).textContent()).toBe('0')
     }
   }
 
+  it('dismisses on a native outside click immediately after opening', async () => {
+    await trigger.click()
+    // Presence animation markers do not establish dismissal readiness.
+    await page.mouse.click(900, 10)
+    await expect.poll(() => trigger.getAttribute('aria-expanded')).toBe('false')
+    expect(await page.getByRole('status', { name: 'Selected action' }).textContent()).toBe('None')
+    if (fixture === 'split-button') {
+      expect(await page.getByRole('status', { name: 'Primary count' }).textContent()).toBe('0')
+    }
+  })
+
   describe('outside click during opening', () => {
-    // Keep reproduction/setup assertions outside it.fails: missing markers, fixture
-    // errors, or accidental selections must fail the suite, not count as the bug.
     beforeEach(clickOutsideDuringOpening)
 
-    // https://github.com/huntabyte/bits-ui/issues/2141
-    // An upstream fix must unexpectedly pass, prompting removal of .fails.
-    it.fails('dismisses the menu', async () => {
-      await expect.poll(() => trigger.getAttribute('aria-expanded')).toBe('false')
-    })
-
-    afterEach(async () => {
-      // The early-dismissal assertion has completed. Replay the identical sequence
-      // to prove it is a valid outside interaction, without a sleep or a second
-      // expected failure hiding an unrelated event-dispatch problem.
-      await dispatchOutsideClick(false)
+    it('dismisses the menu', async () => {
       await expect.poll(() => trigger.getAttribute('aria-expanded')).toBe('false')
       expect(await page.getByRole('status', { name: 'Selected action' }).textContent()).toBe('None')
       if (fixture === 'split-button') {
         expect(await page.getByRole('status', { name: 'Primary count' }).textContent()).toBe('0')
       }
     })
+  })
+})
+
+describe('Bits UI dismissal across content changes', () => {
+  let page: Page
+
+  beforeEach(async () => {
+    page = await browser.newPage()
+    await page.goto(`${origin}packages/plugin-sdk/src/ui/browser/bits-menu-lifecycle.html`)
+    await page.getByRole('menu', { name: 'Lifecycle actions' }).waitFor()
+  }, 30_000)
+
+  afterEach(async () => {
+    await page?.close()
+  })
+
+  it('dismisses an outside click captured before the same content rerenders', async () => {
+    // The public pointerdown callback flushes a rerender during the captured interaction.
+    await page.getByRole('button', { name: 'Rerender outside' }).dispatchEvent('pointerdown', {
+      pointerType: 'mouse', button: 0, buttons: 1, clientX: 900, clientY: 10,
+    })
+    expect(await page.getByRole('status', { name: 'Revision count' }).textContent()).toBe('1')
+    await expect.poll(() => page.getByRole('status', { name: 'Menu open' }).textContent()).toBe('false')
+    expect(await page.getByRole('status', { name: 'Dismissal count' }).textContent()).toBe('1')
+  })
+
+  it('dismisses an outside click as soon as the content ref is replaced', async () => {
+    const previousContent = await page.getByRole('menu', { name: 'Lifecycle actions' }).elementHandle()
+    await clickOutsideOnMutation(page, '[role="menu"][data-content-version="1"]')
+    await page.getByRole('button', { name: 'Replace content' }).dispatchEvent('pointerdown', {
+      pointerType: 'mouse', button: 0, buttons: 1,
+    })
+    expect(await page.locator('html').getAttribute('data-outside-click-dispatched')).toBe('true')
+    expect(await previousContent!.evaluate((node) => node.isConnected)).toBe(false)
+    await expect.poll(() => page.getByRole('status', { name: 'Menu open' }).textContent()).toBe('false')
+    expect(await page.getByRole('status', { name: 'Dismissal count' }).textContent()).toBe('1')
   })
 })
 

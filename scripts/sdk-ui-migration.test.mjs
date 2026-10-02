@@ -12,6 +12,7 @@ const reviewedUnresolved = {
   'packages/plugin-sdk/src/ui/Alert.svelte': ['{...attributes}'],
   'packages/plugin-sdk/src/ui/AnchoredMenu.svelte': ['class="of-anchored-menu {className ?? \'\'}"', '{...tooltipProps}', '{...triggerButton}', '{...props}'],
   'packages/plugin-sdk/src/ui/Badge.svelte': ['{...attributes}', 'class={className}'],
+  'packages/plugin-sdk/src/ui/BitsMenuLifecycleBrowserFixture.svelte': ['{...props}'],
   'packages/plugin-sdk/src/ui/Button.svelte': ['{...props}'],
   'packages/plugin-sdk/src/ui/ButtonControl.svelte': ['{...attributes}', 'class={className}'],
   'packages/plugin-sdk/src/ui/Checkbox.svelte': ['class={["of-checkbox", className]}', '{...attributes}', 'class={className}'],

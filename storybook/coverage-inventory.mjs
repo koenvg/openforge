@@ -496,7 +496,7 @@ const inventory = {
     { source: 'src/components/task-detail/TaskDetailLifecycle.svelte', kind: 'nonvisual-provider', reason: 'Coordinates task workspace and terminal lifecycle through callbacks; renders no UI.' },
     { source: 'plugins/github-sync/src/review/pr/__fixtures__/ReviewWorkspaceHarness.svelte', kind: 'nonvisual-provider', reason: 'Creates isolated review workspace state without rendering UI.' },
     ...[
-      'AnchoredMenuKeyboardFixture', 'BitsMenuOpeningBrowserFixture', 'CoreControlsThemeFixture',
+      'AnchoredMenuKeyboardFixture', 'BitsMenuLifecycleBrowserFixture', 'BitsMenuOpeningBrowserFixture', 'CoreControlsThemeFixture',
       'SearchPaletteBrowserFixture', 'SplitButtonBrowserFixture', 'StatusBadgeThemeFixture',
     ].map(name => ({
       source: `packages/plugin-sdk/src/ui/${name}.svelte`, kind: /** @type {const} */ ('test-only-wrapper'),
