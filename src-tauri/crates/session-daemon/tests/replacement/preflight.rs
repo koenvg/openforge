@@ -112,6 +112,95 @@ fn updater_maintenance_activates_a_distinct_image_without_replacing_the_pty_owne
 }
 
 #[test]
+fn maintenance_failed_activation_preserves_receipts_controller_rules_and_live_io() {
+    use openforge_session_client::MaintenanceClient;
+    for (image, stage) in [
+        (
+            env!("CARGO_BIN_EXE_openforge-session-daemon-fixture-exec-fails"),
+            ReplacementStage::Exec,
+        ),
+        (
+            env!("CARGO_BIN_EXE_openforge-session-daemon-fixture-init-fails"),
+            ReplacementStage::Initialization,
+        ),
+    ] {
+        let (mut fixture, client) = Fixture::new();
+        let before = client.capabilities().unwrap();
+        let command = ShellCommand {
+            owner: TerminalOwner::Shell {
+                task_id: "maintenance-rollback".into(),
+                index: None,
+            },
+            command: PreparedCommand {
+                program: "/bin/cat".into(),
+                args: vec![],
+                cwd: fixture.root.path().into(),
+                env: BTreeMap::new(),
+            },
+            columns: 80,
+            rows: 24,
+            image_protocol: None,
+        };
+        let session = client.spawn("maintenance-shell", &command).unwrap();
+        fixture
+            .tracked
+            .push(managed_process::ManagedProcessIdentity::capture(session.pid).unwrap());
+        let maintenance =
+            MaintenanceClient::attach(fixture.root.path(), client.controller().clone()).unwrap();
+        let operation = OperationId::parse("maintenance-rollback").unwrap();
+        maintenance
+            .prepare(operation.clone(), Path::new(image))
+            .unwrap();
+        assert!(maintenance.activate(operation.clone()).is_err());
+        let receipt = maintenance.status(&operation).unwrap();
+        assert_eq!(receipt.state, ReplacementState::Failed { stage });
+        assert_eq!(receipt.actual_version, before.image_version);
+        let (capabilities, observed) = MaintenanceClient::observe_replacement(
+            fixture.root.path(),
+            &client.controller().installation,
+            &operation,
+        )
+        .unwrap();
+        assert_eq!(capabilities.pid, before.pid);
+        assert_eq!(capabilities.image_version, before.image_version);
+        assert_eq!(
+            serde_json::to_value(observed).unwrap(),
+            serde_json::to_value(&receipt).unwrap()
+        );
+        if stage == ReplacementStage::Exec {
+            assert_eq!(
+                maintenance.inventory().unwrap().controller,
+                *client.controller()
+            );
+        } else {
+            assert!(matches!(
+                maintenance.inventory(),
+                Err(Error::StaleController)
+            ));
+        }
+        let next = Client::connect(fixture.root.path()).unwrap();
+        let next_maintenance =
+            MaintenanceClient::attach(fixture.root.path(), next.controller().clone()).unwrap();
+        assert!(next_maintenance.activate(operation.clone()).is_err());
+        assert_eq!(
+            serde_json::to_value(next_maintenance.status(&operation).unwrap()).unwrap(),
+            serde_json::to_value(&receipt).unwrap()
+        );
+        let retried = next.spawn("maintenance-shell", &command).unwrap();
+        assert_eq!(retried.pid, session.pid);
+        assert_eq!(retried.pty, session.pty);
+        next.write(
+            "maintenance-after",
+            &session.pty,
+            1,
+            b"maintenance-survived\n",
+        )
+        .unwrap();
+        wait_text(&next, &session.pty, "maintenance-survived");
+    }
+}
+
+#[test]
 fn supported_large_image_keeps_replacement_available() {
     // The image contract accepts up to 128 MiB, including non-code file contents.
     // Trailing zeroes leave the signed Mach-O code identity unchanged.

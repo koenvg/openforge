@@ -1,4 +1,5 @@
 //! Single-owner image replacement. Preparation serves concurrently; commit alone quiesces.
+mod activation;
 mod bootstrap;
 mod checkpoint;
 mod descriptors;
@@ -10,19 +11,17 @@ mod resume;
 #[cfg(test)]
 mod tests;
 mod version;
-use crate::host::{Host, HostPause};
+use crate::host::Host;
 use crate::pause_deadline::PauseDeadline;
+pub(crate) use activation::Activation;
+use checkpoint::Snapshot;
 pub(crate) use descriptors::Resources;
 use openforge_session_client::runtime::RuntimeDirectory;
-use openforge_session_host::CapacityKind;
 use openforge_session_protocol::*;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeSet,
-    fs::File,
     io::Read,
-    os::{fd::AsRawFd, unix::process::CommandExt},
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
@@ -54,77 +53,6 @@ struct Job {
     target: Option<images::Image>,
     state: ReplacementState,
 }
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Snapshot {
-    current: images::Image,
-    jobs: Vec<Job>,
-}
-impl Snapshot {
-    fn target(&self, operation: &OperationId) -> Result<&images::Image, Error> {
-        self.jobs
-            .iter()
-            .find(|job| &job.operation == operation && job.state == ReplacementState::Executing)
-            .and_then(|job| job.target.as_ref())
-            .ok_or(Error::InvalidRequest)
-    }
-    fn validate(&self, operation: &OperationId, directory: &Path) -> Result<(), Error> {
-        if self.jobs.len() > MAX_JOBS {
-            return Err(Error::Capacity);
-        }
-        image_shape(&self.current, directory)?;
-        let mut ids = BTreeSet::new();
-        let mut active = 0;
-        for job in &self.jobs {
-            if !ids.insert(job.operation.as_str())
-                || !job.requested.is_absolute()
-                || job.requested.as_os_str().len() > 4096
-                || job.source_version.is_empty()
-                || job.source_version.len() > 256
-            {
-                return Err(Error::InvalidRequest);
-            }
-            if let Some(image) = &job.target {
-                image_shape(image, directory)?;
-            }
-            let actual = if job.state == ReplacementState::Activated {
-                &job.target.as_ref().ok_or(Error::InvalidRequest)?.version
-            } else {
-                &job.source_version
-            };
-            if &job.actual_version != actual {
-                return Err(Error::InvalidRequest);
-            }
-            match job.state {
-                ReplacementState::Preparing | ReplacementState::Prepared => {
-                    return Err(Error::InvalidRequest)
-                }
-                ReplacementState::Executing => {
-                    active += 1;
-                    if &job.operation != operation || job.target.is_none() {
-                        return Err(Error::InvalidRequest);
-                    }
-                }
-                _ => {}
-            }
-        }
-        if active != 1 {
-            return Err(Error::InvalidRequest);
-        }
-        Ok(())
-    }
-}
-fn image_shape(image: &images::Image, directory: &Path) -> Result<(), Error> {
-    if image.path.parent() != Some(directory)
-        || image.version.is_empty()
-        || image.version.len() > 256
-        || image.sha256.len() != 64
-        || !image.sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
-    {
-        return Err(Error::InvalidRequest);
-    }
-    Ok(())
-}
 struct Pending {
     index: usize,
     started: Instant,
@@ -143,17 +71,6 @@ pub(crate) struct Manager {
 pub(crate) struct Dispatch {
     pub response: Response,
     pub activation: Option<Activation>,
-}
-pub(crate) struct Activation {
-    file: File,
-    retained: Vec<i32>,
-    image: images::Image,
-    operation: OperationId,
-    checkpoint_bytes: usize,
-    deadline: PauseDeadline,
-    paused_at: Instant,
-    _spare_descriptors: Vec<File>,
-    _pause: HostPause,
 }
 impl Manager {
     pub fn new(runtime: &RuntimeDirectory) -> Self {
@@ -309,7 +226,15 @@ impl Manager {
                                 .find(|job| job.operation == operation)
                                 .ok_or(Error::InvalidRequest)?
                                 .state = ReplacementState::Executing;
-                            match self.capture(host, runtime, resources, operation.clone()) {
+                            match Activation::capture(
+                                host,
+                                runtime,
+                                resources,
+                                self.current.as_ref().ok_or(Error::UnsupportedReplacement)?,
+                                &self.jobs,
+                                operation.clone(),
+                                Arc::clone(&self.pause_workers),
+                            ) {
                                 Ok(prepared) => activation = Some(prepared),
                                 Err(Error::CapacityExceeded(kind)) => {
                                     eprintln!("session checkpoint capacity refused: {kind}");
@@ -397,84 +322,17 @@ impl Manager {
         }
         Ok(())
     }
-    fn capture(
-        &self,
-        host: &Host,
-        runtime: &RuntimeDirectory,
-        resources: &Resources,
-        operation: OperationId,
-    ) -> Result<Activation, Error> {
-        host.backend.preflight_checkpoint()?;
-        let paused_at = Instant::now();
-        let deadline = PauseDeadline::new(Arc::clone(&self.pause_workers));
-        let (host, pause) = host.checkpoint(&deadline)?;
-        // Reserve initialization headroom while refusal can still reopen the old owner.
-        // Exec closes these CLOEXEC descriptors before rebuilding reader/writer/runtime wrappers.
-        let spare = File::open("/dev/null")
-            .map_err(|_| Error::CapacityExceeded(CapacityKind::FileDescriptors))?;
-        let mut spare_descriptors = Vec::new();
-        for _ in 0..crate::backend::RESTORE_FD_RESERVE {
-            spare_descriptors.push(
-                spare
-                    .try_clone()
-                    .map_err(|_| Error::CapacityExceeded(CapacityKind::FileDescriptors))?,
-            );
-        }
-        let manager = Snapshot {
-            current: self.current.clone().ok_or(Error::UnsupportedReplacement)?,
-            jobs: self.jobs.clone(),
+    pub fn execute(&mut self, activation: Activation) {
+        let error = activation.execute();
+        let stage = if error == PauseDeadline::expired() {
+            ReplacementStage::Checkpoint
+        } else {
+            ReplacementStage::Exec
         };
-        let root = runtime
-            .path()
-            .parent()
-            .ok_or(Error::InvalidRequest)?
-            .to_path_buf();
-        let credentials = runtime.credentials().clone();
-        let roots = descriptors::Roots::capture(resources)?;
-        let port = resources
-            .agent
-            .local_addr()
-            .map_err(|_| Error::RecoveryUnavailable)?
-            .port();
-        let directory = runtime.path().to_path_buf();
-        let worker_operation = operation.clone();
-        let worker_deadline = deadline.clone();
-        let (file, checkpoint_bytes, image, mut retained) = deadline.run(move || {
-            worker_deadline.stage("header")?;
-            let runtime = RuntimeDirectory::reopen(&root, &credentials)?;
-            let header = checkpoint::Header::capture(
-                &runtime,
-                roots,
-                port,
-                &host,
-                &manager,
-                worker_operation,
-            )?;
-            host.verify_credentials(&header.agent_runtime, &worker_deadline)?;
-            let image = header.target.clone();
-            let recovery = header.recovery.clone();
-            let retained = header.descriptors();
-            worker_deadline.stage("encode")?;
-            let bytes = checkpoint::encode(header, &checkpoint::Body { host, manager })?;
-            images::verify_paused(&image, &bytes, &worker_deadline, "target-probe")?;
-            images::verify_paused(&recovery, &bytes, &worker_deadline, "recovery-probe")?;
-            let file = checkpoint::create(&directory, &bytes, &worker_deadline)?;
-            worker_deadline.check()?;
-            Ok((file, bytes.len(), image, retained))
-        })?;
-        retained.push(file.as_raw_fd());
-        descriptors::validate_list(&retained)?;
-        Ok(Activation {
-            file,
-            retained,
-            image,
-            operation,
-            checkpoint_bytes,
-            deadline,
-            paused_at,
-            _spare_descriptors: spare_descriptors,
-            _pause: pause,
-        })
+        let operation = activation.operation().clone();
+        // Inheritance rollback has finished. Reopen old I/O before filesystem cleanup.
+        drop(activation);
+        self.fail(&operation, stage);
     }
     fn restored(
         snapshot: Snapshot,
@@ -511,56 +369,6 @@ impl Manager {
         };
         job.actual_version.clone_from(&manager.running_version);
         Ok(manager)
-    }
-}
-impl Activation {
-    pub fn reply_budget(&self) -> Result<Duration, Error> {
-        self.deadline.remaining()
-    }
-    pub fn execute(self, manager: &mut Manager) {
-        let result = (|| {
-            #[cfg(feature = "replacement-fixtures")]
-            if !crate::pause_deadline::stage_delay("pre-exec").is_zero() {
-                let deadline = self.deadline.clone();
-                self.deadline.run(move || deadline.stage("pre-exec"))?;
-            }
-            self.deadline.check()?;
-            let _inheritance = descriptors::Inheritance::prepare(&self.retained)?;
-            #[cfg(feature = "replacement-fixtures")]
-            if self
-                .image
-                .version
-                .contains("/openforge-session-daemon-fixture-exec-fails@")
-            {
-                use std::os::unix::fs::PermissionsExt;
-                std::fs::set_permissions(&self.image.path, std::fs::Permissions::from_mode(0o400))
-                    .map_err(|_| Error::RecoveryUnavailable)?;
-            }
-            eprintln!(
-                "session handoff metrics: {},{},{}",
-                self.checkpoint_bytes,
-                self.retained.len(),
-                self.paused_at.elapsed().as_millis()
-            );
-            self.deadline.check()?;
-            let error = std::process::Command::new(&self.image.path)
-                .arg("--resume")
-                .arg(self.file.as_raw_fd().to_string())
-                .env_clear()
-                .exec();
-            Err::<(), Error>(Error::Transport(error.to_string()))
-        })();
-        if let Err(error) = result {
-            let stage = if error == PauseDeadline::expired() {
-                ReplacementStage::Checkpoint
-            } else {
-                ReplacementStage::Exec
-            };
-            let operation = self.operation.clone();
-            // Inheritance rollback has finished. Reopen old I/O before filesystem cleanup.
-            drop(self);
-            manager.fail(&operation, stage);
-        }
     }
 }
 pub(crate) fn run() -> Result<(), Error> {
