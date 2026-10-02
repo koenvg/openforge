@@ -1,5 +1,7 @@
 # UI migration inventory
 
+The sections below record the earlier migration stages. The final removal gate is described in [Removal readiness, KVG-4874](#removal-readiness-kvg-4874); references to a retained adapter in earlier sections are historical.
+
 Run `pnpm check:ui-migration`. It also runs through `pnpm lint`, and its seeded tests run through `pnpm test`:
 
 ```sh
@@ -172,6 +174,21 @@ Task Browser loading, toolbar, errors, and visual-feedback review now use semant
 `scripts/task-browser-ui-migration.test.mjs` checks the complete plugin, including executable tests. The only remaining scanner candidates are documented non-class strings: browser state keys, command inputs, surface IDs, keyboard actions, and accessibility roles. There are no unexplained legacy consumers or dynamic producers. The earlier machine-readable ledger remains historical.
 
 See [Task Browser migration validation](task-browser-presentation-migration.md) for baseline reproduction, validation scope, and the pre-existing narrow-toolbar issue tracked as KVG-5100.
+
+## Removal readiness, KVG-4874
+
+`pnpm check:ui-migration` now runs both the completed geometry/control guard and the removal-readiness gate. The latter uses the same parser-backed inventory across host sources, shared packages, bundled plugins, stories, executable fixtures/tests, script producers, and build entrypoints. It also detects script-loaded dependency assets and legacy selector probes. Dependencies, generated output, Rust, website/mobile, and historical prose are not executable consumer roots.
+
+`scripts/ui-removal-review.json` records exact, counted non-consumer dispositions. These cover native roles/elements, command/state identifiers, SDK caller-owned CSS and attribute forwarding, finite local/semantic class composition, classifier vocabulary, and intentional poisoned-variable assertions. The two `tooltip-story` records are a locally defined scoped class, not a daisyUI modifier. New expressions, extra occurrences, missing sources, duplicate reviews, and stale records fail. The gate does not silently ignore unresolved expressions or all test files.
+
+Six exact negative-test sources are excluded with reasons in that policy. They seed rejected classes, variables, dependency inputs, or unreviewed producers. Real fixture styles remain checked. Existing shader/color palette variables and the `--color-of-*` namespace remain valid; the guard does not ban every `--color-*` name.
+
+The unused `getTaskStateBadgeClass` has no imports or callers, so its old strings are not executable consumers. KVG-5335 tracks its reintroduction after KVG-4627. No task-state logic was changed to clean it up here. All executable color, geometry, component and dependency consumers outside deliberate negative probes have been removed or migrated. The refreshed machine-readable ledger remains a classification report, not a raw-count removal threshold.
+
+Fonts, focus, reduced motion, root paint, and scrollbar paint now live in `src/styles/global-presentation.css`. The theme document adapter still owns native `color-scheme`. Both daisyUI theme blocks, compatibility aliases, compact legacy sizing, dependency/lockfile resolution, and Vite dependency-resolver aliases are removed. See [validation and rollback](daisyui-removal-validation.md) for the evidence and remaining gaps.
+
+Direct static imports/exports, dynamic imports, CommonJS loading/resolution, TypeScript module references, and Svelte script imports are module-loading inputs. Exact `daisyui` package roots/subpaths and direct adapter stylesheet imports fail readiness, including stylesheet query suffixes; bare package-name metadata and absence assertions do not.
+Imperative DOM class assignments and class-list mutations are styling sinks, not identifier dispositions. Compatibility stylesheet reads are build inputs; absence assertions are not. Negative guard strings and the generated consumer ledger remain analysis inputs but are excluded from Tailwind production discovery. A compiled-CSS regression verifies that no compatibility-variable reader is emitted from them.
 
 ## File Viewer presentation, KVG-4869
 

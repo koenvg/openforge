@@ -53,7 +53,7 @@ function surfaceContent(
 
   const chrome = element('div', 'flex min-h-10 items-center gap-2 border-b border-of-border bg-of-panel px-4')
   const lights = element('div', 'flex gap-1.5', '')
-  for (const color of ['bg-error/70', 'bg-warning/70', 'bg-success/70']) {
+  for (const color of ['bg-of-danger/70', 'bg-of-warning/70', 'bg-of-success/70']) {
     lights.append(element('span', `h-2.5 w-2.5 rounded-full ${color}`))
   }
   chrome.append(lights)
@@ -72,7 +72,7 @@ function surfaceContent(
     card.append(element('p', 'mt-3 text-sm text-of-text-muted', 'The local adapter is holding this navigation in progress.'))
   } else if (state.error) {
     card.setAttribute('role', 'alert')
-    card.append(element('p', 'text-xs font-semibold uppercase tracking-[0.16em] text-error', state.error.code))
+    card.append(element('p', 'text-xs font-semibold uppercase tracking-[0.16em] text-of-danger', state.error.code))
     card.append(element('h2', 'mt-3 text-2xl font-semibold text-of-text', state.error.message))
     card.append(element('p', 'mt-3 font-mono text-xs text-of-text-muted', state.error.url))
   } else if (state.url === 'about:blank') {
@@ -83,7 +83,7 @@ function surfaceContent(
     card.append(element('p', 'text-xs font-semibold uppercase tracking-[0.16em] text-of-accent', page?.eyebrow ?? 'Local browser fixture'))
     card.append(element('h2', 'mt-3 text-2xl font-semibold text-of-text', page?.heading ?? (state.title || 'Attached browser page')))
     card.append(element('p', 'mt-3 text-sm leading-6 text-of-text-muted', page?.body ?? 'A deterministic local page is attached without opening an external browser surface.'))
-    const action = element('button', 'mt-6 min-h-9 rounded-[var(--of-radius-control)] bg-primary px-4 text-sm font-medium text-primary-content', 'Preview action')
+    const action = element('button', 'mt-6 min-h-9 rounded-[var(--of-radius-control)] bg-of-accent px-4 text-sm font-medium text-of-on-accent', 'Preview action')
     action.type = 'button'
     card.append(action)
   }

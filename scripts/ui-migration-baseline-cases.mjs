@@ -14,7 +14,7 @@ export const baselineCases = [
   ] },
   { story: 'pages-self-review--loading', narrowGap: 'KVG-4897: existing narrow diff pane has zero width', targets: [
     { id: 'feedback', selector: '[role="status"]:has-text("Loading diff...")' },
-    { id: 'spinner', selector: '[role="status"]:has-text("Loading diff...") .loading' },
+    { id: 'spinner', selector: '[role="status"]:has-text("Loading diff...") span[data-size]' },
   ] },
   { story: 'pages-self-review--failure', narrowGap: 'KVG-4897: existing narrow diff pane has zero width', targets: [
     { id: 'feedback', selector: '[role="alert"]:has-text("Failed to load diff. Please try again.")' },
@@ -34,11 +34,11 @@ export const baselineCases = [
   ] },
   { story: 'pages-global-settings--loading', targets: [
     { id: 'feedback', selector: 'main >> text=Loading settings…' },
-    { id: 'spinner', selector: 'main .loading' },
+    { id: 'spinner', selector: 'main span[data-size]' },
   ] },
   { story: 'pages-project-settings--saving', targets: [
     { id: 'feedback', selector: 'main [aria-live="polite"]:has-text("Saving changes…")' },
-    { id: 'spinner', selector: 'main .loading' },
+    { id: 'spinner', selector: 'main span[data-size]' },
   ] },
   { story: 'pages-project-setup--empty', targets: [
     { id: 'dialog', selector: '[role="dialog"][aria-label="Add Project"]' },

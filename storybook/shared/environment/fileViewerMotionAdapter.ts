@@ -11,7 +11,7 @@ export function createFileViewerMotionAdapter(): StoryEnvironmentAdapter {
   }
   function freeze() {
     if (document.documentElement.dataset.storybookMotion !== 'reduced') { restore(); return }
-    for (const element of document.querySelectorAll<HTMLElement>('.loading')) {
+    for (const element of document.querySelectorAll<HTMLElement>('span[data-size]')) {
       if (originals.has(element)) continue
       const mask = getComputedStyle(element).maskImage
       const match = /^url\("data:image\/svg\+xml,(.*)"\)$/.exec(mask)

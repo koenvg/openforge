@@ -8,7 +8,6 @@ import { chromium, type Browser } from 'playwright'
 import { PNG } from 'pngjs'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createOpenForgePluginSdkSourceAliases } from '../../../../packages/plugin-sdk/src/vite'
-import { createDaisyUiTailwindPluginAliases } from '../../../lib/viteDaisyUi'
 import { createServer, type ViteDevServer } from 'vite'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..')
@@ -32,7 +31,6 @@ beforeAll(async () => {
     resolve: {
       alias: [
         ...createOpenForgePluginSdkSourceAliases(repoRoot),
-        ...createDaisyUiTailwindPluginAliases(),
       ],
     },
     server: { host: '127.0.0.1', port: 0 },

@@ -72,7 +72,7 @@ export async function samplePresentationTree(target) {
     }
     return {
       root: measure(root),
-      spinner: [...root.querySelectorAll('.loading, [data-size]')].filter(element => element.tagName === 'SPAN').map(measure),
+      spinner: [...root.querySelectorAll('[data-size]')].filter(element => element.tagName === 'SPAN').map(measure),
       hints: [...root.querySelectorAll('kbd')].map(measure),
       controls: [...root.querySelectorAll('button, input, [role="option"]')].map(measure),
     }

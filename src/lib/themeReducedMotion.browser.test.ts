@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { chromium, type Browser } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-const themeAdapterCss = readFileSync(new URL('../styles/theme-adapter.css', import.meta.url), 'utf8')
+const globalPresentationCss = readFileSync(new URL('../styles/global-presentation.css', import.meta.url), 'utf8')
 let browser: Browser
 
 beforeAll(async () => {
@@ -21,7 +21,7 @@ describe('global reduced motion in Chromium', () => {
       const page = await browser.newPage({ reducedMotion })
       try {
         await page.setContent('<div>Theme token probe</div>')
-        await page.addStyleTag({ content: themeAdapterCss })
+        await page.addStyleTag({ content: globalPresentationCss })
         const colors = await page.locator('div').evaluate((element) => {
           element.style.color = 'rgb(255, 0, 0)'
           const initial = getComputedStyle(element).color
@@ -55,7 +55,7 @@ describe('global reduced motion in Chromium', () => {
           </style>
           <button>Animated control</button>
         `)
-        await page.addStyleTag({ content: themeAdapterCss })
+        await page.addStyleTag({ content: globalPresentationCss })
         const styles = await page.getByRole('button').evaluate((element) =>
           [null, '::before', '::after'].map((pseudo) => {
             const style = getComputedStyle(element, pseudo)

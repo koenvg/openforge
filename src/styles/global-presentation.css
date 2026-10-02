@@ -1,0 +1,37 @@
+/* Base paint stays layered so component and plugin-owned CSS can override it. */
+@layer base {
+  :root,
+  [data-theme] {
+    background-color: var(--of-surface);
+    color: var(--of-text);
+  }
+
+  :root {
+    scrollbar-color: color-mix(in oklch, currentColor 35%, transparent) transparent;
+  }
+}
+
+:root {
+  --font-sans: var(--of-font-sans);
+  --font-mono: var(--of-font-mono);
+}
+
+.of-field:focus-visible,
+  :where(button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: var(--of-focus-width) solid var(--of-focus-ring);
+  outline-offset: var(--of-space1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    /* A nonzero duration would introduce transitions on otherwise static elements. */
+    transition-duration: 0ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-delay: 0ms !important;
+  }
+}

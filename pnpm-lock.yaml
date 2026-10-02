@@ -54,15 +54,9 @@ catalogs:
     dompurify:
       specifier: ^3.4.15
       version: 3.4.15
-    github-slugger:
-      specifier: ^2.0.0
-      version: 2.0.0
     marked:
       specifier: ^18.0.13
       version: 18.0.13
-    mermaid:
-      specifier: ^11.17.2
-      version: 11.17.2
     semver:
       specifier: ^7.8.5
       version: 7.8.5
@@ -78,17 +72,6 @@ catalogs:
     vitest:
       specifier: ^4.1.11
       version: 4.1.11
-  pinned:
-    '@types/node':
-      specifier: 26.4.1
-      version: 26.4.1
-    svelte:
-      specifier: 5.57.0
-      version: 5.57.0
-  typescript6:
-    typescript:
-      specifier: ^6.0.3
-      version: 6.0.3
 
 patchedDependencies:
   '@git-diff-view/svelte@0.1.7':
@@ -168,9 +151,6 @@ importers:
       '@xterm/xterm':
         specifier: 'catalog:'
         version: 6.0.0
-      daisyui:
-        specifier: ^5.7.38
-        version: 5.7.38
       dompurify:
         specifier: 'catalog:'
         version: 3.4.15
@@ -2717,9 +2697,6 @@ packages:
 
   dagre-d3-es@7.0.14:
     resolution: {integrity: sha512-P4rFMVq9ESWqmOgK+dlXvOtLwYg0i7u0HBGJER0LZDJT2VHIPAMZ/riPxqJceWMStH5+E61QxFra9kIS3AqdMg==}
-
-  daisyui@5.7.38:
-    resolution: {integrity: sha512-ef3RIbteKVmlQ10ak0l4mu8F70pBJ2UBjDJNsA2vWlpNdErpHqfxddxK2ckNNYd7vQvTqP4a1A1vSsunlCGVOw==}
 
   data-urls@7.0.0:
     resolution: {integrity: sha512-23XHcCF+coGYevirZceTVD7NdJOqVn+49IHyxgszm+JIiHLoB2TkmPtsYkNWT1pvRSGkc35L6NHs0yHkN2SumA==}
@@ -6321,8 +6298,6 @@ snapshots:
     dependencies:
       d3: 7.9.0
       lodash-es: 4.18.1
-
-  daisyui@5.7.38: {}
 
   data-urls@7.0.0:
     dependencies:

@@ -4,7 +4,6 @@ import type { StorybookConfig } from '@storybook/svelte-vite'
 import { mergeConfig } from 'vite'
 import { fileURLToPath } from 'node:url'
 import { createOpenForgePluginSdkSourceAliases } from '../../packages/plugin-sdk/src/vite.ts'
-import { createDaisyUiTailwindPluginAliases } from '../../src/lib/viteDaisyUi.ts'
 
 export function createStorybookConfig(stories: string[]): StorybookConfig {
   return {
@@ -23,7 +22,6 @@ export function createStorybookConfig(stories: string[]): StorybookConfig {
         resolve: {
           alias: [
             ...createOpenForgePluginSdkSourceAliases(new URL('../../', import.meta.url)),
-            ...createDaisyUiTailwindPluginAliases(),
           ],
         },
       })

@@ -5,6 +5,7 @@ import { chromium } from 'playwright'
 import { baselineCases } from './ui-migration-baseline-cases.mjs'
 import { measureTargets } from './ui-migration-baseline-measurements.mjs'
 import { baselineThemeIds, installBaselineThemes, selectBaselineTheme } from './ui-migration-theme-fixtures.mjs'
+import { captureControlStates } from './storybook-migration-browser-harness.mjs'
 
 // Native computed measurements supplement, never replace, pinned raster review.
 const url = process.env.STORYBOOK_URL
@@ -27,6 +28,15 @@ try {
         await page.goto(`${url}/iframe.html?id=${entry.story}&viewMode=story&globals=openforgeTheme:openforge-light;openforgeMotion:reduced`)
         await page.waitForFunction(() => ['finished', 'errored'].includes(window.__STORYBOOK_PREVIEW__?.currentRender?.phase))
         assert.equal(await page.evaluate(() => window.__STORYBOOK_PREVIEW__.currentRender.phase), 'finished', `${entry.story} interaction must finish successfully`)
+        if (entry.story === 'pages-project-setup--success') {
+          // The completion story now reopens the dialog. Hold its real, transient
+          // success state with the browser clock, without changing application callbacks.
+          await page.clock.install()
+          await page.clock.pauseAt(new Date(Date.now() + 100))
+          await page.getByRole('radio', { name: /New repo/ }).evaluate(element => element.click())
+          await page.getByRole('textbox', { name: 'Project Name' }).fill('catalog-project')
+          await page.getByRole('button', { name: 'Create Project', exact: true }).evaluate(element => element.click())
+        }
         for (const target of targets) await page.locator(target.selector).waitFor({ state: target.knownInvisibleReason ? 'attached' : 'visible' })
         await page.evaluate(() => document.fonts.ready)
         await page.addStyleTag({ content: '* { transition: none !important; }' })
@@ -42,18 +52,10 @@ try {
           if (entry.interaction && !knownGap) {
             const control = page.locator(entry.interaction)
             const target = [{ id: 'interaction', selector: entry.interaction }]
-            await control.hover()
-            interactions.push({ state: 'hover', ...await measureTargets(page, target) })
-            await page.mouse.down()
-            try {
-              assert.ok(await control.evaluate(element => element.matches(':active')), 'Pressed sample must be active')
-              interactions.push({ state: 'pressed', ...await measureTargets(page, target) })
-              await page.mouse.move(0, 0)
-            } finally { await page.mouse.up() }
-            await page.keyboard.press('Tab')
-            await control.focus()
-            assert.ok(await control.evaluate(element => element.matches(':focus-visible')), 'Keyboard focus must be visible')
-            interactions.push({ state: 'focus-visible', ...await measureTargets(page, target) })
+            interactions.push(...await captureControlStates(page, {
+              control,
+              sample: async (_page, _control, state) => ({ state, ...await measureTargets(page, target) }),
+            }))
           }
           reports.push({ story: entry.story, theme, viewport, snapshot, interactions, ...(knownGap ? { knownGap } : {}), consoleErrors: [...consoleErrors] })
         }
