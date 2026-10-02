@@ -43,7 +43,7 @@ it.each(['replay', 'drain', 'text'])('retains Task Detail %s failure evidence wh
     expect(progress.some((step: { phase: string }) => step.phase === phase)).toBe(true)
   })
   const page = {
-    setDefaultTimeout: vi.fn(), on: vi.fn(), clock: { setFixedTime: vi.fn() }, goto: vi.fn(),
+    setDefaultTimeout: vi.fn(), on: vi.fn(), clock: { setFixedTime: vi.fn(), pauseAt: vi.fn() }, goto: vi.fn(),
     waitForFunction: vi.fn().mockRejectedValue(new Error('readiness deadline')),
     evaluate: vi.fn(callback => Promise.resolve(callback())),
   }

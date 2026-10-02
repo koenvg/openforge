@@ -39,3 +39,13 @@ Validation covers the complete affected visual-runner subsystem and the existing
 KVG-5341 tracks the separate stale-output cleanup issue encountered during repeated full runs. It is not fixed here.
 
 KVG-5342 tracks an older post-readiness paint-clock hang. A public fault probe scheduled a renderer-blocking callback after readiness and left capture pending past a 2.5-second watchdog with a 500-millisecond capture timeout. Both the starting revision and this working tree behaved identically, so this is not the completion review's new interaction-phase regression. The reproduction and evidence are `/tmp/KVG-5330-paint-deadline-probe.mjs` and `/tmp/KVG-5330-paint-deadline-probe.log`. This independent issue remains unfixed here.
+
+## PR CI follow-up
+
+PR #2704 at `d4bda74b0` passed all four hosted visual shards, the regression probes, catalog coverage, and the visual aggregate. Frontend shard 1 in CI run `37048908690` failed three Task Detail readiness-evidence cases because their fake browser page omitted `clock.pauseAt()`, which capture now calls before navigation. The aggregate frontend gate consequently failed too.
+
+The existing cases reproduced that error locally before the fixture correction and passed afterward. Adding the missing fake clock method preserves their real story-play checks, replay/drain/text evidence, bounded history, absent readiness marker, and context-close assertions. No runner or production behavior changed in this CI correction.
+
+Local checks passed: plugin and app builds; all three readiness cases; all 160 visual-runner tests; root and Storybook typechecks; lint; and diff whitespace validation. A complete local `pnpm test --shard=1/3` passed 2,433 tests but hit one unrelated five-second timeout in the unchanged Creation Workflow suite. That suite passed all seven cases when run separately, alongside the three readiness cases, and had passed in the original hosted CI run. KVG-5347 tracks that load-sensitive timeout without widening its deadline or changing product behavior.
+
+The screenshot runner, manifest, and baselines are unchanged by the CI fixture correction, so the full canonical visual matrix was not rerun locally for it. Hosted CI is rerun on the follow-up commit. The original single completion review remains the task's only review pass.
