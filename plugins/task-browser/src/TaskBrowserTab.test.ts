@@ -85,27 +85,6 @@ function props(api: ReturnType<typeof createMockFrontendOpenForgeApi>, taskId: s
   }
 }
 
-function task(taskId: string) {
-  return {
-    id: taskId,
-    initial_prompt: 'Improve checkout',
-    status: 'doing' as const,
-    prompt: null,
-    title: 'Checkout polish',
-    title_source: 'manual' as const,
-    title_generated_at: null,
-    agent: 'worker',
-    permission_mode: null,
-    worktree_source: null,
-    worktree_branch: null,
-    source_ticket_url: null,
-    depends_on: [],
-    project_id: 'P-1',
-    created_at: 0,
-    updated_at: 0,
-  }
-}
-
 describe('TaskBrowserTab lifecycle', () => {
   it('uses a single compact navigation toolbar without a persistent status strip', async () => {
     const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
@@ -487,11 +466,10 @@ describe('TaskBrowserTab lifecycle', () => {
       selectionCancelled.resolve(null)
     })
     vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
-    api.tasks.get = vi.fn(async taskId => task(taskId))
-    api.tasks.sendFollowUp = vi.fn(async request => ({
+    vi.spyOn(api.tasks, 'sendFollowUp').mockImplementation(async request => ({
       taskId: request.taskId,
       sessionId: 'S-1',
-      disposition: 'queued' as const,
+      disposition: 'queued',
     }))
 
     render(TaskBrowserTab, { props: props(api, 'T-A') })
@@ -504,6 +482,7 @@ describe('TaskBrowserTab lifecycle', () => {
     await fireEvent.click(send)
 
     await waitFor(() => expect(api.tasks.sendFollowUp).toHaveBeenCalledTimes(1))
+    expect(api.tasks.sendFollowUp).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'T-A' }))
     await waitFor(() => expect(screen.queryByText('1 screenshot · 1 annotation')).toBeNull())
   })
 
@@ -530,8 +509,7 @@ describe('TaskBrowserTab lifecycle', () => {
     const surface = createSurface('https://capture.example/')
     const delivery = deferred<{ taskId: string; sessionId: string; disposition: 'queued' }>()
     vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
-    api.tasks.get = vi.fn(async taskId => task(taskId))
-    api.tasks.sendFollowUp = vi.fn(() => delivery.promise)
+    vi.spyOn(api.tasks, 'sendFollowUp').mockImplementation(() => delivery.promise)
 
     render(TaskBrowserTab, { props: props(api, 'T-A') })
     await screen.findByDisplayValue('https://capture.example/')
@@ -561,8 +539,7 @@ describe('TaskBrowserTab lifecycle', () => {
     const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
     const surface = createSurface('https://capture.example/')
     vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
-    api.tasks.get = vi.fn(async taskId => task(taskId))
-    api.tasks.sendFollowUp = vi.fn()
+    vi.spyOn(api.tasks, 'sendFollowUp')
       .mockRejectedValueOnce(new TaskFollowUpError('NO_SESSION', 'No Agent Session exists for Task T-A'))
       .mockResolvedValueOnce({ taskId: 'T-A', sessionId: 'S-1', disposition: 'delivered' })
 
@@ -579,6 +556,8 @@ describe('TaskBrowserTab lifecycle', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Send visual feedback to agent' }))
     await waitFor(() => expect(screen.queryByText('1 screenshot · 1 annotation')).toBeNull())
     expect(api.tasks.sendFollowUp).toHaveBeenCalledTimes(2)
+    expect(api.tasks.sendFollowUp).toHaveBeenNthCalledWith(1, expect.objectContaining({ taskId: 'T-A' }))
+    expect(api.tasks.sendFollowUp).toHaveBeenNthCalledWith(2, expect.objectContaining({ taskId: 'T-A' }))
   })
 
   it('retains acknowledged artifacts when the Task changes during delivery', async () => {
@@ -588,8 +567,7 @@ describe('TaskBrowserTab lifecycle', () => {
     const delivery = deferred<{ taskId: string; sessionId: string; disposition: 'delivered' }>()
     vi.spyOn(api.browserSurfaces, 'getOrCreate').mockImplementation(async request =>
       request.taskId === 'T-A' ? firstSurface : secondSurface)
-    api.tasks.get = vi.fn(async taskId => task(taskId))
-    api.tasks.sendFollowUp = vi.fn(() => delivery.promise)
+    vi.spyOn(api.tasks, 'sendFollowUp').mockImplementation(() => delivery.promise)
 
     const view = render(TaskBrowserTab, { props: props(api, 'T-A') })
     await screen.findByDisplayValue('https://task-a.example/')
@@ -604,6 +582,7 @@ describe('TaskBrowserTab lifecycle', () => {
 
     expect(firstSurface.discardCapture).not.toHaveBeenCalled()
     expect(api.tasks.sendFollowUp).toHaveBeenCalledTimes(1)
+    expect(api.tasks.sendFollowUp).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'T-A' }))
   })
 
   it('collects multiple annotations while reusing unchanged capture evidence', async () => {
@@ -697,11 +676,10 @@ describe('TaskBrowserTab lifecycle', () => {
         dataUrl: 'data:image/png;base64,c2Vjb25k',
       })
     vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
-    api.tasks.get = vi.fn(async taskId => task(taskId))
-    api.tasks.sendFollowUp = vi.fn(async request => ({
+    vi.spyOn(api.tasks, 'sendFollowUp').mockImplementation(async request => ({
       taskId: request.taskId,
       sessionId: 'S-1',
-      disposition: 'queued' as const,
+      disposition: 'queued',
     }))
 
     render(TaskBrowserTab, { props: props(api, 'T-A') })
@@ -731,6 +709,7 @@ describe('TaskBrowserTab lifecycle', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: 'Send visual feedback to agent' }))
     await waitFor(() => expect(api.tasks.sendFollowUp).toHaveBeenCalledTimes(1))
+    expect(api.tasks.sendFollowUp).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'T-A' }))
     const message = vi.mocked(api.tasks.sendFollowUp).mock.calls[0]?.[0].message ?? ''
     expect(message.indexOf('## Capture 1')).toBeLessThan(message.indexOf('## Capture 2'))
     expect(message).toContain('### Annotation 1')
@@ -795,11 +774,10 @@ describe('TaskBrowserTab lifecycle', () => {
     const api = createMockFrontendOpenForgeApi({ pluginId: 'com.openforge.task-browser', projectId: 'P-1' })
     const surface = createSurface('https://capture.example/')
     vi.spyOn(api.browserSurfaces, 'getOrCreate').mockResolvedValue(surface)
-    api.tasks.get = vi.fn(async taskId => task(taskId))
-    api.tasks.sendFollowUp = vi.fn(async request => ({
+    vi.spyOn(api.tasks, 'sendFollowUp').mockImplementation(async request => ({
       taskId: request.taskId,
       sessionId: 'S-1',
-      disposition: 'delivered' as const,
+      disposition: 'delivered',
     }))
 
     render(TaskBrowserTab, { props: props(api, 'T-A') })
@@ -815,6 +793,7 @@ describe('TaskBrowserTab lifecycle', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Send visual feedback to agent' }))
 
     await waitFor(() => expect(api.tasks.sendFollowUp).toHaveBeenCalledTimes(1))
+    expect(api.tasks.sendFollowUp).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'T-A' }))
     const message = vi.mocked(api.tasks.sendFollowUp).mock.calls[0]?.[0].message ?? ''
     expect(message).toContain('> Corrected button alignment')
     expect(message).toContain('Region: x=0.25, y=0.1, width=0.4, height=0.4')
