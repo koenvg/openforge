@@ -18,6 +18,83 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+fn isolate_metadata_refresh_task_ids(db: &crate::db::Database) {
+    // Database prefixes are random three-letter values. A collision must not
+    // let independent fixtures supersede work in the process-wide title queue.
+    db.set_config("task_id_prefix", &format!("META-{}", uuid::Uuid::new_v4()))
+        .expect("isolate metadata refresh task IDs");
+}
+
+#[tokio::test]
+async fn queued_title_refreshes_in_independent_fixtures_do_not_supersede_each_other() {
+    let (first_db, _first_temp_dir) = make_test_db("metadata_refresh_independent");
+    let (second_db, _second_temp_dir) = make_test_db("metadata_refresh_independent");
+    first_db
+        .set_config("task_id_prefix", "META")
+        .expect("seed first fixture prefix");
+    second_db
+        .set_config("task_id_prefix", "META")
+        .expect("seed colliding fixture prefix");
+    isolate_metadata_refresh_task_ids(&first_db);
+    isolate_metadata_refresh_task_ids(&second_db);
+    let first_task = first_db
+        .create_task("First fixture task", "doing", None, None, None)
+        .expect("create first task");
+    let second_task = second_db
+        .create_task("Second fixture task", "doing", None, None, None)
+        .expect("create second task");
+    let first_db = Arc::new(Mutex::new(first_db));
+    let second_db = Arc::new(Mutex::new(second_db));
+    let first_queued =
+        queue_task_display_title_refresh(first_task.id.clone(), "opencode".to_string(), None, None);
+    let second_queued = queue_task_display_title_refresh(
+        second_task.id.clone(),
+        "opencode".to_string(),
+        None,
+        None,
+    );
+
+    let (first_result, second_result) = tokio::join!(
+        refresh_queued_task_display_title_with_ai_once_after(
+            Arc::clone(&first_db),
+            first_queued,
+            Duration::ZERO,
+            |_job, _prompt| async { Ok(Some("First Fixture Title".to_string())) },
+        ),
+        refresh_queued_task_display_title_with_ai_once_after(
+            Arc::clone(&second_db),
+            second_queued,
+            Duration::ZERO,
+            |_job, _prompt| async { Ok(Some("Second Fixture Title".to_string())) },
+        ),
+    );
+
+    assert!(first_result.expect("first fixture refresh"));
+    assert!(second_result.expect("second fixture refresh"));
+    assert_eq!(
+        first_db
+            .lock()
+            .unwrap()
+            .get_task(&first_task.id)
+            .unwrap()
+            .unwrap()
+            .title
+            .as_deref(),
+        Some("First Fixture Title"),
+    );
+    assert_eq!(
+        second_db
+            .lock()
+            .unwrap()
+            .get_task(&second_task.id)
+            .unwrap()
+            .unwrap()
+            .title
+            .as_deref(),
+        Some("Second Fixture Title"),
+    );
+}
+
 #[test]
 fn task_metadata_refresh_diagnostic_formatter_keeps_safe_metadata_only_message() {
     let generated_title = "Actual Generated Title";
@@ -398,6 +475,7 @@ fn refresh_task_display_title_once_uses_ai_title_when_provider_succeeds() {
 #[tokio::test]
 async fn queued_task_display_title_refresh_recovers_from_poisoned_database_lock() {
     let (db, _temp_dir) = make_test_db("metadata_refresh_ai_title_poisoned_database_lock");
+    isolate_metadata_refresh_task_ids(&db);
     let task = db
         .create_task("Vague OpenCode activity", "doing", None, None, None)
         .expect("create task");
@@ -438,6 +516,7 @@ async fn queued_task_display_title_refresh_recovers_from_poisoned_database_lock(
 #[tokio::test]
 async fn queued_task_display_title_refresh_coalesces_after_pending_lock_is_poisoned() {
     let (db, _temp_dir) = make_test_db("metadata_refresh_ai_title_poisoned_pending_lock");
+    isolate_metadata_refresh_task_ids(&db);
     let task = db
         .create_task("Vague OpenCode activity", "doing", None, None, None)
         .expect("create task");
@@ -493,6 +572,7 @@ async fn queued_task_display_title_refresh_coalesces_after_pending_lock_is_poiso
 #[tokio::test]
 async fn refresh_task_display_title_with_ai_once_coalesces_same_task_to_latest_snapshot() {
     let (db, _temp_dir) = make_test_db("metadata_refresh_ai_title_debounce");
+    isolate_metadata_refresh_task_ids(&db);
     let task = db
         .create_task("Vague OpenCode activity", "doing", None, None, None)
         .expect("create task");
@@ -569,11 +649,12 @@ async fn refresh_task_display_title_with_ai_once_coalesces_same_task_to_latest_s
 #[tokio::test]
 async fn refresh_task_display_title_serializes_in_flight_work_for_one_task() {
     let (db, _temp_dir) = make_test_db("metadata_refresh_ai_title_serialized");
+    isolate_metadata_refresh_task_ids(&db);
     let task = db
         .create_task("Vague title", "doing", None, None, None)
         .expect("create task");
     let db = Arc::new(Mutex::new(db));
-    let first_started = Arc::new(tokio::sync::Notify::new());
+    let (first_started, wait_for_first) = tokio::sync::oneshot::channel();
     let release_first = Arc::new(tokio::sync::Notify::new());
     let second_started = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
@@ -588,16 +669,18 @@ async fn refresh_task_display_title_serializes_in_flight_work_for_one_task() {
         first_queued,
         Duration::ZERO,
         {
-            let first_started = Arc::clone(&first_started);
             let release_first = Arc::clone(&release_first);
             move |_job, _prompt| async move {
-                first_started.notify_one();
+                first_started.send(()).expect("signal first provider start");
                 release_first.notified().await;
                 Ok(Some("Superseded Title".to_string()))
             }
         },
     ));
-    first_started.notified().await;
+    tokio::time::timeout(Duration::from_secs(5), wait_for_first)
+        .await
+        .expect("first provider should start promptly")
+        .expect("first provider must not be superseded by another test");
 
     let second_queued = queue_task_display_title_refresh(
         task.id.clone(),
@@ -639,6 +722,7 @@ async fn refresh_task_display_title_serializes_in_flight_work_for_one_task() {
 async fn refresh_task_display_title_with_ai_once_skips_in_flight_title_when_newer_snapshot_arrives()
 {
     let (db, _temp_dir) = make_test_db("metadata_refresh_ai_title_in_flight_superseded");
+    isolate_metadata_refresh_task_ids(&db);
     let task = db
         .create_task("Vague OpenCode activity", "doing", None, None, None)
         .expect("create task");
