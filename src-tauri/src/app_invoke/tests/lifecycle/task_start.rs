@@ -113,9 +113,9 @@ async fn start_implementation_starts_configured_pi_provider_through_app_invoke_b
         assert_eq!(workspace.status, "active");
     }
 
-    if let Some(pty_manager) = state.pty_manager.as_ref() {
-        let _ = pty_manager.kill_pty(&task_id).await;
-    }
+    fixture
+        .finish()
+        .expect("provider fixture cleanup should succeed");
 }
 
 #[tokio::test]
@@ -200,9 +200,9 @@ async fn start_implementation_uses_authoritative_project_path_and_publishes_cano
     assert_eq!(event.payload["action"], "updated");
     assert_eq!(event.payload["task_id"], task_id);
 
-    if let Some(pty_manager) = state.pty_manager.as_ref() {
-        let _ = pty_manager.kill_pty(&task_id).await;
-    }
+    fixture
+        .finish()
+        .expect("provider fixture cleanup should succeed");
 }
 
 #[tokio::test]
@@ -332,9 +332,9 @@ async fn start_implementation_injects_plugin_configured_review_workflow() {
         "got provider log: {log}"
     );
 
-    if let Some(pty_manager) = state.pty_manager.as_ref() {
-        let _ = pty_manager.kill_pty(&task_id).await;
-    }
+    fixture
+        .finish()
+        .expect("provider fixture cleanup should succeed");
 }
 
 #[tokio::test]
@@ -412,9 +412,9 @@ async fn start_implementation_materializes_pasted_image_references_for_provider_
         "provider prompt should include materialized file path, got provider log: {log}"
     );
 
-    if let Some(pty_manager) = state.pty_manager.as_ref() {
-        let _ = pty_manager.kill_pty(&task_id).await;
-    }
+    fixture
+        .finish()
+        .expect("provider fixture cleanup should succeed");
 }
 
 #[tokio::test]
@@ -500,9 +500,9 @@ async fn start_implementation_passes_task_agent_to_configured_opencode_provider(
         assert!(session.pty_instance_id.is_some());
     }
 
-    if let Some(pty_manager) = state.pty_manager.as_ref() {
-        let _ = pty_manager.kill_pty(&task_id).await;
-    }
+    fixture
+        .finish()
+        .expect("provider fixture cleanup should succeed");
 }
 
 #[tokio::test]
@@ -587,9 +587,9 @@ async fn start_implementation_starts_configured_codex_provider_through_app_invok
         assert_eq!(workspace.status, "active");
     }
 
-    if let Some(pty_manager) = state.pty_manager.as_ref() {
-        let _ = pty_manager.kill_pty(&task_id).await;
-    }
+    fixture
+        .finish()
+        .expect("provider fixture cleanup should succeed");
 }
 
 #[tokio::test]
@@ -776,9 +776,9 @@ async fn start_implementation_replaces_stale_existing_branch_worktree_path() {
         assert_eq!(workspace.branch_name.as_deref(), Some("feature/open-pr"));
     }
 
-    if let Some(pty_manager) = state.pty_manager.as_ref() {
-        let _ = pty_manager.kill_pty(&task_id).await;
-    }
+    fixture
+        .finish()
+        .expect("provider fixture cleanup should succeed");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -801,6 +801,12 @@ async fn concurrent_existing_branch_starts_keep_worktree_roots_isolated() {
     let (mut state_b, _db_temp_b) = test_state("parallel_existing_branch_start_b");
     state_a.task_start_worktree_root = Some(worktree_root_a.clone());
     state_b.task_start_worktree_root = Some(worktree_root_b.clone());
+    let mut cleanup_a = crate::pty_manager::test_fixture::NativePtyFixtureCleanup::new(
+        state_a.pty_manager.as_mut().expect("first PTY manager"),
+    );
+    let mut cleanup_b = crate::pty_manager::test_fixture::NativePtyFixtureCleanup::new(
+        state_b.pty_manager.as_mut().expect("second PTY manager"),
+    );
     configure_provider_test_path(&mut state_a, &sandbox_a.bin_dir);
     configure_provider_test_path(&mut state_b, &sandbox_b.bin_dir);
 
@@ -908,6 +914,8 @@ async fn concurrent_existing_branch_starts_keep_worktree_roots_isolated() {
     let (kill_a, kill_b) = tokio::join!(manager_a.kill_pty(&task_a), manager_b.kill_pty(&task_b));
     kill_a.expect("first provider should stop");
     kill_b.expect("second provider should stop");
+    cleanup_a.finish().expect("first fixture cleanup");
+    cleanup_b.finish().expect("second fixture cleanup");
 }
 
 #[tokio::test]
