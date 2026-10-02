@@ -1,39 +1,29 @@
 // @vitest-environment node
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { resolve } from 'node:path'
-import { svelte } from '@sveltejs/vite-plugin-svelte'
-import { chromium } from 'playwright'
-import { createServer } from 'vite'
 import { expect, it } from 'vitest'
+import { createSdkBrowserFixture } from '../../test/browserFixture'
 import { BUILTIN_THEMES, THEME_TOKEN_CSS_PROPERTIES } from '../../../../src/lib/themeContract'
-import { createOpenForgePluginSdkSourceAliasRecord } from '../vite'
 import { assertFeedbackBrowserContract } from '../../scripts/feedback-browser-contract.mjs'
 
 it('renders public feedback with only tokens and retains mounted state across themes', async () => {
-  const root = resolve(import.meta.dirname, '../../../..')
-  const cacheDir = await mkdtemp(resolve(tmpdir(), 'openforge-feedback-'))
-  const server = await createServer({
-    root, configFile: false, cacheDir, plugins: [svelte()], logLevel: 'error',
-    resolve: { alias: createOpenForgePluginSdkSourceAliasRecord(new URL('../../../../', import.meta.url)) },
-    optimizeDeps: { entries: ['packages/plugin-sdk/scripts/fixtures/feedback/index.html'] },
-    server: { host: '127.0.0.1', port: 0 },
+  const fixture = await createSdkBrowserFixture({
+    entries: [
+      'packages/plugin-sdk/scripts/fixtures/feedback/index.html',
+      'packages/plugin-sdk/src/ui/browser/feedback-geometry.html',
+    ],
+    sourceAliases: true,
   })
-  let browser
   try {
-    await server.listen()
-    browser = await chromium.launch()
-    const page = await browser.newPage({ viewport: { width: 1000, height: 1200 } })
+    const page = await fixture.newPage({ viewport: { width: 1000, height: 1200 } })
     const themes = BUILTIN_THEMES.map(theme => ({
       id: theme.id,
       properties: Object.fromEntries(Object.entries(theme.tokens).map(([key, value]) => [THEME_TOKEN_CSS_PROPERTIES[key as keyof typeof theme.tokens], value])),
     }))
     themes.push({ id: 'com.example.ink:ink', properties: { ...themes[0].properties, '--of-accent': '#6713ac', '--of-danger': '#93264a', '--of-radius-container': '17px' } })
     themes.push({ id: 'com.example.copper:copper', properties: { ...themes[1].properties, '--of-accent': '#be551b', '--of-danger': '#dd3311', '--of-radius-container': '0px', '--of-control-height-compact': '32px' } })
-    await assertFeedbackBrowserContract(page, `${server.resolvedUrls!.local[0]}packages/plugin-sdk/scripts/fixtures/feedback/index.html`, themes)
+    await assertFeedbackBrowserContract(page, `${fixture.origin}packages/plugin-sdk/scripts/fixtures/feedback/index.html`, themes)
 
     await page.setViewportSize({ width: 1000, height: 1200 })
-    await page.goto(`${server.resolvedUrls!.local[0]}packages/plugin-sdk/src/ui/browser/feedback-geometry.html`)
+    await page.goto(`${fixture.origin}packages/plugin-sdk/src/ui/browser/feedback-geometry.html`)
     const view = page.getByRole('region', { name: 'Plugin view', exact: true })
     await view.getByRole('button', { name: 'Retry', exact: true }).waitFor()
     await page.evaluate(() => document.fonts.ready)
@@ -70,8 +60,6 @@ it('renders public feedback with only tokens and retains mounted state across th
       }
     }
   } finally {
-    await browser?.close()
-    await server.close()
-    await rm(cacheDir, { recursive: true, force: true })
+    await fixture.close()
   }
 }, 60_000)

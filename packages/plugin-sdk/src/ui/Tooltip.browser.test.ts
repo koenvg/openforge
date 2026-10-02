@@ -1,48 +1,26 @@
 // @vitest-environment node
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { resolve } from 'node:path'
-import { svelte } from '@sveltejs/vite-plugin-svelte'
-import { chromium, type Browser, type Page } from 'playwright'
-import { createServer, type ViteDevServer } from 'vite'
+import type { Page } from 'playwright'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { createOpenForgePluginSdkSourceAliasRecord } from '../vite'
+import { createSdkBrowserFixture, type SdkBrowserFixture } from '../../test/browserFixture'
 import { THEME_TOKEN_CSS_PROPERTIES, type ThemeTokenName } from '../themes'
 import { STUDIO_LIGHT, STUDIO_DARK } from '../../../../src/lib/themes/studio'
 import { WORKSHOP_LIGHT, WORKSHOP_DARK } from '../../../../src/lib/themes/workshop'
 
-let server: ViteDevServer
-let browser: Browser
+let browser: SdkBrowserFixture
 let page: Page
-let cacheRoot: string
 
 beforeAll(async () => {
-  cacheRoot = await mkdtemp(resolve(tmpdir(), 'openforge-tooltips-'))
-  server = await createServer({
-    configFile: false,
-    root: resolve(import.meta.dirname, '../../../..'),
-    cacheDir: cacheRoot,
-    plugins: [svelte()],
-    optimizeDeps: { entries: ['packages/plugin-sdk/src/ui/browser/tooltip.html'] },
-    resolve: { alias: createOpenForgePluginSdkSourceAliasRecord(new URL('../../../../', import.meta.url)) },
-    logLevel: 'error',
-    server: { host: '127.0.0.1', port: 0 },
+  browser = await createSdkBrowserFixture({
+    entries: ['packages/plugin-sdk/src/ui/browser/tooltip.html'],
+    sourceAliases: true,
   })
-  await server.listen()
-  browser = await chromium.launch({ headless: true })
 }, 60_000)
 
-afterAll(async () => {
-  try { await browser?.close() } finally {
-    try { await server?.close() } finally {
-      if (cacheRoot) await rm(cacheRoot, { recursive: true, force: true })
-    }
-  }
-})
+afterAll(async () => { await browser?.close() })
 
 beforeEach(async () => {
   page = await browser.newPage({ viewport: { width: 1000, height: 700 } })
-  await page.goto(`${server.resolvedUrls!.local[0]}packages/plugin-sdk/src/ui/browser/tooltip.html`)
+  await page.goto(`${browser.origin}packages/plugin-sdk/src/ui/browser/tooltip.html`)
   await page.getByRole('button', { name: 'top action' }).waitFor()
 })
 
@@ -70,7 +48,7 @@ describe('icon button tooltip positioning', () => {
 
   it('wraps a long label within a narrow viewport outside its clipped container', async () => {
     await page.setViewportSize({ width: 240, height: 700 })
-    await page.goto(`${server.resolvedUrls!.local[0]}packages/plugin-sdk/src/ui/browser/tooltip.html?long=1`)
+    await page.goto(`${browser.origin}packages/plugin-sdk/src/ui/browser/tooltip.html?long=1`)
     const button = page.getByRole('button', { name: /^A long action label/ })
     await button.focus()
     const tooltip = page.getByRole('tooltip')
@@ -107,7 +85,7 @@ describe('icon button tooltip positioning', () => {
   })
 
   it.each(['top', 'right', 'bottom', 'left'])('avoids clipping at the %s window edge', async (side) => {
-    await page.goto(`${server.resolvedUrls!.local[0]}packages/plugin-sdk/src/ui/browser/tooltip.html?edge=${side}`)
+    await page.goto(`${browser.origin}packages/plugin-sdk/src/ui/browser/tooltip.html?edge=${side}`)
     await page.addStyleTag({ content: '[role="tooltip"] { animation-play-state: paused !important; }' })
     await page.getByRole('button', { name: 'Edge action' }).focus()
     const tooltip = page.getByRole('tooltip')
@@ -133,7 +111,7 @@ describe('icon button tooltip positioning', () => {
   })
 
   it.each(['start', 'end'])('honors %s alignment when there is room', async (align) => {
-    await page.goto(`${server.resolvedUrls!.local[0]}packages/plugin-sdk/src/ui/browser/tooltip.html?align=${align}`)
+    await page.goto(`${browser.origin}packages/plugin-sdk/src/ui/browser/tooltip.html?align=${align}`)
     const button = page.getByRole('button', { name: 'Edge action' })
     await button.evaluate((node) => node.parentElement!.style.marginLeft = '300px')
     await button.focus()
@@ -212,7 +190,7 @@ describe('icon button tooltip positioning', () => {
   it('activates on the first touch without opening a tooltip', async () => {
     await page.close()
     page = await browser.newPage({ hasTouch: true })
-    await page.goto(`${server.resolvedUrls!.local[0]}packages/plugin-sdk/src/ui/browser/tooltip.html`)
+    await page.goto(`${browser.origin}packages/plugin-sdk/src/ui/browser/tooltip.html`)
     await page.getByRole('button', { name: 'top action', exact: true }).tap()
     expect(await page.getByRole('status', { name: 'Action count' }).textContent()).toBe('1')
     expect(await page.getByRole('tooltip').count()).toBe(0)

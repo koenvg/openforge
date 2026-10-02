@@ -1,28 +1,15 @@
 // @vitest-environment node
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { resolve } from 'node:path'
-import { svelte } from '@sveltejs/vite-plugin-svelte'
-import { chromium } from 'playwright'
-import { createServer } from 'vite'
 import { expect, it } from 'vitest'
+import { createSdkBrowserFixture } from '../../test/browserFixture'
 import { BUILTIN_THEMES, THEME_TOKEN_CSS_PROPERTIES } from '../../../../src/lib/themeContract'
-import { createOpenForgePluginSdkSourceAliasRecord } from '../vite'
 
 it('keeps SDK workspace and diagram controls painted and interactive with only theme tokens', async () => {
-  const root = resolve(import.meta.dirname, '../../../..')
-  const cacheDir = await mkdtemp(resolve(tmpdir(), 'openforge-sdk-views-'))
-  const server = await createServer({
-    root, configFile: false, cacheDir, plugins: [svelte()], logLevel: 'error',
-    resolve: { alias: createOpenForgePluginSdkSourceAliasRecord(new URL('../../../../', import.meta.url)) },
-    optimizeDeps: { entries: ['packages/plugin-sdk/src/ui/browser/sdk-views.html'] },
-    server: { host: '127.0.0.1', port: 0 },
+  const fixture = await createSdkBrowserFixture({
+    entries: ['packages/plugin-sdk/src/ui/browser/sdk-views.html'],
+    sourceAliases: true,
   })
-  let browser
   try {
-    await server.listen()
-    browser = await chromium.launch()
-    const page = await browser.newPage({ viewport: { width: 640, height: 700 }, reducedMotion: 'reduce' })
+    const page = await fixture.newPage({ viewport: { width: 640, height: 700 }, reducedMotion: 'reduce' })
     const errors: string[] = []
     page.on('pageerror', error => errors.push(error.message))
     const themes = BUILTIN_THEMES.map(theme => ({
@@ -31,7 +18,7 @@ it('keeps SDK workspace and diagram controls painted and interactive with only t
     }))
     themes.push({ id: 'com.example.ink:ink', properties: { ...themes[0].properties, '--of-surface': '#182337', '--of-border': '#ec72b4', '--of-text': '#e9e0d2', '--of-accent': '#d26bfa', '--of-radius-control': '17px' } })
     await page.addInitScript(value => { (window as typeof window & { sdkViewThemes: typeof value }).sdkViewThemes = value }, themes)
-    await page.goto(`${server.resolvedUrls!.local[0]}packages/plugin-sdk/src/ui/browser/sdk-views.html`)
+    await page.goto(`${fixture.origin}packages/plugin-sdk/src/ui/browser/sdk-views.html`)
     const style = (selector: string, property: string) => page.locator(selector).first().evaluate((element, key) => getComputedStyle(element).getPropertyValue(key).trim(), property)
     const color = (token: string) => page.evaluate(value => {
       const probe = document.createElement('span')
@@ -106,8 +93,6 @@ it('keeps SDK workspace and diagram controls painted and interactive with only t
     await close.click()
     expect(errors).toEqual([])
   } finally {
-    await browser?.close()
-    await server.close()
-    await rm(cacheDir, { recursive: true, force: true })
+    await fixture.close()
   }
 }, 90_000)
