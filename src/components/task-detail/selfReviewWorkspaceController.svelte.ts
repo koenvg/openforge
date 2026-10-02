@@ -44,7 +44,6 @@ export function createSelfReviewWorkspaceController(
   })
 
   const fileStateController = createSelfReviewFileStateController({
-    getTaskId: options.getTaskId,
     getReviewFiles: () => selfReviewDiffFiles,
     getReviewContext: diffController.getReviewContext,
     getIsDiffLoading: () => diffController.isLoading,
