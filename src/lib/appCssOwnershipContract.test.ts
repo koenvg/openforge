@@ -32,16 +32,16 @@ const ownedStylesheets = [
 ] as const
 
 describe('app stylesheet ownership contract', () => {
-  it('imports feature styles after the theme adapter in the declared order', () => {
+  it('imports feature styles after global presentation in the declared order', () => {
     const imports = [
-      '@import "./styles/theme-adapter.css";',
+      '@import "./styles/global-presentation.css";',
       ...ownedStylesheets.map(({ importRule }) => importRule),
     ]
 
     const importIndexes = imports.map(importRule => appCss.indexOf(importRule))
     expect(importIndexes.every(index => index >= 0)).toBe(true)
     expect(importIndexes).toEqual([...importIndexes].sort((left, right) => left - right))
-    expect(importIndexes.at(-1)).toBeLessThan(appCss.indexOf('@plugin "daisyui";'))
+    expect(appCss).not.toMatch(/@plugin\s+["']daisyui/)
   })
 
   it.each(ownedStylesheets)('keeps $importRule rules in its owned stylesheet', ({ source, markers }) => {

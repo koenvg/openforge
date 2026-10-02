@@ -88,7 +88,7 @@ it('paints every inventoried production color, variant chain and opacity form', 
   let browser
   try {
     const input = join(directory, 'probe.css')
-    // Isolate utility paint from the retained adapter's unlayered global focus rule.
+    // Isolate utility paint from the global presentation's unlayered global focus rule.
     writeFileSync(input, `@import "${root}/node_modules/tailwindcss/index.css"; @import "${root}/src/styles/semantic-utilities.css"; @source inline("${[...classes, ...extra, 'ring-2', 'ring-offset-2', 'outline-2', 'bg-linear-to-r'].join(' ')}");`)
     const bundle = await build({ root, configFile: false, logLevel: 'silent', plugins: [tailwindcss()],
       build: { write: false, minify: false, rollupOptions: { input } } })
@@ -174,3 +174,13 @@ it('discovers semantic classes from shared packages and bundled plugins in a pro
     for (const directory of directories) rmSync(directory, { recursive: true, force: true })
   }
 }, 60000)
+
+
+it('does not ship compatibility variable readers from negative probes or inventory metadata', async () => {
+  const bundle = await build({ root, configFile: false, logLevel: 'silent', plugins: [tailwindcss()],
+    build: { write: false, minify: false, rollupOptions: { input: join(root, 'src/app.css') } } })
+  const css = bundle.output.filter(asset => asset.type === 'asset' && asset.fileName.endsWith('.css')).map(asset => asset.source).join('\n')
+  const records = inventoryLegacyUiConsumers([{ path: 'production.css', contents: css }])
+    .filter(record => ['arbitrary-variable', 'color-variable', 'geometry-variable', 'compatibility-definition', 'build-input', 'unresolved'].includes(record.kind))
+  expect(records).toEqual([])
+}, 60_000)

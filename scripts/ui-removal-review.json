@@ -17,6 +17,13 @@
     {
       "path": "packages/plugin-sdk/scripts/check-published-contract.mjs",
       "kind": "script-component-candidate",
+      "token": "modal",
+      "count": 1,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "packages/plugin-sdk/scripts/check-published-contract.mjs",
+      "kind": "script-component-candidate",
       "token": "tab",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
@@ -31,21 +38,7 @@
     {
       "path": "packages/plugin-sdk/scripts/check-published-contract.mjs",
       "kind": "script-component-candidate",
-      "token": "modal",
-      "count": 1,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "packages/plugin-sdk/scripts/check-published-contract.mjs",
-      "kind": "script-component-candidate",
       "token": "tooltip",
-      "count": 1,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "packages/plugin-sdk/scripts/feedback-browser-contract.mjs",
-      "kind": "script-component-candidate",
-      "token": "progress",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -61,6 +54,13 @@
       "kind": "script-component-candidate",
       "token": "loading",
       "count": 2,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "packages/plugin-sdk/scripts/feedback-browser-contract.mjs",
+      "kind": "script-component-candidate",
+      "token": "progress",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -129,15 +129,15 @@
     {
       "path": "packages/plugin-sdk/src/taskBrowserDevToolsShortcuts.test.ts",
       "kind": "script-component-candidate",
-      "token": "toggle",
-      "count": 5,
+      "token": "input",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "packages/plugin-sdk/src/taskBrowserDevToolsShortcuts.test.ts",
       "kind": "script-component-candidate",
-      "token": "input",
-      "count": 1,
+      "token": "toggle",
+      "count": 5,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -150,14 +150,14 @@
     {
       "path": "packages/plugin-sdk/src/testing.test.ts",
       "kind": "script-component-candidate",
-      "token": "tabs",
+      "token": "tab",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "packages/plugin-sdk/src/testing.test.ts",
       "kind": "script-component-candidate",
-      "token": "tab",
+      "token": "tabs",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -185,21 +185,21 @@
     {
       "path": "packages/plugin-sdk/src/ui/AnchoredMenu.browser.test.ts",
       "kind": "script-component-candidate",
-      "token": "menu",
-      "count": 12,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "packages/plugin-sdk/src/ui/AnchoredMenu.browser.test.ts",
-      "kind": "script-component-candidate",
       "token": "checkbox",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
+      "path": "packages/plugin-sdk/src/ui/AnchoredMenu.browser.test.ts",
+      "kind": "script-component-candidate",
+      "token": "menu",
+      "count": 12,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
       "path": "packages/plugin-sdk/src/ui/AnchoredMenu.svelte",
       "kind": "unresolved",
-      "token": "class=\"of-anchored-menu {className ?? ''}\"",
+      "token": "{...props}",
       "count": 1,
       "reason": "Supported SDK caller-owned class/attribute forwarding, or test-only data. SDK consumers remain covered by the full scan."
     },
@@ -220,22 +220,22 @@
     {
       "path": "packages/plugin-sdk/src/ui/AnchoredMenu.svelte",
       "kind": "unresolved",
-      "token": "{...props}",
+      "token": "class=\"of-anchored-menu {className ?? ''}\"",
       "count": 1,
       "reason": "Supported SDK caller-owned class/attribute forwarding, or test-only data. SDK consumers remain covered by the full scan."
     },
     {
       "path": "packages/plugin-sdk/src/ui/AnchoredMenu.test.ts",
       "kind": "script-component-candidate",
-      "token": "menu",
-      "count": 7,
+      "token": "checkbox",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "packages/plugin-sdk/src/ui/AnchoredMenu.test.ts",
       "kind": "script-component-candidate",
-      "token": "checkbox",
-      "count": 1,
+      "token": "menu",
+      "count": 7,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -262,15 +262,15 @@
     {
       "path": "packages/plugin-sdk/src/ui/Button.test.ts",
       "kind": "script-component-candidate",
-      "token": "tooltip",
-      "count": 3,
+      "token": "loading",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "packages/plugin-sdk/src/ui/Button.test.ts",
       "kind": "script-component-candidate",
-      "token": "loading",
-      "count": 1,
+      "token": "tooltip",
+      "count": 3,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -290,14 +290,14 @@
     {
       "path": "packages/plugin-sdk/src/ui/Checkbox.svelte",
       "kind": "unresolved",
-      "token": "class={[\"of-checkbox\", className]}",
+      "token": "{...attributes}",
       "count": 1,
       "reason": "Supported SDK caller-owned class/attribute forwarding, or test-only data. SDK consumers remain covered by the full scan."
     },
     {
       "path": "packages/plugin-sdk/src/ui/Checkbox.svelte",
       "kind": "unresolved",
-      "token": "{...attributes}",
+      "token": "class={[\"of-checkbox\", className]}",
       "count": 1,
       "reason": "Supported SDK caller-owned class/attribute forwarding, or test-only data. SDK consumers remain covered by the full scan."
     },
@@ -367,15 +367,15 @@
     {
       "path": "packages/plugin-sdk/src/ui/IconButton.test.ts",
       "kind": "script-component-candidate",
-      "token": "tooltip",
-      "count": 15,
+      "token": "loading",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "packages/plugin-sdk/src/ui/IconButton.test.ts",
       "kind": "script-component-candidate",
-      "token": "loading",
-      "count": 2,
+      "token": "tooltip",
+      "count": 15,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -402,7 +402,7 @@
     {
       "path": "packages/plugin-sdk/src/ui/Modal.svelte",
       "kind": "unresolved",
-      "token": "class=\"of-modal-layer {modalClass}\"",
+      "token": "{...props}",
       "count": 1,
       "reason": "Supported SDK caller-owned class/attribute forwarding, or test-only data. SDK consumers remain covered by the full scan."
     },
@@ -416,7 +416,7 @@
     {
       "path": "packages/plugin-sdk/src/ui/Modal.svelte",
       "kind": "unresolved",
-      "token": "{...props}",
+      "token": "class=\"of-modal-layer {modalClass}\"",
       "count": 1,
       "reason": "Supported SDK caller-owned class/attribute forwarding, or test-only data. SDK consumers remain covered by the full scan."
     },
@@ -430,14 +430,14 @@
     {
       "path": "packages/plugin-sdk/src/ui/PaletteListbox.svelte",
       "kind": "unresolved",
-      "token": "class=\"state {listClass}\"",
+      "token": "class=\"results {listClass}\"",
       "count": 1,
       "reason": "Supported SDK caller-owned class/attribute forwarding, or test-only data. SDK consumers remain covered by the full scan."
     },
     {
       "path": "packages/plugin-sdk/src/ui/PaletteListbox.svelte",
       "kind": "unresolved",
-      "token": "class=\"results {listClass}\"",
+      "token": "class=\"state {listClass}\"",
       "count": 1,
       "reason": "Supported SDK caller-owned class/attribute forwarding, or test-only data. SDK consumers remain covered by the full scan."
     },
@@ -556,14 +556,14 @@
     {
       "path": "packages/plugin-sdk/src/ui/SearchPalette.browser.test.ts",
       "kind": "script-component-candidate",
-      "token": "textarea",
+      "token": "input",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "packages/plugin-sdk/src/ui/SearchPalette.browser.test.ts",
       "kind": "script-component-candidate",
-      "token": "input",
+      "token": "textarea",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -710,29 +710,29 @@
     {
       "path": "packages/plugin-sdk/src/ui/Tooltip.svelte",
       "kind": "unresolved",
-      "token": "class=\"of-tooltip {className ?? ''}\"",
+      "token": "{...props}",
       "count": 1,
       "reason": "Supported SDK caller-owned class/attribute forwarding, or test-only data. SDK consumers remain covered by the full scan."
     },
     {
       "path": "packages/plugin-sdk/src/ui/Tooltip.svelte",
       "kind": "unresolved",
-      "token": "{...props}",
+      "token": "class=\"of-tooltip {className ?? ''}\"",
       "count": 1,
       "reason": "Supported SDK caller-owned class/attribute forwarding, or test-only data. SDK consumers remain covered by the full scan."
     },
     {
       "path": "packages/plugin-sdk/src/ui/Tooltip.test.ts",
       "kind": "script-component-candidate",
-      "token": "tooltip",
-      "count": 6,
+      "token": "menu-action",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "packages/plugin-sdk/src/ui/Tooltip.test.ts",
       "kind": "script-component-candidate",
-      "token": "menu-action",
-      "count": 1,
+      "token": "tooltip",
+      "count": 6,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -745,14 +745,14 @@
     {
       "path": "packages/plugin-sdk/src/ui/TooltipControl.svelte",
       "kind": "unresolved",
-      "token": "{...wrapperProps}",
+      "token": "{...props}",
       "count": 1,
       "reason": "Supported SDK caller-owned class/attribute forwarding, or test-only data. SDK consumers remain covered by the full scan."
     },
     {
       "path": "packages/plugin-sdk/src/ui/TooltipControl.svelte",
       "kind": "unresolved",
-      "token": "{...props}",
+      "token": "{...wrapperProps}",
       "count": 1,
       "reason": "Supported SDK caller-owned class/attribute forwarding, or test-only data. SDK consumers remain covered by the full scan."
     },
@@ -829,14 +829,14 @@
     {
       "path": "packages/pr-review-ui/src/domUtils.ts",
       "kind": "script-component-candidate",
-      "token": "textarea",
+      "token": "select",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "packages/pr-review-ui/src/domUtils.ts",
       "kind": "script-component-candidate",
-      "token": "select",
+      "token": "textarea",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -857,15 +857,15 @@
     {
       "path": "packages/pr-review-ui/src/FileTree.keyboard.test.ts",
       "kind": "script-component-candidate",
-      "token": "tab",
-      "count": 2,
+      "token": "checkbox",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "packages/pr-review-ui/src/FileTree.keyboard.test.ts",
       "kind": "script-component-candidate",
-      "token": "checkbox",
-      "count": 1,
+      "token": "tab",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -892,15 +892,15 @@
     {
       "path": "packages/pr-review-ui/src/FileTree.test.ts",
       "kind": "script-component-candidate",
-      "token": "toggle",
-      "count": 5,
+      "token": "checkbox",
+      "count": 4,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "packages/pr-review-ui/src/FileTree.test.ts",
       "kind": "script-component-candidate",
-      "token": "checkbox",
-      "count": 4,
+      "token": "toggle",
+      "count": 5,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -941,14 +941,14 @@
     {
       "path": "packages/pr-review-ui/src/PrOverviewTab.test.ts",
       "kind": "script-component-candidate",
-      "token": "loading",
+      "token": "alert",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "packages/pr-review-ui/src/PrOverviewTab.test.ts",
       "kind": "script-component-candidate",
-      "token": "alert",
+      "token": "loading",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -997,8 +997,8 @@
     {
       "path": "packages/pr-review-ui/src/ReviewSubmitPanel.test.ts",
       "kind": "script-component-candidate",
-      "token": "textarea",
-      "count": 3,
+      "token": "alert",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -1011,8 +1011,8 @@
     {
       "path": "packages/pr-review-ui/src/ReviewSubmitPanel.test.ts",
       "kind": "script-component-candidate",
-      "token": "alert",
-      "count": 1,
+      "token": "textarea",
+      "count": 3,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -1039,13 +1039,6 @@
     {
       "path": "packages/pr-review-ui/src/ui/PrStatusChip.svelte",
       "kind": "unresolved",
-      "token": "class=\"text-[0.65rem] font-semibold px-1.5 py-0.5 rounded-[var(--of-radius-container)] {detailClasses[chip.variant]} flex items-center gap-1 w-fit\"",
-      "count": 1,
-      "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
-    },
-    {
-      "path": "packages/pr-review-ui/src/ui/PrStatusChip.svelte",
-      "kind": "unresolved",
       "token": "class=\"inline-flex items-center gap-1.5 rounded-[var(--of-radius-round)] px-2.5 py-1.5 {variantClasses[chip.variant].bg}\"",
       "count": 1,
       "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
@@ -1053,8 +1046,15 @@
     {
       "path": "packages/pr-review-ui/src/ui/PrStatusChip.svelte",
       "kind": "unresolved",
-      "token": "class=\"w-3.5 h-3.5 {variantClasses[chip.variant].text}\"",
-      "count": 3,
+      "token": "class=\"text-[0.65rem] font-semibold px-1.5 py-0.5 rounded-[var(--of-radius-container)] {detailClasses[chip.variant]} flex items-center gap-1 w-fit\"",
+      "count": 1,
+      "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
+    },
+    {
+      "path": "packages/pr-review-ui/src/ui/PrStatusChip.svelte",
+      "kind": "unresolved",
+      "token": "class=\"text-xs font-semibold {variantClasses[chip.variant].text}\"",
+      "count": 1,
       "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
     },
     {
@@ -1067,8 +1067,8 @@
     {
       "path": "packages/pr-review-ui/src/ui/PrStatusChip.svelte",
       "kind": "unresolved",
-      "token": "class=\"text-xs font-semibold {variantClasses[chip.variant].text}\"",
-      "count": 1,
+      "token": "class=\"w-3.5 h-3.5 {variantClasses[chip.variant].text}\"",
+      "count": 3,
       "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
     },
     {
@@ -1130,14 +1130,14 @@
     {
       "path": "packages/terminal-runtime/src/taskTerminalTabsSession.test.ts",
       "kind": "script-component-candidate",
-      "token": "tabs",
+      "token": "tab",
       "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "packages/terminal-runtime/src/taskTerminalTabsSession.test.ts",
       "kind": "script-component-candidate",
-      "token": "tab",
+      "token": "tabs",
       "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -1200,15 +1200,15 @@
     {
       "path": "packages/terminal-runtime/src/terminalRuntimeShellLifecycle.integration.test.ts",
       "kind": "script-component-candidate",
-      "token": "tab",
-      "count": 2,
+      "token": "input",
+      "count": 5,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "packages/terminal-runtime/src/terminalRuntimeShellLifecycle.integration.test.ts",
       "kind": "script-component-candidate",
-      "token": "input",
-      "count": 5,
+      "token": "tab",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -1249,15 +1249,15 @@
     {
       "path": "plugins/file-viewer/src/FileContentViewer.test.ts",
       "kind": "script-component-candidate",
-      "token": "loading",
-      "count": 9,
+      "token": "alert",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "plugins/file-viewer/src/FileContentViewer.test.ts",
       "kind": "script-component-candidate",
-      "token": "alert",
-      "count": 1,
+      "token": "loading",
+      "count": 9,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -1340,14 +1340,14 @@
     {
       "path": "plugins/github-sync/src/lib/domUtils.ts",
       "kind": "script-component-candidate",
-      "token": "textarea",
+      "token": "select",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "plugins/github-sync/src/lib/domUtils.ts",
       "kind": "script-component-candidate",
-      "token": "select",
+      "token": "textarea",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -1438,20 +1438,6 @@
     {
       "path": "plugins/github-sync/src/review/pr/PrReviewView.test.ts",
       "kind": "script-component-candidate",
-      "token": "tab",
-      "count": 48,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "plugins/github-sync/src/review/pr/PrReviewView.test.ts",
-      "kind": "script-component-candidate",
-      "token": "progress",
-      "count": 3,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "plugins/github-sync/src/review/pr/PrReviewView.test.ts",
-      "kind": "script-component-candidate",
       "token": "alert",
       "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
@@ -1459,8 +1445,15 @@
     {
       "path": "plugins/github-sync/src/review/pr/PrReviewView.test.ts",
       "kind": "script-component-candidate",
-      "token": "tabs",
-      "count": 2,
+      "token": "card",
+      "count": 1,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "plugins/github-sync/src/review/pr/PrReviewView.test.ts",
+      "kind": "script-component-candidate",
+      "token": "checkbox",
+      "count": 6,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -1480,8 +1473,22 @@
     {
       "path": "plugins/github-sync/src/review/pr/PrReviewView.test.ts",
       "kind": "script-component-candidate",
-      "token": "card",
-      "count": 1,
+      "token": "progress",
+      "count": 3,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "plugins/github-sync/src/review/pr/PrReviewView.test.ts",
+      "kind": "script-component-candidate",
+      "token": "tab",
+      "count": 48,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "plugins/github-sync/src/review/pr/PrReviewView.test.ts",
+      "kind": "script-component-candidate",
+      "token": "tabs",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -1492,10 +1499,10 @@
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
-      "path": "plugins/github-sync/src/review/pr/PrReviewView.test.ts",
+      "path": "plugins/github-sync/src/review/pr/review-workspace/usePrReviewAgentSession.test.ts",
       "kind": "script-component-candidate",
-      "token": "checkbox",
-      "count": 6,
+      "token": "input",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -1509,13 +1516,6 @@
       "path": "plugins/github-sync/src/review/pr/review-workspace/usePrReviewAgentSession.test.ts",
       "kind": "script-component-candidate",
       "token": "tab",
-      "count": 1,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "plugins/github-sync/src/review/pr/review-workspace/usePrReviewAgentSession.test.ts",
-      "kind": "script-component-candidate",
-      "token": "input",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -1550,14 +1550,14 @@
     {
       "path": "plugins/github-sync/src/review/pr/reviewWorkspace.test.ts",
       "kind": "script-component-candidate",
-      "token": "loading",
+      "token": "input",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "plugins/github-sync/src/review/pr/reviewWorkspace.test.ts",
       "kind": "script-component-candidate",
-      "token": "input",
+      "token": "loading",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -1606,6 +1606,20 @@
     {
       "path": "plugins/github-sync/src/task/TaskPullRequestStatus.test.ts",
       "kind": "script-component-candidate",
+      "token": "card",
+      "count": 1,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "plugins/github-sync/src/task/TaskPullRequestStatus.test.ts",
+      "kind": "script-component-candidate",
+      "token": "collapse",
+      "count": 1,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "plugins/github-sync/src/task/TaskPullRequestStatus.test.ts",
+      "kind": "script-component-candidate",
       "token": "loading",
       "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
@@ -1620,30 +1634,9 @@
     {
       "path": "plugins/github-sync/src/task/TaskPullRequestStatus.test.ts",
       "kind": "script-component-candidate",
-      "token": "card",
-      "count": 1,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "plugins/github-sync/src/task/TaskPullRequestStatus.test.ts",
-      "kind": "script-component-candidate",
       "token": "toggle",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "plugins/github-sync/src/task/TaskPullRequestStatus.test.ts",
-      "kind": "script-component-candidate",
-      "token": "collapse",
-      "count": 1,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "plugins/github-sync/src/uiMigration.test.ts",
-      "kind": "unresolved",
-      "token": "LEGACY_COMPONENT_CLASS = /(?:^|\\s)(?:btn|input|textarea|select|checkbox|toggle|badge|card|tabs?|menu)(?:-|\\s|$)/",
-      "count": 1,
-      "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
     },
     {
       "path": "plugins/github-sync/src/uiMigration.test.ts",
@@ -1653,11 +1646,11 @@
       "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
     },
     {
-      "path": "plugins/task-browser/src/agentOpenCommand.test.ts",
-      "kind": "script-component-candidate",
-      "token": "loading",
-      "count": 4,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+      "path": "plugins/github-sync/src/uiMigration.test.ts",
+      "kind": "unresolved",
+      "token": "LEGACY_COMPONENT_CLASS = /(?:^|\\s)(?:btn|input|textarea|select|checkbox|toggle|badge|card|tabs?|menu)(?:-|\\s|$)/",
+      "count": 1,
+      "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
     },
     {
       "path": "plugins/task-browser/src/agentOpenCommand.test.ts",
@@ -1667,16 +1660,23 @@
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
-      "path": "plugins/task-browser/src/browserTabSession.test.ts",
+      "path": "plugins/task-browser/src/agentOpenCommand.test.ts",
       "kind": "script-component-candidate",
-      "token": "tab",
-      "count": 2,
+      "token": "loading",
+      "count": 4,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "plugins/task-browser/src/browserTabSession.test.ts",
       "kind": "script-component-candidate",
       "token": "loading",
+      "count": 2,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "plugins/task-browser/src/browserTabSession.test.ts",
+      "kind": "script-component-candidate",
+      "token": "tab",
       "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -1774,14 +1774,14 @@
     {
       "path": "plugins/terminal/src/TerminalProjectView.test.ts",
       "kind": "script-component-candidate",
-      "token": "tabs",
+      "token": "tab",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "plugins/terminal/src/TerminalProjectView.test.ts",
       "kind": "script-component-candidate",
-      "token": "tab",
+      "token": "tabs",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -1829,10 +1829,10 @@
     },
     {
       "path": "scripts/capture-sdk-migration-baseline.mjs",
-      "kind": "script-component-candidate",
-      "token": "loading-feedback",
+      "kind": "script-arbitrary-variable-candidate",
+      "token": "--color-base-100",
       "count": 1,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
     },
     {
       "path": "scripts/capture-sdk-migration-baseline.mjs",
@@ -1844,16 +1844,16 @@
     {
       "path": "scripts/capture-sdk-migration-baseline.mjs",
       "kind": "script-component-candidate",
-      "token": "loading-spinner",
-      "count": 2,
+      "token": "loading-feedback",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "scripts/capture-sdk-migration-baseline.mjs",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-base-100",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
+      "kind": "script-component-candidate",
+      "token": "loading-spinner",
+      "count": 2,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "scripts/capture-sdk-migration-baseline.mjs",
@@ -1936,6 +1936,20 @@
       "path": "scripts/check-settings-themes.mjs",
       "kind": "script-component-candidate",
       "token": "input",
+      "count": 2,
+      "reason": "Assertions describe retained mounted input and focus. These strings are messages, not CSS classes."
+    },
+    {
+      "path": "scripts/check-task-browser-presentation.mjs",
+      "kind": "script-arbitrary-variable-candidate",
+      "token": "--color-base-100",
+      "count": 1,
+      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
+    },
+    {
+      "path": "scripts/check-task-browser-presentation.mjs",
+      "kind": "script-component-candidate",
+      "token": "input",
       "count": 3,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -1955,31 +1969,10 @@
     },
     {
       "path": "scripts/check-task-browser-presentation.mjs",
-      "kind": "script-component-candidate",
-      "token": "input",
-      "count": 3,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "scripts/check-task-browser-presentation.mjs",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-base-100",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "scripts/check-task-browser-presentation.mjs",
       "kind": "script-variable-candidate",
       "token": "--color-base-100",
       "count": 1,
       "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "scripts/check-task-detail-themes.mjs",
-      "kind": "script-component-candidate",
-      "token": "loading",
-      "count": 3,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "scripts/check-task-detail-themes.mjs",
@@ -1998,16 +1991,23 @@
     {
       "path": "scripts/check-task-detail-themes.mjs",
       "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-primary:",
+      "token": "--color-error:",
       "count": 1,
       "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
     },
     {
       "path": "scripts/check-task-detail-themes.mjs",
       "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-error:",
+      "token": "--color-primary:",
       "count": 1,
       "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
+    },
+    {
+      "path": "scripts/check-task-detail-themes.mjs",
+      "kind": "script-component-candidate",
+      "token": "loading",
+      "count": 3,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "scripts/check-task-detail-themes.mjs",
@@ -2026,14 +2026,21 @@
     {
       "path": "scripts/check-task-detail-themes.mjs",
       "kind": "script-variable-candidate",
-      "token": "--color-primary",
+      "token": "--color-error",
       "count": 1,
       "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
     },
     {
       "path": "scripts/check-task-detail-themes.mjs",
       "kind": "script-variable-candidate",
-      "token": "--color-error",
+      "token": "--color-primary",
+      "count": 1,
+      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
+    },
+    {
+      "path": "scripts/check-terminal-presentation-themes.mjs",
+      "kind": "script-arbitrary-variable-candidate",
+      "token": "--color-base-100",
       "count": 1,
       "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
     },
@@ -2046,13 +2053,6 @@
     },
     {
       "path": "scripts/check-terminal-presentation-themes.mjs",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-base-100",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "scripts/check-terminal-presentation-themes.mjs",
       "kind": "script-variable-candidate",
       "token": "--color-base-100",
       "count": 1,
@@ -2060,98 +2060,7 @@
     },
     {
       "path": "scripts/check-ui-migration-inventory.mjs",
-      "kind": "unresolved",
-      "token": "DAISY_UI_CONTROL_CLASS = /^(?:btn|input|select|textarea|checkbox|toggle|badge|card|tabs?|join|modal|dropdown|tooltip|menu|collapse)(?:-|$)/",
-      "count": 1,
-      "reason": "Inventory classifier or compiled-class discovery, not a product class producer."
-    },
-    {
-      "path": "scripts/check-ui-migration-inventory.mjs",
-      "kind": "unresolved",
-      "token": "LEGACY_COLOR_CLASS = new RegExp(`^((?:bg|text|border(?:-[xytrblse])?|divide|ring(?:-offset)?|outline|decoration|placeholder|caret|accent|fill|stroke|from|via|to|shadow)-)(${Object.keys(LEGACY_COLOR_ROLES).sort((a, b) => b.length - a.length).join('|')})(/.*)?$`)",
-      "count": 1,
-      "reason": "Inventory classifier or compiled-class discovery, not a product class producer."
-    },
-    {
-      "path": "scripts/check-ui-migration-inventory.mjs",
       "kind": "script-arbitrary-variable-candidate",
-      "token": "--radius-selector",
-      "count": 1,
-      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
-    },
-    {
-      "path": "scripts/check-ui-migration-inventory.mjs",
-      "kind": "script-variable-candidate",
-      "token": "--radius-selector",
-      "count": 1,
-      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
-    },
-    {
-      "path": "scripts/check-ui-migration-inventory.mjs",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--radius-field",
-      "count": 1,
-      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
-    },
-    {
-      "path": "scripts/check-ui-migration-inventory.mjs",
-      "kind": "script-variable-candidate",
-      "token": "--radius-field",
-      "count": 1,
-      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
-    },
-    {
-      "path": "scripts/check-ui-migration-inventory.mjs",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--radius-box",
-      "count": 1,
-      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
-    },
-    {
-      "path": "scripts/check-ui-migration-inventory.mjs",
-      "kind": "script-variable-candidate",
-      "token": "--radius-box",
-      "count": 1,
-      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
-    },
-    {
-      "path": "scripts/check-ui-migration-inventory.mjs",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--size-selector",
-      "count": 1,
-      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
-    },
-    {
-      "path": "scripts/check-ui-migration-inventory.mjs",
-      "kind": "script-variable-candidate",
-      "token": "--size-selector",
-      "count": 1,
-      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
-    },
-    {
-      "path": "scripts/check-ui-migration-inventory.mjs",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--size-field",
-      "count": 1,
-      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
-    },
-    {
-      "path": "scripts/check-ui-migration-inventory.mjs",
-      "kind": "script-variable-candidate",
-      "token": "--size-field",
-      "count": 1,
-      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
-    },
-    {
-      "path": "scripts/check-ui-migration-inventory.mjs",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--border",
-      "count": 1,
-      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
-    },
-    {
-      "path": "scripts/check-ui-migration-inventory.mjs",
-      "kind": "script-variable-candidate",
       "token": "--border",
       "count": 1,
       "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
@@ -2165,13 +2074,6 @@
     },
     {
       "path": "scripts/check-ui-migration-inventory.mjs",
-      "kind": "script-variable-candidate",
-      "token": "--depth",
-      "count": 1,
-      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
-    },
-    {
-      "path": "scripts/check-ui-migration-inventory.mjs",
       "kind": "script-arbitrary-variable-candidate",
       "token": "--noise",
       "count": 1,
@@ -2179,8 +2081,36 @@
     },
     {
       "path": "scripts/check-ui-migration-inventory.mjs",
-      "kind": "script-variable-candidate",
-      "token": "--noise",
+      "kind": "script-arbitrary-variable-candidate",
+      "token": "--radius-box",
+      "count": 1,
+      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
+    },
+    {
+      "path": "scripts/check-ui-migration-inventory.mjs",
+      "kind": "script-arbitrary-variable-candidate",
+      "token": "--radius-field",
+      "count": 1,
+      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
+    },
+    {
+      "path": "scripts/check-ui-migration-inventory.mjs",
+      "kind": "script-arbitrary-variable-candidate",
+      "token": "--radius-selector",
+      "count": 1,
+      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
+    },
+    {
+      "path": "scripts/check-ui-migration-inventory.mjs",
+      "kind": "script-arbitrary-variable-candidate",
+      "token": "--size-field",
+      "count": 1,
+      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
+    },
+    {
+      "path": "scripts/check-ui-migration-inventory.mjs",
+      "kind": "script-arbitrary-variable-candidate",
+      "token": "--size-selector",
       "count": 1,
       "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
     },
@@ -2193,6 +2123,69 @@
     },
     {
       "path": "scripts/check-ui-migration-inventory.mjs",
+      "kind": "script-variable-candidate",
+      "token": "--border",
+      "count": 1,
+      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
+    },
+    {
+      "path": "scripts/check-ui-migration-inventory.mjs",
+      "kind": "script-variable-candidate",
+      "token": "--depth",
+      "count": 1,
+      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
+    },
+    {
+      "path": "scripts/check-ui-migration-inventory.mjs",
+      "kind": "script-variable-candidate",
+      "token": "--noise",
+      "count": 1,
+      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
+    },
+    {
+      "path": "scripts/check-ui-migration-inventory.mjs",
+      "kind": "script-variable-candidate",
+      "token": "--radius-box",
+      "count": 1,
+      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
+    },
+    {
+      "path": "scripts/check-ui-migration-inventory.mjs",
+      "kind": "script-variable-candidate",
+      "token": "--radius-field",
+      "count": 1,
+      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
+    },
+    {
+      "path": "scripts/check-ui-migration-inventory.mjs",
+      "kind": "script-variable-candidate",
+      "token": "--radius-selector",
+      "count": 1,
+      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
+    },
+    {
+      "path": "scripts/check-ui-migration-inventory.mjs",
+      "kind": "script-variable-candidate",
+      "token": "--size-field",
+      "count": 1,
+      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
+    },
+    {
+      "path": "scripts/check-ui-migration-inventory.mjs",
+      "kind": "script-variable-candidate",
+      "token": "--size-selector",
+      "count": 1,
+      "reason": "Classifier vocabulary for detecting removed variables, not an applied CSS read."
+    },
+    {
+      "path": "scripts/check-ui-migration-inventory.mjs",
+      "kind": "unresolved",
+      "token": "classification = classifyLegacyToken(match[1])",
+      "count": 1,
+      "reason": "Inventory classifier or compiled-class discovery, not a product class producer."
+    },
+    {
+      "path": "scripts/check-ui-migration-inventory.mjs",
       "kind": "unresolved",
       "token": "classification = classifyLegacyToken(token)",
       "count": 1,
@@ -2201,7 +2194,14 @@
     {
       "path": "scripts/check-ui-migration-inventory.mjs",
       "kind": "unresolved",
-      "token": "classification = classifyLegacyToken(match[1])",
+      "token": "DAISY_UI_CONTROL_CLASS = /^(?:btn|input|select|textarea|checkbox|toggle|badge|card|tabs?|join|modal|dropdown|tooltip|menu|collapse)(?:-|$)/",
+      "count": 1,
+      "reason": "Inventory classifier or compiled-class discovery, not a product class producer."
+    },
+    {
+      "path": "scripts/check-ui-migration-inventory.mjs",
+      "kind": "unresolved",
+      "token": "LEGACY_COLOR_CLASS = new RegExp(`^((?:bg|text|border(?:-[xytrblse])?|divide|ring(?:-offset)?|outline|decoration|placeholder|caret|accent|fill|stroke|from|via|to|shadow)-)(${Object.keys(LEGACY_COLOR_ROLES).sort((a, b) => b.length - a.length).join('|')})(/.*)?$`)",
       "count": 1,
       "reason": "Inventory classifier or compiled-class discovery, not a product class producer."
     },
@@ -2222,15 +2222,15 @@
     {
       "path": "scripts/desktop-test-driver.test.mjs",
       "kind": "script-component-candidate",
-      "token": "tabs",
-      "count": 2,
+      "token": "tab",
+      "count": 3,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "scripts/desktop-test-driver.test.mjs",
       "kind": "script-component-candidate",
-      "token": "tab",
-      "count": 3,
+      "token": "tabs",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -2243,15 +2243,15 @@
     {
       "path": "scripts/desktop-test/driver.mjs",
       "kind": "script-component-candidate",
-      "token": "tabs",
-      "count": 3,
+      "token": "tab",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "scripts/desktop-test/driver.mjs",
       "kind": "script-component-candidate",
-      "token": "tab",
-      "count": 1,
+      "token": "tabs",
+      "count": 3,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -2271,7 +2271,7 @@
     {
       "path": "scripts/file-viewer-ui-migration.test.mjs",
       "kind": "script-component-candidate",
-      "token": "tab",
+      "token": "alert",
       "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -2285,7 +2285,14 @@
     {
       "path": "scripts/file-viewer-ui-migration.test.mjs",
       "kind": "script-component-candidate",
-      "token": "alert",
+      "token": "select",
+      "count": 1,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "scripts/file-viewer-ui-migration.test.mjs",
+      "kind": "script-component-candidate",
+      "token": "tab",
       "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -2293,13 +2300,6 @@
       "path": "scripts/file-viewer-ui-migration.test.mjs",
       "kind": "script-component-candidate",
       "token": "toggle",
-      "count": 1,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "scripts/file-viewer-ui-migration.test.mjs",
-      "kind": "script-component-candidate",
-      "token": "select",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -2320,16 +2320,23 @@
     {
       "path": "scripts/generate-companion-dart-client.mjs",
       "kind": "unresolved",
-      "token": "className = `${upperCamel(kind)}ResourceIdentityData`",
-      "count": 2,
+      "token": "classes = variants.map((variant) => {\n    const kind = variant.properties.kind.const\n    const className = `${upperCamel(kind)}ResourceIdentityData`\n    const hasId = Boolean(variant.properties.id)\n    return `final class ${className} extends CompanionResourceIdentityData {\n  const ${className}(${hasId ? 'this.id' : ''});\n${hasId ? '\\n  final String id;\\n' : ''}\n  @override\n  Map<String, Object?> toJson() => <String, Object?>{\n    'kind': ${dartString(kind)},${hasId ? \"\\n    'id': id,\" : ''}\n  };\n}\n`\n  })",
+      "count": 1,
       "reason": "Dart type-name/code generation, not a CSS class producer."
     },
     {
       "path": "scripts/generate-companion-dart-client.mjs",
       "kind": "unresolved",
-      "token": "classes = variants.map((variant) => {\n    const kind = variant.properties.kind.const\n    const className = `${upperCamel(kind)}ResourceIdentityData`\n    const hasId = Boolean(variant.properties.id)\n    return `final class ${className} extends CompanionResourceIdentityData {\n  const ${className}(${hasId ? 'this.id' : ''});\n${hasId ? '\\n  final String id;\\n' : ''}\n  @override\n  Map<String, Object?> toJson() => <String, Object?>{\n    'kind': ${dartString(kind)},${hasId ? \"\\n    'id': id,\" : ''}\n  };\n}\n`\n  })",
-      "count": 1,
+      "token": "className = `${upperCamel(kind)}ResourceIdentityData`",
+      "count": 2,
       "reason": "Dart type-name/code generation, not a CSS class producer."
+    },
+    {
+      "path": "scripts/native-impact.mjs",
+      "kind": "script-component-candidate",
+      "token": "input",
+      "count": 1,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "scripts/native-impact.mjs",
@@ -2339,7 +2346,7 @@
       "reason": "Native-impact classifier predicate, not CSS."
     },
     {
-      "path": "scripts/native-impact.mjs",
+      "path": "scripts/native-impact.test.mjs",
       "kind": "script-component-candidate",
       "token": "input",
       "count": 1,
@@ -2353,11 +2360,25 @@
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
-      "path": "scripts/native-impact.test.mjs",
-      "kind": "script-component-candidate",
-      "token": "input",
+      "path": "scripts/semantic-utilities.test.mjs",
+      "kind": "unresolved",
+      "token": "`${candidate} ring-2 ring-offset-2 outline-2 bg-linear-to-r`",
       "count": 1,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+      "reason": "Candidates are semantic replacements from the inventory plus fixed of-* extras. Additional classes are native Tailwind ring, outline, and gradient utilities."
+    },
+    {
+      "path": "scripts/semantic-utilities.test.mjs",
+      "kind": "unresolved",
+      "token": "`text-of-${role}`",
+      "count": 1,
+      "reason": "Browser matrix iterates canonical semantic roles and emits only text-of-* classes."
+    },
+    {
+      "path": "scripts/semantic-utilities.test.mjs",
+      "kind": "unresolved",
+      "token": "candidate",
+      "count": 1,
+      "reason": "Production discovery probes construct bg-of-accent/<alpha> from six fixed package/plugin locations; this is not a legacy utility."
     },
     {
       "path": "scripts/semantic-utilities.test.mjs",
@@ -2390,14 +2411,14 @@
     {
       "path": "scripts/storybook-file-viewer-check.mjs",
       "kind": "script-component-candidate",
-      "token": "loading",
+      "token": "alert",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "scripts/storybook-file-viewer-check.mjs",
       "kind": "script-component-candidate",
-      "token": "alert",
+      "token": "loading",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -2481,8 +2502,8 @@
     {
       "path": "scripts/task-browser-ui-migration.test.mjs",
       "kind": "script-component-candidate",
-      "token": "loading",
-      "count": 2,
+      "token": "alert",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -2490,6 +2511,13 @@
       "kind": "script-component-candidate",
       "token": "input",
       "count": 1,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "scripts/task-browser-ui-migration.test.mjs",
+      "kind": "script-component-candidate",
+      "token": "loading",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -2507,17 +2535,17 @@
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
-      "path": "scripts/task-browser-ui-migration.test.mjs",
-      "kind": "script-component-candidate",
-      "token": "alert",
-      "count": 1,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
       "path": "scripts/task-detail-theme-state.mjs",
       "kind": "script-component-candidate",
       "token": "kbd",
       "count": 1,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "scripts/terminal-input-order.mjs",
+      "kind": "script-component-candidate",
+      "token": "input",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -2528,10 +2556,17 @@
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
-      "path": "scripts/terminal-input-order.mjs",
+      "path": "scripts/terminal-ui-migration.test.mjs",
+      "kind": "script-component-candidate",
+      "token": "alert",
+      "count": 1,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "scripts/terminal-ui-migration.test.mjs",
       "kind": "script-component-candidate",
       "token": "input",
-      "count": 2,
+      "count": 7,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -2551,22 +2586,8 @@
     {
       "path": "scripts/terminal-ui-migration.test.mjs",
       "kind": "script-component-candidate",
-      "token": "alert",
-      "count": 1,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "scripts/terminal-ui-migration.test.mjs",
-      "kind": "script-component-candidate",
       "token": "tabs",
       "count": 3,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "scripts/terminal-ui-migration.test.mjs",
-      "kind": "script-component-candidate",
-      "token": "input",
-      "count": 7,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -2582,6 +2603,13 @@
       "token": "loading",
       "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "scripts/ui-script-presentation.mjs",
+      "kind": "script-component-candidate",
+      "token": "toggle",
+      "count": 2,
+      "reason": "DOM classList method name used to classify AST calls, not a CSS class."
     },
     {
       "path": "src/App.navigation-shortcuts.test.ts",
@@ -2600,15 +2628,15 @@
     {
       "path": "src/App.project-navigation.test.ts",
       "kind": "script-component-candidate",
-      "token": "tab",
-      "count": 1,
+      "token": "input",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/App.project-navigation.test.ts",
       "kind": "script-component-candidate",
-      "token": "input",
-      "count": 2,
+      "token": "tab",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -2621,15 +2649,15 @@
     {
       "path": "src/App.shortcuts.test.ts",
       "kind": "script-component-candidate",
-      "token": "tab",
-      "count": 1,
+      "token": "input",
+      "count": 5,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/App.shortcuts.test.ts",
       "kind": "script-component-candidate",
-      "token": "input",
-      "count": 5,
+      "token": "tab",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -2670,13 +2698,6 @@
     {
       "path": "src/components/AddTaskDialog.creation.test.ts",
       "kind": "script-component-candidate",
-      "token": "loading",
-      "count": 8,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "src/components/AddTaskDialog.creation.test.ts",
-      "kind": "script-component-candidate",
       "token": "alert",
       "count": 4,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
@@ -2684,15 +2705,22 @@
     {
       "path": "src/components/AddTaskDialog.creation.test.ts",
       "kind": "script-component-candidate",
-      "token": "toggle",
-      "count": 2,
+      "token": "dropdown",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/components/AddTaskDialog.creation.test.ts",
       "kind": "script-component-candidate",
-      "token": "dropdown",
-      "count": 1,
+      "token": "loading",
+      "count": 8,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "src/components/AddTaskDialog.creation.test.ts",
+      "kind": "script-component-candidate",
+      "token": "toggle",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -2704,17 +2732,17 @@
     },
     {
       "path": "src/components/AddTaskDialog.svelte",
-      "kind": "unresolved",
-      "token": "class={mode === 'create' ? 'create-task-layout' : undefined}",
-      "count": 1,
-      "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
-    },
-    {
-      "path": "src/components/AddTaskDialog.svelte",
       "kind": "script-component-candidate",
       "token": "textarea",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "src/components/AddTaskDialog.svelte",
+      "kind": "unresolved",
+      "token": "class={mode === 'create' ? 'create-task-layout' : undefined}",
+      "count": 1,
+      "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
     },
     {
       "path": "src/components/AddTaskDialog.testFixtures.ts",
@@ -2740,13 +2768,6 @@
     {
       "path": "src/components/attention/AttentionOverviewDialog.test.ts",
       "kind": "script-component-candidate",
-      "token": "loading",
-      "count": 1,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "src/components/attention/AttentionOverviewDialog.test.ts",
-      "kind": "script-component-candidate",
       "token": "alert",
       "count": 6,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
@@ -2754,15 +2775,22 @@
     {
       "path": "src/components/attention/AttentionOverviewDialog.test.ts",
       "kind": "script-component-candidate",
-      "token": "toggle",
-      "count": 2,
+      "token": "kbd",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/components/attention/AttentionOverviewDialog.test.ts",
       "kind": "script-component-candidate",
-      "token": "kbd",
+      "token": "loading",
       "count": 1,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "src/components/attention/AttentionOverviewDialog.test.ts",
+      "kind": "script-component-candidate",
+      "token": "toggle",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -2781,26 +2809,26 @@
     },
     {
       "path": "src/components/feedback/toasts/AppToast.svelte",
+      "kind": "script-component-candidate",
+      "token": "alert",
+      "count": 1,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "src/components/feedback/toasts/AppToast.svelte",
+      "kind": "script-component-candidate",
+      "token": "loading",
+      "count": 1,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "src/components/feedback/toasts/AppToast.svelte",
       "kind": "unresolved",
       "token": "class=\"app-toast-icon app-toast-icon--{variant}\"",
       "count": 1,
       "reason": "Identity, callbacks, data, or plugin-owned props forwarded to the existing component, not a host legacy style requirement."
     },
     {
-      "path": "src/components/feedback/toasts/AppToast.svelte",
-      "kind": "script-component-candidate",
-      "token": "loading",
-      "count": 1,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "src/components/feedback/toasts/AppToast.svelte",
-      "kind": "script-component-candidate",
-      "token": "alert",
-      "count": 1,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
       "path": "src/components/feedback/toasts/AppToast.test.ts",
       "kind": "script-component-candidate",
       "token": "alert",
@@ -2812,6 +2840,13 @@
       "kind": "script-component-candidate",
       "token": "loading",
       "count": 1,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "src/components/feedback/toasts/ToastHost.svelte",
+      "kind": "script-component-candidate",
+      "token": "input",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -2822,10 +2857,10 @@
       "reason": "Identity, callbacks, data, or plugin-owned props forwarded to the existing component, not a host legacy style requirement."
     },
     {
-      "path": "src/components/feedback/toasts/ToastHost.svelte",
+      "path": "src/components/focus-board/BacklogLabelFilterDropdown.test.ts",
       "kind": "script-component-candidate",
-      "token": "input",
-      "count": 2,
+      "token": "menu",
+      "count": 6,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -2833,13 +2868,6 @@
       "kind": "script-component-candidate",
       "token": "toggle",
       "count": 1,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "src/components/focus-board/BacklogLabelFilterDropdown.test.ts",
-      "kind": "script-component-candidate",
-      "token": "menu",
-      "count": 6,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -2859,6 +2887,13 @@
     {
       "path": "src/components/focus-board/FocusBoard.filtering.test.ts",
       "kind": "script-component-candidate",
+      "token": "dropdown",
+      "count": 4,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "src/components/focus-board/FocusBoard.filtering.test.ts",
+      "kind": "script-component-candidate",
       "token": "menu",
       "count": 5,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
@@ -2871,10 +2906,10 @@
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
-      "path": "src/components/focus-board/FocusBoard.filtering.test.ts",
+      "path": "src/components/focus-board/FocusBoard.interactions.test.ts",
       "kind": "script-component-candidate",
-      "token": "dropdown",
-      "count": 4,
+      "token": "card",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -2889,13 +2924,6 @@
       "kind": "script-component-candidate",
       "token": "menu",
       "count": 4,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "src/components/focus-board/FocusBoard.interactions.test.ts",
-      "kind": "script-component-candidate",
-      "token": "card",
-      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -2942,10 +2970,10 @@
     },
     {
       "path": "src/components/focus-board/TaskListItem.test.ts",
-      "kind": "unresolved",
-      "token": "forwardedClasses = ['task-item-action', 'task-item-action--quiet', 'task-item-action--muted']",
-      "count": 1,
-      "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
+      "kind": "script-component-candidate",
+      "token": "card",
+      "count": 3,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/components/focus-board/TaskListItem.test.ts",
@@ -2956,10 +2984,10 @@
     },
     {
       "path": "src/components/focus-board/TaskListItem.test.ts",
-      "kind": "script-component-candidate",
-      "token": "card",
-      "count": 3,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+      "kind": "unresolved",
+      "token": "forwardedClasses = ['task-item-action', 'task-item-action--quiet', 'task-item-action--muted']",
+      "count": 1,
+      "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
     },
     {
       "path": "src/components/plugin/GlobalPluginSettingsPanel.test.ts",
@@ -2999,14 +3027,14 @@
     {
       "path": "src/components/plugin/PluginSlot.svelte",
       "kind": "unresolved",
-      "token": "{...renderProps}",
+      "token": "{...extraProps ?? {}}",
       "count": 1,
       "reason": "Identity, callbacks, data, or plugin-owned props forwarded to the existing component, not a host legacy style requirement."
     },
     {
       "path": "src/components/plugin/PluginSlot.svelte",
       "kind": "unresolved",
-      "token": "{...extraProps ?? {}}",
+      "token": "{...renderProps}",
       "count": 1,
       "reason": "Identity, callbacks, data, or plugin-owned props forwarded to the existing component, not a host legacy style requirement."
     },
@@ -3020,13 +3048,6 @@
     {
       "path": "src/components/plugin/PluginSlot.test.ts",
       "kind": "script-component-candidate",
-      "token": "tab",
-      "count": 2,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "src/components/plugin/PluginSlot.test.ts",
-      "kind": "script-component-candidate",
       "token": "alert",
       "count": 3,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
@@ -3036,6 +3057,13 @@
       "kind": "script-component-candidate",
       "token": "loading",
       "count": 1,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "src/components/plugin/PluginSlot.test.ts",
+      "kind": "script-component-candidate",
+      "token": "tab",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -3069,15 +3097,15 @@
     {
       "path": "src/components/project/ProjectSwitcherModal.test.ts",
       "kind": "script-component-candidate",
-      "token": "select",
-      "count": 1,
+      "token": "modal",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/components/project/ProjectSwitcherModal.test.ts",
       "kind": "script-component-candidate",
-      "token": "modal",
-      "count": 2,
+      "token": "select",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -3097,14 +3125,14 @@
     {
       "path": "src/components/prompt/PromptInput.svelte",
       "kind": "unresolved",
-      "token": "optionClass={(_item, _index, highlighted) => `px-3 py-2 cursor-pointer flex items-center gap-2 hover:bg-of-surface-subtle ${highlighted ? 'bg-of-accent/10 text-of-accent' : ''}`}",
+      "token": "class=\"w-full resize-none bg-transparent border-none outline-none focus-visible:outline-none focus-visible:outline-offset-0 {textareaClass}\"",
       "count": 1,
       "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
     },
     {
       "path": "src/components/prompt/PromptInput.svelte",
       "kind": "unresolved",
-      "token": "class=\"w-full resize-none bg-transparent border-none outline-none focus-visible:outline-none focus-visible:outline-offset-0 {textareaClass}\"",
+      "token": "optionClass={(_item, _index, highlighted) => `px-3 py-2 cursor-pointer flex items-center gap-2 hover:bg-of-surface-subtle ${highlighted ? 'bg-of-accent/10 text-of-accent' : ''}`}",
       "count": 1,
       "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
     },
@@ -3173,10 +3201,10 @@
     },
     {
       "path": "src/components/settings/HierarchicalSettingsCard.svelte",
-      "kind": "unresolved",
-      "token": "{...{ [fitAttachment]: fromAction(fitToContent, () => ({ expanded: isExpanded(setting.key), value: currentValue(setting.key) })) }}",
-      "count": 1,
-      "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
+      "kind": "script-component-candidate",
+      "token": "input",
+      "count": 2,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/components/settings/HierarchicalSettingsCard.svelte",
@@ -3187,9 +3215,16 @@
     },
     {
       "path": "src/components/settings/HierarchicalSettingsCard.svelte",
+      "kind": "unresolved",
+      "token": "{...{ [fitAttachment]: fromAction(fitToContent, () => ({ expanded: isExpanded(setting.key), value: currentValue(setting.key) })) }}",
+      "count": 1,
+      "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
+    },
+    {
+      "path": "src/components/settings/HierarchicalSettingsCard.test.ts",
       "kind": "script-component-candidate",
-      "token": "input",
-      "count": 2,
+      "token": "card",
+      "count": 3,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -3197,13 +3232,6 @@
       "kind": "script-component-candidate",
       "token": "select",
       "count": 2,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "src/components/settings/HierarchicalSettingsCard.test.ts",
-      "kind": "script-component-candidate",
-      "token": "card",
-      "count": 3,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -3272,15 +3300,15 @@
     {
       "path": "src/components/settings/SettingsView.autosave.globalPersistence.test.ts",
       "kind": "script-component-candidate",
-      "token": "toggle",
-      "count": 2,
+      "token": "loading",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/components/settings/SettingsView.autosave.globalPersistence.test.ts",
       "kind": "script-component-candidate",
-      "token": "loading",
-      "count": 1,
+      "token": "toggle",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -3363,35 +3391,21 @@
     {
       "path": "src/components/shared/tasks/TaskRelationshipDetailSection.svelte",
       "kind": "unresolved",
+      "token": "class={footerClass}",
+      "count": 2,
+      "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
+    },
+    {
+      "path": "src/components/shared/tasks/TaskRelationshipDetailSection.svelte",
+      "kind": "unresolved",
+      "token": "class={headingElementClass}",
+      "count": 1,
+      "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
+    },
+    {
+      "path": "src/components/shared/tasks/TaskRelationshipDetailSection.svelte",
+      "kind": "unresolved",
       "token": "class={idSpanClass}",
-      "count": 1,
-      "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
-    },
-    {
-      "path": "src/components/shared/tasks/TaskRelationshipDetailSection.svelte",
-      "kind": "unresolved",
-      "token": "class={statusSpanClass}",
-      "count": 1,
-      "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
-    },
-    {
-      "path": "src/components/shared/tasks/TaskRelationshipDetailSection.svelte",
-      "kind": "unresolved",
-      "token": "class={projectSpanClass}",
-      "count": 1,
-      "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
-    },
-    {
-      "path": "src/components/shared/tasks/TaskRelationshipDetailSection.svelte",
-      "kind": "unresolved",
-      "token": "class={titleSpanClass}",
-      "count": 1,
-      "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
-    },
-    {
-      "path": "src/components/shared/tasks/TaskRelationshipDetailSection.svelte",
-      "kind": "unresolved",
-      "token": "class={readinessSpanClass}",
       "count": 1,
       "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
     },
@@ -3405,15 +3419,15 @@
     {
       "path": "src/components/shared/tasks/TaskRelationshipDetailSection.svelte",
       "kind": "unresolved",
-      "token": "class={statusItemClass}",
-      "count": 2,
+      "token": "class={projectSpanClass}",
+      "count": 1,
       "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
     },
     {
       "path": "src/components/shared/tasks/TaskRelationshipDetailSection.svelte",
       "kind": "unresolved",
-      "token": "class={footerClass}",
-      "count": 2,
+      "token": "class={readinessSpanClass}",
+      "count": 1,
       "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
     },
     {
@@ -3426,7 +3440,21 @@
     {
       "path": "src/components/shared/tasks/TaskRelationshipDetailSection.svelte",
       "kind": "unresolved",
-      "token": "class={headingElementClass}",
+      "token": "class={statusItemClass}",
+      "count": 2,
+      "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
+    },
+    {
+      "path": "src/components/shared/tasks/TaskRelationshipDetailSection.svelte",
+      "kind": "unresolved",
+      "token": "class={statusSpanClass}",
+      "count": 1,
+      "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
+    },
+    {
+      "path": "src/components/shared/tasks/TaskRelationshipDetailSection.svelte",
+      "kind": "unresolved",
+      "token": "class={titleSpanClass}",
       "count": 1,
       "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
     },
@@ -3454,14 +3482,14 @@
     {
       "path": "src/components/shared/ui/ContextMenuItem.svelte",
       "kind": "unresolved",
-      "token": "triggerClass={menuItemClasses}",
+      "token": "class={menuItemClasses}",
       "count": 1,
       "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
     },
     {
       "path": "src/components/shared/ui/ContextMenuItem.svelte",
       "kind": "unresolved",
-      "token": "class={menuItemClasses}",
+      "token": "triggerClass={menuItemClasses}",
       "count": 1,
       "reason": "Reviewed finite semantic/local class composition or domain data. Literal alternatives and helper-produced colors contain no legacy paint; the full-source scan guards their producers."
     },
@@ -3475,14 +3503,14 @@
     {
       "path": "src/components/shared/ui/Modal.test.ts",
       "kind": "script-component-candidate",
-      "token": "input-selector",
+      "token": "input",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/components/shared/ui/Modal.test.ts",
       "kind": "script-component-candidate",
-      "token": "input",
+      "token": "input-selector",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -3510,6 +3538,13 @@
     {
       "path": "src/components/shell/AppSidebar.test.ts",
       "kind": "script-component-candidate",
+      "token": "badge",
+      "count": 2,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "src/components/shell/AppSidebar.test.ts",
+      "kind": "script-component-candidate",
       "token": "collapse",
       "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
@@ -3519,13 +3554,6 @@
       "kind": "script-component-candidate",
       "token": "toggle",
       "count": 1,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "src/components/shell/AppSidebar.test.ts",
-      "kind": "script-component-candidate",
-      "token": "badge",
-      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -3552,7 +3580,7 @@
     {
       "path": "src/components/shell/FileQuickOpen.test.ts",
       "kind": "script-component-candidate",
-      "token": "select",
+      "token": "loading",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -3566,7 +3594,7 @@
     {
       "path": "src/components/shell/FileQuickOpen.test.ts",
       "kind": "script-component-candidate",
-      "token": "loading",
+      "token": "select",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -3657,14 +3685,14 @@
     {
       "path": "src/components/task-detail/SelfReviewView.feedbackComments.test.ts",
       "kind": "script-component-candidate",
-      "token": "tab",
-      "count": 14,
+      "token": "alert",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/components/task-detail/SelfReviewView.feedbackComments.test.ts",
       "kind": "script-component-candidate",
-      "token": "loading",
+      "token": "card",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -3678,15 +3706,15 @@
     {
       "path": "src/components/task-detail/SelfReviewView.feedbackComments.test.ts",
       "kind": "script-component-candidate",
-      "token": "card",
+      "token": "loading",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/components/task-detail/SelfReviewView.feedbackComments.test.ts",
       "kind": "script-component-candidate",
-      "token": "alert",
-      "count": 2,
+      "token": "tab",
+      "count": 14,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -3694,13 +3722,6 @@
       "kind": "script-component-candidate",
       "token": "toggle",
       "count": 2,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "src/components/task-detail/SelfReviewView.nonApplicationFiltering.test.ts",
-      "kind": "script-component-candidate",
-      "token": "toggle",
-      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -3708,6 +3729,13 @@
       "kind": "script-component-candidate",
       "token": "checkbox",
       "count": 2,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "src/components/task-detail/SelfReviewView.nonApplicationFiltering.test.ts",
+      "kind": "script-component-candidate",
+      "token": "toggle",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -3734,14 +3762,14 @@
     {
       "path": "src/components/task-detail/SelfReviewView.reviewScope.test.ts",
       "kind": "script-component-candidate",
-      "token": "toggle",
+      "token": "checkbox",
       "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/components/task-detail/SelfReviewView.reviewScope.test.ts",
       "kind": "script-component-candidate",
-      "token": "checkbox",
+      "token": "toggle",
       "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -3762,15 +3790,15 @@
     {
       "path": "src/components/task-detail/SelfReviewView.sidePanel.test.ts",
       "kind": "script-component-candidate",
-      "token": "tab",
-      "count": 9,
+      "token": "loading",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/components/task-detail/SelfReviewView.sidePanel.test.ts",
       "kind": "script-component-candidate",
-      "token": "loading",
-      "count": 2,
+      "token": "tab",
+      "count": 9,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -3804,14 +3832,14 @@
     {
       "path": "src/components/task-detail/SourceTicketLink.test.ts",
       "kind": "script-component-candidate",
-      "token": "card",
+      "token": "alert",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/components/task-detail/SourceTicketLink.test.ts",
       "kind": "script-component-candidate",
-      "token": "alert",
+      "token": "card",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -3874,21 +3902,7 @@
     {
       "path": "src/components/task-detail/TaskDetailView.keyboard-shortcuts.test.ts",
       "kind": "script-component-candidate",
-      "token": "tab",
-      "count": 2,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "src/components/task-detail/TaskDetailView.keyboard-shortcuts.test.ts",
-      "kind": "script-component-candidate",
       "token": "input",
-      "count": 2,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "src/components/task-detail/TaskDetailView.keyboard-shortcuts.test.ts",
-      "kind": "script-component-candidate",
-      "token": "toggle",
       "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -3900,6 +3914,20 @@
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
+      "path": "src/components/task-detail/TaskDetailView.keyboard-shortcuts.test.ts",
+      "kind": "script-component-candidate",
+      "token": "tab",
+      "count": 2,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "src/components/task-detail/TaskDetailView.keyboard-shortcuts.test.ts",
+      "kind": "script-component-candidate",
+      "token": "toggle",
+      "count": 2,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
       "path": "src/components/task-detail/TaskDetailView.mounted-panes.test.ts",
       "kind": "script-component-candidate",
       "token": "input",
@@ -3910,13 +3938,6 @@
       "path": "src/components/task-detail/TaskDetailView.mounted-panes.test.ts",
       "kind": "script-component-candidate",
       "token": "tab",
-      "count": 2,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "src/components/task-detail/TaskDetailView.navigation.test.ts",
-      "kind": "script-component-candidate",
-      "token": "toggle",
       "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -3928,9 +3949,16 @@
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
+      "path": "src/components/task-detail/TaskDetailView.navigation.test.ts",
+      "kind": "script-component-candidate",
+      "token": "toggle",
+      "count": 2,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
       "path": "src/components/task-detail/TaskDetailView.shell.test.ts",
       "kind": "script-component-candidate",
-      "token": "tabs",
+      "token": "badge",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -3944,7 +3972,7 @@
     {
       "path": "src/components/task-detail/TaskDetailView.shell.test.ts",
       "kind": "script-component-candidate",
-      "token": "badge",
+      "token": "tabs",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -4140,13 +4168,6 @@
     {
       "path": "src/electron/taskBrowserVisualFeedbackOverlay.test.ts",
       "kind": "script-component-candidate",
-      "token": "textarea",
-      "count": 1,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "src/electron/taskBrowserVisualFeedbackOverlay.test.ts",
-      "kind": "script-component-candidate",
       "token": "card",
       "count": 3,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
@@ -4156,6 +4177,13 @@
       "kind": "script-component-candidate",
       "token": "input",
       "count": 3,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "src/electron/taskBrowserVisualFeedbackOverlay.test.ts",
+      "kind": "script-component-candidate",
+      "token": "textarea",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -4266,15 +4294,15 @@
     {
       "path": "src/lib/appShortcuts.test.ts",
       "kind": "script-component-candidate",
-      "token": "toggle",
-      "count": 2,
+      "token": "modal",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/lib/appShortcuts.test.ts",
       "kind": "script-component-candidate",
-      "token": "modal",
-      "count": 1,
+      "token": "toggle",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -4294,15 +4322,15 @@
     {
       "path": "src/lib/attentionOverviewInteraction.ts",
       "kind": "script-component-candidate",
-      "token": "toggle-reviews",
-      "count": 3,
+      "token": "toggle-group",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/lib/attentionOverviewInteraction.ts",
       "kind": "script-component-candidate",
-      "token": "toggle-group",
-      "count": 2,
+      "token": "toggle-reviews",
+      "count": 3,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -4343,14 +4371,14 @@
     {
       "path": "src/lib/domUtils.test.ts",
       "kind": "script-component-candidate",
-      "token": "textarea",
+      "token": "select",
       "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/lib/domUtils.test.ts",
       "kind": "script-component-candidate",
-      "token": "select",
+      "token": "textarea",
       "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -4364,14 +4392,14 @@
     {
       "path": "src/lib/domUtils.ts",
       "kind": "script-component-candidate",
-      "token": "textarea",
+      "token": "select",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/lib/domUtils.ts",
       "kind": "script-component-candidate",
-      "token": "select",
+      "token": "textarea",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -4392,13 +4420,6 @@
     {
       "path": "src/lib/hierarchicalSettings.ts",
       "kind": "script-component-candidate",
-      "token": "toggle",
-      "count": 4,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "src/lib/hierarchicalSettings.ts",
-      "kind": "script-component-candidate",
       "token": "select",
       "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
@@ -4408,6 +4429,13 @@
       "kind": "script-component-candidate",
       "token": "textarea",
       "count": 3,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "src/lib/hierarchicalSettings.ts",
+      "kind": "script-component-candidate",
+      "token": "toggle",
+      "count": 4,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -4441,14 +4469,14 @@
     {
       "path": "src/lib/plugin/contributionResolver.test.ts",
       "kind": "script-component-candidate",
-      "token": "tabs",
+      "token": "tab",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/lib/plugin/contributionResolver.test.ts",
       "kind": "script-component-candidate",
-      "token": "tab",
+      "token": "tabs",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -4504,6 +4532,13 @@
     {
       "path": "src/lib/plugin/runtimeContributionRegistry.test.ts",
       "kind": "script-component-candidate",
+      "token": "input",
+      "count": 2,
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "src/lib/plugin/runtimeContributionRegistry.test.ts",
+      "kind": "script-component-candidate",
       "token": "tab",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
@@ -4513,13 +4548,6 @@
       "kind": "script-component-candidate",
       "token": "tabs",
       "count": 1,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
-      "path": "src/lib/plugin/runtimeContributionRegistry.test.ts",
-      "kind": "script-component-candidate",
-      "token": "input",
-      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -4560,15 +4588,15 @@
     {
       "path": "src/lib/router.svelte.test.ts",
       "kind": "script-component-candidate",
-      "token": "tab",
-      "count": 3,
+      "token": "collapse",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/lib/router.svelte.test.ts",
       "kind": "script-component-candidate",
-      "token": "collapse",
-      "count": 1,
+      "token": "tab",
+      "count": 3,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -4679,21 +4707,35 @@
     {
       "path": "src/lib/taskStatePresentation.test.ts",
       "kind": "script-component-candidate",
-      "token": "progress",
+      "token": "input",
       "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/lib/taskStatePresentation.test.ts",
       "kind": "script-component-candidate",
-      "token": "input",
+      "token": "progress",
       "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/lib/taskStatePresentation.ts",
       "kind": "script-component-candidate",
+      "token": "badge-error",
+      "count": 1,
+      "reason": "Unused getTaskStateBadgeClass has no imports or callers and is not an executable styling consumer. Reintroduction cleanup is KVG-5335."
+    },
+    {
+      "path": "src/lib/taskStatePresentation.ts",
+      "kind": "script-component-candidate",
       "token": "badge-ghost",
+      "count": 1,
+      "reason": "Unused getTaskStateBadgeClass has no imports or callers and is not an executable styling consumer. Reintroduction cleanup is KVG-5335."
+    },
+    {
+      "path": "src/lib/taskStatePresentation.ts",
+      "kind": "script-component-candidate",
+      "token": "badge-info",
       "count": 1,
       "reason": "Unused getTaskStateBadgeClass has no imports or callers and is not an executable styling consumer. Reintroduction cleanup is KVG-5335."
     },
@@ -4708,20 +4750,6 @@
       "path": "src/lib/taskStatePresentation.ts",
       "kind": "script-component-candidate",
       "token": "badge-warning",
-      "count": 1,
-      "reason": "Unused getTaskStateBadgeClass has no imports or callers and is not an executable styling consumer. Reintroduction cleanup is KVG-5335."
-    },
-    {
-      "path": "src/lib/taskStatePresentation.ts",
-      "kind": "script-component-candidate",
-      "token": "badge-error",
-      "count": 1,
-      "reason": "Unused getTaskStateBadgeClass has no imports or callers and is not an executable styling consumer. Reintroduction cleanup is KVG-5335."
-    },
-    {
-      "path": "src/lib/taskStatePresentation.ts",
-      "kind": "script-component-candidate",
-      "token": "badge-info",
       "count": 1,
       "reason": "Unused getTaskStateBadgeClass has no imports or callers and is not an executable styling consumer. Reintroduction cleanup is KVG-5335."
     },
@@ -4761,370 +4789,6 @@
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-base-100",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-base-100",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-base-200",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-base-200",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-base-300",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-base-300",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-base-content",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-base-content",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-primary",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-primary",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-primary-content",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-primary-content",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-secondary",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-secondary",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-secondary-content",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-secondary-content",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-accent",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-accent",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-accent-content",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-accent-content",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-neutral",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-neutral",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-neutral-content",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-neutral-content",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-info",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-info",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-info-content",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-info-content",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-success",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-success",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-success-content",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-success-content",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-warning",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-warning",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-warning-content",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-warning-content",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-error",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-error",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--color-error-content",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--color-error-content",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--radius-selector",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--radius-selector",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--radius-field",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--radius-field",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--radius-box",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--radius-box",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--border",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--border",
-      "count": 1,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--size-field:",
-      "count": 2,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--size-field",
-      "count": 2,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-arbitrary-variable-candidate",
-      "token": "--size-selector:",
-      "count": 2,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
-      "path": "src/lib/themeCssContract.test.ts",
-      "kind": "script-variable-candidate",
-      "token": "--size-selector",
-      "count": 2,
-      "reason": "Intentional absence assertion or poisoned-legacy-variable negative browser probe, not presentation paint."
-    },
-    {
       "path": "src/lib/themes/builtinStyles.browser.test.ts",
       "kind": "script-component-candidate",
       "token": "input",
@@ -5162,15 +4826,15 @@
     {
       "path": "src/lib/useVimNavigation.svelte.test.ts",
       "kind": "script-component-candidate",
-      "token": "select",
-      "count": 1,
+      "token": "input",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/lib/useVimNavigation.svelte.test.ts",
       "kind": "script-component-candidate",
-      "token": "input",
-      "count": 2,
+      "token": "select",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -5225,14 +4889,14 @@
     {
       "path": "storybook/coverage-inventory.mjs",
       "kind": "script-component-candidate",
-      "token": "tooltip",
+      "token": "modal",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "storybook/coverage-inventory.mjs",
       "kind": "script-component-candidate",
-      "token": "modal",
+      "token": "tooltip",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -5284,6 +4948,13 @@
       "token": "alert",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "storybook/shared/environment/storyBrowserSurfaceAdapter.ts",
+      "kind": "unresolved",
+      "token": "className",
+      "count": 1,
+      "reason": "Private element factory. Every caller in surfaceContent supplies native Tailwind layout or of-* semantic utilities; the only interpolation selects one of three fixed of-* status colors. No external class input."
     },
     {
       "path": "storybook/shared/environment/storyDesktopAdapter.test.ts",
@@ -5365,15 +5036,15 @@
     {
       "path": "storybook/shared/fixtures/SdkOverlays.svelte",
       "kind": "script-component-candidate",
-      "token": "modal",
-      "count": 2,
+      "token": "menu",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "storybook/shared/fixtures/SdkOverlays.svelte",
       "kind": "script-component-candidate",
-      "token": "menu",
-      "count": 1,
+      "token": "modal",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -5575,15 +5246,15 @@
     {
       "path": "storybook/stories/components/sdk/Tooltips.stories.ts",
       "kind": "script-component-candidate",
-      "token": "tooltip",
-      "count": 5,
+      "token": "menu",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "storybook/stories/components/sdk/Tooltips.stories.ts",
       "kind": "script-component-candidate",
-      "token": "menu",
-      "count": 1,
+      "token": "tooltip",
+      "count": 5,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -5631,14 +5302,14 @@
     {
       "path": "storybook/stories/components/SdkWorkspace.stories.ts",
       "kind": "script-component-candidate",
-      "token": "loading",
+      "token": "alert",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "storybook/stories/components/SdkWorkspace.stories.ts",
       "kind": "script-component-candidate",
-      "token": "alert",
+      "token": "loading",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -5680,14 +5351,14 @@
     {
       "path": "storybook/stories/components/TaskSchedules.stories.ts",
       "kind": "script-component-candidate",
-      "token": "loading",
+      "token": "checkbox",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "storybook/stories/components/TaskSchedules.stories.ts",
       "kind": "script-component-candidate",
-      "token": "checkbox",
+      "token": "loading",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -5701,15 +5372,15 @@
     {
       "path": "storybook/stories/components/TerminalTabs.stories.ts",
       "kind": "script-component-candidate",
-      "token": "tab",
-      "count": 4,
+      "token": "select-first-tab",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "storybook/stories/components/TerminalTabs.stories.ts",
       "kind": "script-component-candidate",
-      "token": "select-first-tab",
-      "count": 1,
+      "token": "tab",
+      "count": 4,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -5736,15 +5407,15 @@
     {
       "path": "storybook/stories/pages/AttentionOverview.stories.ts",
       "kind": "script-component-candidate",
-      "token": "loading",
-      "count": 2,
+      "token": "alert",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "storybook/stories/pages/AttentionOverview.stories.ts",
       "kind": "script-component-candidate",
-      "token": "alert",
-      "count": 1,
+      "token": "loading",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -5785,14 +5456,14 @@
     {
       "path": "storybook/stories/pages/GitHubSyncTaskStatus.stories.ts",
       "kind": "script-component-candidate",
-      "token": "loading",
+      "token": "alert",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "storybook/stories/pages/GitHubSyncTaskStatus.stories.ts",
       "kind": "script-component-candidate",
-      "token": "alert",
+      "token": "loading",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
@@ -5848,15 +5519,15 @@
     {
       "path": "storybook/stories/pages/SelfReview.stories.ts",
       "kind": "script-component-candidate",
-      "token": "tab",
-      "count": 1,
+      "token": "loading",
+      "count": 2,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "storybook/stories/pages/SelfReview.stories.ts",
       "kind": "script-component-candidate",
-      "token": "loading",
-      "count": 2,
+      "token": "tab",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -5869,15 +5540,15 @@
     {
       "path": "storybook/stories/pages/TaskCreation.stories.ts",
       "kind": "script-component-candidate",
-      "token": "loading",
-      "count": 1,
+      "token": "alert",
+      "count": 3,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "storybook/stories/pages/TaskCreation.stories.ts",
       "kind": "script-component-candidate",
-      "token": "alert",
-      "count": 3,
+      "token": "loading",
+      "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {

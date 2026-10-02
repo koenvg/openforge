@@ -28,6 +28,15 @@ try {
         await page.goto(`${url}/iframe.html?id=${entry.story}&viewMode=story&globals=openforgeTheme:openforge-light;openforgeMotion:reduced`)
         await page.waitForFunction(() => ['finished', 'errored'].includes(window.__STORYBOOK_PREVIEW__?.currentRender?.phase))
         assert.equal(await page.evaluate(() => window.__STORYBOOK_PREVIEW__.currentRender.phase), 'finished', `${entry.story} interaction must finish successfully`)
+        if (entry.story === 'pages-project-setup--success') {
+          // The completion story now reopens the dialog. Hold its real, transient
+          // success state with the browser clock, without changing application callbacks.
+          await page.clock.install()
+          await page.clock.pauseAt(new Date(Date.now() + 100))
+          await page.getByRole('radio', { name: /New repo/ }).evaluate(element => element.click())
+          await page.getByRole('textbox', { name: 'Project Name' }).fill('catalog-project')
+          await page.getByRole('button', { name: 'Create Project', exact: true }).evaluate(element => element.click())
+        }
         for (const target of targets) await page.locator(target.selector).waitFor({ state: target.knownInvisibleReason ? 'attached' : 'visible' })
         await page.evaluate(() => document.fonts.ready)
         await page.addStyleTag({ content: '* { transition: none !important; }' })

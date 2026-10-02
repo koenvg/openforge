@@ -9,7 +9,6 @@ import { PNG } from 'pngjs'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createServer, type ViteDevServer } from 'vite'
 import { createOpenForgePluginSdkSourceAliases } from '../../plugin-sdk/src/vite'
-import { createDaisyUiTailwindPluginAliases } from '../../../src/lib/viteDaisyUi'
 import { shouldRunMarkdownVisuals } from './markdownVisualExecution'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
@@ -33,7 +32,6 @@ beforeAll(async () => {
     resolve: {
       alias: [
         ...createOpenForgePluginSdkSourceAliases(repoRoot),
-        ...createDaisyUiTailwindPluginAliases(),
       ],
     },
     server: { host: '127.0.0.1', port: 0 },

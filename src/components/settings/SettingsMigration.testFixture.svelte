@@ -46,11 +46,12 @@
 
 <main class="mx-auto flex max-w-5xl flex-col gap-5 p-6" aria-label="Settings migration fixture">
   <button data-testid="reload-copper" hidden onclick={() => { void reloadCopper() }}>Reload Copper palette</button>
-  <div data-testid="daisy-compatibility" class="text-base-content border border-base-300 bg-base-100">
-    Legacy utility text
-    <span data-testid="daisy-accent" class="text-primary bg-accent border border-primary">Accent</span>
-    <span data-testid="daisy-on-accent" class="text-primary-content">On accent</span>
+  <div data-testid="semantic-colors" class="text-of-text border border-of-border bg-of-surface">
+    Semantic utility text
+    <span data-testid="semantic-accent" class="text-of-accent bg-of-accent border border-of-accent">Accent</span>
+    <span data-testid="semantic-on-accent" class="text-of-on-accent">On accent</span>
   </div>
+  <button data-testid="semantic-interaction" class="bg-of-surface text-of-text hover:bg-of-accent/10 active:bg-of-accent/20">Opaque child</button>
   <div data-testid="semantic-compatibility" class="absolute text-of-text border border-of-border/50 bg-of-surface" aria-hidden="true"></div>
   <SettingsPreferencesCard availableThemes={$availableThemes} selectedThemeId={$selectedTheme.id}
     onThemeChange={(id) => { void registry.selectTheme(id) }}

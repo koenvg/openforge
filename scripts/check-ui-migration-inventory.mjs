@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parse } from 'svelte/compiler'
 import { parse as parseScript } from '@babel/parser'
 import { findUiRemovalViolations } from './ui-removal-readiness.mjs'
+import { scriptPresentationInputs } from './ui-script-presentation.mjs'
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -89,7 +90,7 @@ function stringsIn(node, bindings, seen = new Set()) {
   const values = []
   visit(node, (child) => {
     if (child.type === 'Text') values.push(child.data)
-    if (child.type === 'Literal' && typeof child.value === 'string') values.push(child.value)
+    if (['Literal', 'StringLiteral'].includes(child.type) && typeof child.value === 'string') values.push(child.value)
     if (child.type === 'TemplateElement') values.push(child.value.raw)
     if (child.type === 'Property' && !child.computed && child.key?.type === 'Identifier') values.push(child.key.name)
     if (child.type === 'Identifier' && bindings.has(child.name) && !seen.has(child.name)) {
@@ -161,7 +162,7 @@ function unresolvedClass(node, bindings, seen = new Set()) {
   if (Array.isArray(node)) return node.some(child => unresolvedClass(child, bindings, seen))
   if (!node || typeof node !== 'object') return false
   switch (node.type) {
-    case 'Text': case 'Literal': return false
+    case 'Text': case 'Literal': case 'StringLiteral': return false
     case 'Attribute': return unresolvedClass(node.value, bindings, seen)
     case 'MustacheTag': return unresolvedClass(node.expression, bindings, seen)
     case 'Identifier':
@@ -214,6 +215,36 @@ export function inventoryLegacyUiConsumers(sources) {
         if (classification) record('script-selector-candidate', match[1], classification.replacement, start)
       }
     }
+    const script = isMarkup ? [ast.instance, ast.module] : isCss ? null : ast
+    const bindings = new Map()
+    visit(script, node => {
+      if (node.type !== 'VariableDeclaration') return
+      for (const declaration of node.declarations) {
+        if (declaration.id?.type !== 'Identifier') continue
+        const name = declaration.id.name
+        bindings.set(name, node.kind === 'const' && !bindings.has(name) ? declaration.init : null)
+      }
+    })
+    const styled = new Set()
+    visit(script, node => {
+      const inputs = scriptPresentationInputs(node)
+      if (!inputs) return
+      if (inputs.classValue) {
+        const value = inputs.classValue
+        for (const text of stringsIn(value, bindings)) for (const token of text.split(/\s+/)) {
+          classConsumer(token, value.start)
+          styled.add(token)
+        }
+        if (unresolvedClass(value, bindings)) record('unresolved', source.contents.slice(value.start, value.end), 'Review imperative class producer', value.start)
+      }
+      for (const text of stringsIn(inputs.moduleAssets, bindings)) {
+        const specifier = text.split(/[?#]/, 1)[0]
+        if (/^daisyui(?:\/|$)|(?:^|\/)theme-adapter\.css$/.test(specifier)) record('build-input', text, 'Remove legacy module dependency', node.start)
+      }
+      for (const text of stringsIn(inputs.styleAssets, bindings)) {
+        if (/(?:^|\/)theme-adapter\.css$/.test(text)) record('build-input', text, 'Remove compatibility stylesheet read', node.start)
+      }
+    })
     if (!isMarkup && !isCss) {
       visit(ast, node => {
         if (node.type === 'VariableDeclarator' && /class/i.test(node.id?.name ?? '')
@@ -224,7 +255,7 @@ export function inventoryLegacyUiConsumers(sources) {
         const value = node.type === 'TemplateElement' ? node.value.raw : node.value
         scriptInputs(value, node.start)
         for (const token of value.split(/\s+/)) {
-          classConsumer(token, node.start, true)
+          if (!styled.has(token)) classConsumer(token, node.start, true)
         }
         for (const [token] of legacyVariables(value)) record('script-variable-candidate', token, LEGACY_VARIABLES[token], node.start)
       })
@@ -242,16 +273,6 @@ export function inventoryLegacyUiConsumers(sources) {
       if (node.type === 'Atrule' && ['plugin', 'import'].includes(node.name)) {
         const token = node.prelude.replace(/^['"]|['"]$/g, '')
         if (/daisyui|theme-adapter\.css/.test(token)) record('build-input', token, 'Retain until final removal', start)
-      }
-    })
-    const bindings = new Map()
-    visit([ast.instance, ast.module], node => {
-      if (node.type !== 'VariableDeclaration') return
-      for (const declaration of node.declarations) {
-        if (declaration.id?.type !== 'Identifier') continue
-        // Mutable bindings and name collisions cannot be resolved from an initializer.
-        const name = declaration.id.name
-        bindings.set(name, node.kind === 'const' && !bindings.has(name) ? declaration.init : null)
       }
     })
     visitTemplate(ast.html, bindings, (node, local) => {

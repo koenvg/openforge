@@ -82,4 +82,10 @@ Fix the package, rebuild its artifacts if needed, and reinstall the corrected lo
 
 Use the documented [SDK UI subpaths](./sdk-reference.md#ui-component-exports). Components consume the active `--of-*` values and do not require Tailwind or daisyUI in the plugin. Externalize the host-shared Svelte runtime using the [SDK Vite helpers](./sdk-reference.md#vitebuild-exports). Declare emitted component CSS in `frontendStyles`. Never import renderer-private `src/**`, SDK implementation paths, or private headless types.
 
+The host no longer ships daisyUI classes or compatibility variables. Undocumented classes such as `btn`, `loading`, `alert`, and `bg-base-100` are not a plugin styling API. Existing SDK exports, theme IDs, `--of-*` tokens, and plugin-owned CSS remain supported.
+
+Host-compiled views can use semantic utilities such as `bg-of-surface`, `text-of-text`, `border-of-border/50`, and `hover:bg-of-accent/10`. These utilities preserve color opacity without changing child opacity. A standalone plugin Tailwind build must define its own compilation setup, or use direct tokens. Public SDK controls need neither host utility CSS nor Tailwind. Use the documented `LoadingIndicator`, `Alert`, and `Progress` imports for feedback, and publish emitted component CSS through `frontendStyles`.
+
+See [removal evidence and rollback](../daisyui-removal-validation.md).
+
 The [testing guide](./testing.md#testing-application-themes) separates registration checks from actual Electron checks. The [release validation record](./theming-release-validation.md) records what was run for this release, including gaps. Do not treat a passing fake or jsdom load event as proof that CSS paints correctly in Electron.

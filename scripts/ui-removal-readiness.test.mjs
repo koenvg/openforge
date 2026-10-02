@@ -100,3 +100,68 @@ it('rejects restoring the removed Vite dependency resolver through a build entry
     expect(result.stderr).toContain('build-input: ./src/lib/viteDaisyUi.ts')
   })
 })
+
+
+it('detects compatibility stylesheet reads without treating absence assertions as consumers', () => {
+  withSourceTree(({ seed, check }) => {
+    seed('src/motion.test.ts', `const css = readFileSync(new URL('../styles/theme-adapter.css', import.meta.url), 'utf8')`)
+    expect(check().stderr).toContain('build-input: ../styles/theme-adapter.css')
+    seed('src/motion.test.ts', `expect(existsSync(new URL('../styles/theme-adapter.css', import.meta.url))).toBe(false)`)
+    expect(check().status).toBe(0)
+  })
+})
+
+it.each([
+  `element.className = 'loading'`,
+  `element.setAttribute('class', 'loading')`,
+  `element.classList.add('loading')`,
+])('does not let a metadata disposition hide an imperative styling sink: %s', source => {
+  withSourceTree(({ seed, check }) => {
+    seed('src/probe.ts', `const state = 'loading'`)
+    seed('scripts/ui-removal-review.json', JSON.stringify({ negativeTests: {}, reviewed: [
+      { path: 'src/probe.ts', kind: 'script-component-candidate', token: 'loading', count: 1, reason: 'Domain state identifier, not a class.' },
+    ] }))
+    expect(check().status).toBe(0)
+    seed('src/probe.ts', source)
+    expect(check().status).toBe(1)
+  })
+})
+
+it('requires review of unresolved imperative class producers', () => {
+  withSourceTree(({ seed, check }) => {
+    seed('src/probe.ts', 'element.className = externalClass')
+    expect(check().stderr).toContain('unresolved: externalClass')
+  })
+})
+
+
+it.each([
+  ['src/entry.ts', `import 'daisyui'`, 'daisyui'],
+  ['src/entry.ts', `import 'daisyui/components/loading.css'`, 'daisyui/components/loading.css'],
+  ['src/entry.ts', `export * from 'daisyui'`, 'daisyui'],
+  ['src/entry.ts', `void import('daisyui')`, 'daisyui'],
+  ['src/entry.ts', `const css = require('daisyui')`, 'daisyui'],
+  ['src/entry.ts', `const css = require.resolve('daisyui')`, 'daisyui'],
+  ['src/entry.ts', `const css = require['resolve']('daisyui')`, 'daisyui'],
+  ['src/entry.ts', `import css = require('daisyui')`, 'daisyui'],
+  ['src/entry.ts', `import '../styles/theme-adapter.css'`, '../styles/theme-adapter.css'],
+  ['src/entry.ts', `void import('../styles/theme-adapter.css')`, '../styles/theme-adapter.css'],
+  ['src/entry.ts', `require.resolve('../styles/theme-adapter.css')`, '../styles/theme-adapter.css'],
+  ['src/entry.ts', `import '../styles/theme-adapter.css?inline'`, '../styles/theme-adapter.css?inline'],
+  ['src/Entry.svelte', `<script>import 'daisyui'</script>`, 'daisyui'],
+  ['src/Entry.svelte', `<script>void import('../styles/theme-adapter.css')</script>`, '../styles/theme-adapter.css'],
+])('rejects direct module dependency inputs in %s: %s', (path, source, specifier) => {
+  withSourceTree(({ seed, check }) => {
+    seed(path, source)
+    const result = check()
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain(`build-input: ${specifier}`)
+  })
+})
+
+it('does not confuse package metadata and stylesheet absence checks with module loads', () => {
+  withSourceTree(({ seed, check }) => {
+    seed('src/absence.test.ts', `const removedPackage = 'daisyui'; expect(existsSync(new URL('../styles/theme-adapter.css', import.meta.url))).toBe(false)`)
+    expect(check().status).toBe(0)
+  })
+})
