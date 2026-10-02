@@ -1,0 +1,156 @@
+diff --git a/src/browser/public/Terminal.ts b/src/browser/public/Terminal.ts
+index f6ec55d24..eaafbcbdf 100644
+--- a/src/browser/public/Terminal.ts
++++ b/src/browser/public/Terminal.ts
+@@ -28,6 +28,40 @@ export class Terminal extends Disposable implements ITerminalApi {
+   private _parser: IParser | undefined;
+   private _buffer: BufferNamespaceApi | undefined;
+   private _publicOptions: Required<ITerminalOptions>;
++  private _screenFirst: { snapshotId: string; watermark: number; historyRows: number; imported: number; page: number; ready: boolean } | undefined;
++
++  /** Experiment-only public extension. Resolves after parsing, not painting. */
++  public restoreScreenFirst(snapshot: import('@xterm/xterm').IScreenFirstSnapshot): Promise<void> {
++    if (!snapshot || typeof snapshot.snapshotId !== 'string' || !snapshot.snapshotId || snapshot.snapshotId.length > 128 ||
++        !Number.isSafeInteger(snapshot.watermark) || snapshot.watermark < 0 ||
++        snapshot.cols !== this.cols || snapshot.rows !== this.rows ||
++        !Number.isSafeInteger(snapshot.historyRows) || snapshot.historyRows < 0 || snapshot.historyRows > 64 ||
++        snapshot.historyRows > this.options.scrollback! || typeof snapshot.screenVt !== 'string' || snapshot.screenVt.length > 16384) {
++      return Promise.reject(new Error('Invalid screen-first snapshot'));
++    }
++    this.reset();
++    const session = this._screenFirst = { snapshotId: snapshot.snapshotId, watermark: snapshot.watermark, historyRows: snapshot.historyRows, imported: 0, page: 0, ready: false as boolean };
++    return new Promise((resolve, reject) => this.write('\x18\x1b[2J\x1b[H' + snapshot.screenVt, () => {
++      if (this._screenFirst !== session) { reject(new Error('Superseded screen-first snapshot')); return; }
++      session.ready = true;
++      resolve();
++    }));
++  }
++
++  /** Inserts bounded physical ASCII rows without invoking the VT parser. */
++  public prependHistoryPage(page: import('@xterm/xterm').IParsedHistoryPage): void {
++    const session = this._screenFirst;
++    if (!session?.ready || !page || page.snapshotId !== session.snapshotId || page.watermark !== session.watermark ||
++        page.index !== session.page || !Array.isArray(page.rows) || page.rows.length === 0 || page.rows.length > 64 ||
++        session.imported + page.rows.length > session.historyRows ||
++        page.rows.some(row => typeof row !== 'string' || row.length > this.cols || /[^\x20-\x7e]/.test(row))) {
++      throw new Error('Invalid or stale parsed history page');
++    }
++    if (this.hasSelection()) { throw new Error('Selection during import is outside this experiment'); }
++    (this._core as TerminalCore).prependPlainTextHistory(page.rows);
++    session.imported += page.rows.length;
++    session.page++;
++  }
+ 
+   constructor(options?: ITerminalOptions & ITerminalInitOnlyOptions) {
+     super();
+@@ -146,6 +180,7 @@ export class Terminal extends Disposable implements ITerminalApi {
+   }
+   public resize(columns: number, rows: number): void {
+     this._verifyIntegers(columns, rows);
++    this._screenFirst = undefined;
+     this._core.resize(columns, rows);
+   }
+   public open(parent: HTMLElement): void {
+@@ -201,6 +236,7 @@ export class Terminal extends Disposable implements ITerminalApi {
+     this._core.selectLines(start, end);
+   }
+   public dispose(): void {
++    this._screenFirst = undefined;
+     super.dispose();
+   }
+   public scrollLines(amount: number): void {
+@@ -222,6 +258,7 @@ export class Terminal extends Disposable implements ITerminalApi {
+     this._core.scrollToLine(line);
+   }
+   public clear(): void {
++    this._screenFirst = undefined;
+     this._core.clear();
+   }
+   public write(data: string | Uint8Array, callback?: () => void): void {
+@@ -239,6 +276,7 @@ export class Terminal extends Disposable implements ITerminalApi {
+     this._core.refresh(start, end);
+   }
+   public reset(): void {
++    this._screenFirst = undefined;
+     this._core.reset();
+   }
+   public clearTextureAtlas(): void {
+diff --git a/src/browser/CoreBrowserTerminal.ts b/src/browser/CoreBrowserTerminal.ts
+index 38ad467a5..164ec0237 100644
+--- a/src/browser/CoreBrowserTerminal.ts
++++ b/src/browser/CoreBrowserTerminal.ts
+@@ -849,6 +849,24 @@ export class CoreBrowserTerminal extends CoreTerminal implements ITerminal {
+    * @param start The row to start from (between 0 and this.rows - 1).
+    * @param end The row to end at (between start and this.rows - 1).
+    */
++  public prependPlainTextHistory(rows: readonly string[]): void {
++    const buffer = this.buffer;
++    if (buffer !== this._bufferService.buffers.normal || buffer.lines.length + rows.length > buffer.lines.maxLength) {
++      throw new Error('Unsupported screen or exhausted history retention');
++    }
++    const lines = rows.map(text => {
++      const line = buffer.getBlankLine(DEFAULT_ATTR_DATA);
++      for (let x = 0; x < text.length; x++) { line.setCellFromCodepoint(x, text.charCodeAt(x), 1, DEFAULT_ATTR_DATA); }
++      return line;
++    });
++    buffer.lines.splice(0, 0, ...lines);
++    buffer.ybase += lines.length;
++    buffer.ydisp += lines.length;
++    buffer.savedY += lines.length;
++    this._onScroll.fire({ position: buffer.ydisp });
++    this.refresh(0, this.rows - 1);
++  }
++
+   public refresh(start: number, end: number): void {
+     this._renderService?.refreshRows(start, end);
+   }
+diff --git a/src/browser/Types.ts b/src/browser/Types.ts
+index 10e604114..2ae5ac931 100644
+--- a/src/browser/Types.ts
++++ b/src/browser/Types.ts
+@@ -12,7 +12,7 @@ import type { Event } from 'vs/base/common/event';
+ /**
+  * A portion of the public API that are implemented identially internally and simply passed through.
+  */
+-type InternalPassthroughApis = Omit<ITerminalApi, 'buffer' | 'parser' | 'unicode' | 'modes' | 'writeln' | 'loadAddon'>;
++type InternalPassthroughApis = Omit<ITerminalApi, 'buffer' | 'parser' | 'unicode' | 'modes' | 'writeln' | 'loadAddon' | 'restoreScreenFirst' | 'prependHistoryPage'>;
+ 
+ export interface ITerminal extends InternalPassthroughApis, ICoreTerminal {
+   screenElement: HTMLElement | undefined;
+diff --git a/typings/xterm.d.ts b/typings/xterm.d.ts
+index 457f1612e..33968b19b 100644
+--- a/typings/xterm.d.ts
++++ b/typings/xterm.d.ts
+@@ -10,6 +10,21 @@
+ /// <reference lib="dom"/>
+ 
+ declare module '@xterm/xterm' {
++  /** Isolated experiment extension, not an upstream xterm API. */
++  export interface IScreenFirstSnapshot {
++    snapshotId: string;
++    watermark: number;
++    cols: number;
++    rows: number;
++    historyRows: number;
++    screenVt: string;
++  }
++  export interface IParsedHistoryPage {
++    snapshotId: string;
++    watermark: number;
++    index: number;
++    rows: string[];
++  }
+   /**
+    * A string or number representing text font weight.
+    */
+@@ -811,6 +826,10 @@ declare module '@xterm/xterm' {
+    * The class that represents an xterm.js terminal.
+    */
+   export class Terminal implements IDisposable {
++    /** Restores portable Ghostty VT. Resolves after parsing, not painting. */
++    restoreScreenFirst(snapshot: IScreenFirstSnapshot): Promise<void>;
++    /** Prepends one newest-to-oldest page of chronological physical ASCII rows. */
++    prependHistoryPage(page: IParsedHistoryPage): void;
+     /**
+      * The element containing the terminal.
+      */

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Screen before history | frozen Ghostty fixture</title>
+  <link rel="stylesheet" href="/xterm.css">
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; color: #edf2f7; background: #101820; }
+    body { margin: 0; padding: 24px; max-width: 1200px; }
+    h1 { font-size: 24px; margin: 0 0 8px; } h2 { font-size: 18px; }
+    p { line-height: 1.5; color: #cbd5e1; }
+    nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0; }
+    button { font: inherit; padding: 10px 14px; border: 1px solid #64748b; border-radius: 6px; background: #243447; color: #fff; cursor: pointer; }
+    button:focus-visible { outline: 3px solid #6ee7b7; outline-offset: 3px; } button:disabled { opacity: .5; cursor: default; }
+    main { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+    section { padding: 16px; border: 1px solid #64748b; border-radius: 8px; min-width: 0; }
+    .terminal-frame { overflow-x: auto; min-height: 154px; }
+    .terminal { width: max-content; }
+    .loading { min-height: 24px; }
+    #error { color: #fda4af; }
+    @media (max-width: 1050px) { main { grid-template-columns: 1fr; } body { padding: 16px; } }
+  </style>
+</head>
+<body>
+  <h1>Show the screen before history</h1>
+  <p>Frozen Ghostty fixture. Real xterm 6.0.0 rendering. No agent, PTY, or live user session.</p>
+  <p>Both terminals use 48 x 8 cells and 64 history rows of retention. History starts paused and moves only when you release a page.</p>
+  <nav aria-label="Fixture controls">
+    <button id="pause">Pause history</button><button id="resume">Resume in one second</button><button id="release">Release one page</button>
+    <button id="live">Inject controlled live output</button><button id="reset">Reset</button>
+    <button id="history">Scroll to history</button><button id="bottom">Return to live screen</button>
+  </nav>
+  <p id="status" role="status" aria-live="polite">Preparing current screen...</p>
+  <p id="error" role="alert"></p>
+  <main>
+    <section aria-labelledby="baseline-title">
+      <h2 id="baseline-title">Baseline, concealed replay</h2>
+      <p class="loading" id="baseline-state">Concealed until history completes. Input blocked.</p>
+      <div class="terminal-frame"><div id="baseline" class="terminal"></div></div>
+    </section>
+    <section aria-labelledby="candidate-title">
+      <h2 id="candidate-title">Candidate, screen first</h2>
+      <p class="loading">Click the terminal and type <kbd>k</kbd>. Only that glyph is echoed.</p>
+      <div class="terminal-frame"><div id="candidate" class="terminal"></div></div>
+    </section>
+  </main>
+  <p>The plain-text older page is pre-parsed by pinned Ghostty. Import does not replay VT into the candidate.</p>
+  <script type="module" src="/page.js"></script>
+</body>
+</html>

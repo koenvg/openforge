@@ -1,0 +1,43 @@
+{
+  "browser": "Chrome/153.0.8010.53",
+  "width": 720,
+  "trustedMouseClicks": true,
+  "controls": [
+    {
+      "text": "Pause history",
+      "reachable": true
+    },
+    {
+      "text": "Resume in one second",
+      "reachable": true
+    },
+    {
+      "text": "Release one page",
+      "reachable": true
+    },
+    {
+      "text": "Inject controlled live output",
+      "reachable": true
+    },
+    {
+      "text": "Reset",
+      "reachable": true
+    },
+    {
+      "text": "Scroll to history",
+      "reachable": true
+    },
+    {
+      "text": "Return to live screen",
+      "reachable": true
+    }
+  ],
+  "checks": [
+    "resume then pause",
+    "live output",
+    "one-page release",
+    "scroll to history",
+    "return to live screen",
+    "reset"
+  ]
+}

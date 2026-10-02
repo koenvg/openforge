@@ -1,0 +1,146 @@
+{
+  "browser": "Chrome/153.0.8010.53",
+  "afterReset": {
+    "status": {
+      "candidate": {
+        "cells": [
+          "FINAL CORRECT SCREEN",
+          "Ghostty owns terminal state",
+          "History is paused",
+          "Fixture only, no PTY",
+          "Fixed 48 x 8 cells",
+          "Input: k",
+          "Live output lands here",
+          "ready> "
+        ],
+        "cursor": [
+          7,
+          7
+        ],
+        "history": 0,
+        "viewport": 0
+      },
+      "baseline": {
+        "cells": [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        "cursor": [
+          0,
+          0
+        ],
+        "history": 0,
+        "viewport": 0
+      },
+      "historyPaused": true,
+      "pendingPages": 1,
+      "input": "",
+      "baselineConcealed": true,
+      "paintedCandidate": "FINAL CORRECT SCREENGhostty owns terminal stateHistory is pausedFixture only, no PTYFixed 48 x 8 cellsInput: kLive output lands hereready>  "
+    },
+    "baselineHistory": []
+  },
+  "complete": {
+    "candidate": {
+      "cells": [
+        "FINAL CORRECT SCREEN",
+        "Ghostty owns terminal state",
+        "History is paused",
+        "Fixture only, no PTY",
+        "Fixed 48 x 8 cells",
+        "Input: k",
+        "Live output lands here",
+        "ready> "
+      ],
+      "cursor": [
+        7,
+        7
+      ],
+      "history": 16,
+      "viewport": 16
+    },
+    "baseline": {
+      "cells": [
+        "FINAL CORRECT SCREEN",
+        "Ghostty owns terminal state",
+        "History is paused",
+        "Fixture only, no PTY",
+        "Fixed 48 x 8 cells",
+        "Input: k",
+        "Live output lands here",
+        "ready> "
+      ],
+      "cursor": [
+        7,
+        7
+      ],
+      "history": 16,
+      "viewport": 16
+    },
+    "historyPaused": true,
+    "pendingPages": 0,
+    "input": "",
+    "baselineConcealed": false,
+    "paintedCandidate": "FINAL CORRECT SCREENGhostty owns terminal stateHistory is pausedFixture only, no PTYFixed 48 x 8 cellsInput: kLive output lands hereready>  "
+  },
+  "candidateHistory": [
+    "OLDER HISTORY 01",
+    "OLDER HISTORY 02",
+    "OLDER HISTORY 03",
+    "OLDER HISTORY 04",
+    "OLDER HISTORY 05",
+    "OLDER HISTORY 06",
+    "OLDER HISTORY 07",
+    "OLDER HISTORY 08",
+    "OLDER HISTORY 09",
+    "OLDER HISTORY 10",
+    "OLDER HISTORY 11",
+    "OLDER HISTORY 12",
+    "OLDER HISTORY 13",
+    "OLDER HISTORY 14",
+    "OLDER HISTORY 15",
+    "OLDER HISTORY 16"
+  ],
+  "baselineHistory": [
+    "OLDER HISTORY 01",
+    "OLDER HISTORY 02",
+    "OLDER HISTORY 03",
+    "OLDER HISTORY 04",
+    "OLDER HISTORY 05",
+    "OLDER HISTORY 06",
+    "OLDER HISTORY 07",
+    "OLDER HISTORY 08",
+    "OLDER HISTORY 09",
+    "OLDER HISTORY 10",
+    "OLDER HISTORY 11",
+    "OLDER HISTORY 12",
+    "OLDER HISTORY 13",
+    "OLDER HISTORY 14",
+    "OLDER HISTORY 15",
+    "OLDER HISTORY 16"
+  ],
+  "expectedHistory": [
+    "OLDER HISTORY 01",
+    "OLDER HISTORY 02",
+    "OLDER HISTORY 03",
+    "OLDER HISTORY 04",
+    "OLDER HISTORY 05",
+    "OLDER HISTORY 06",
+    "OLDER HISTORY 07",
+    "OLDER HISTORY 08",
+    "OLDER HISTORY 09",
+    "OLDER HISTORY 10",
+    "OLDER HISTORY 11",
+    "OLDER HISTORY 12",
+    "OLDER HISTORY 13",
+    "OLDER HISTORY 14",
+    "OLDER HISTORY 15",
+    "OLDER HISTORY 16"
+  ]
+}
