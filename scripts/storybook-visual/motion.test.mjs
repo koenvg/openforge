@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { chromium } from 'playwright'
-import { readFile } from 'node:fs/promises'
 import { freezeAnimatedSvgMasks } from './motion.mjs'
 
 let browser
@@ -8,13 +7,14 @@ beforeAll(async () => { browser = await chromium.launch({ headless: true }) })
 afterAll(async () => { await browser?.close() })
 
 describe('embedded SVG motion in canonical captures', () => {
-  it('keeps production DaisyUI spinners visible and pixel-stable as time passes', async () => {
+  it('keeps plugin-owned animated SVG masks visible and pixel-stable as time passes', async () => {
     const page = await browser.newPage({ viewport: { width: 100, height: 100 }, reducedMotion: 'reduce' })
     try {
-      const css = await readFile(new URL('../../node_modules/daisyui/components/loading.css', import.meta.url), 'utf8')
-      await page.setContent(`<style>${css} *{animation:none!important;transition:none!important} body{margin:0;color:#333}</style><span class="loading loading-spinner"></span>`)
+      // Plugin-owned SVG masks remain supported even though SDK indicators use native CSS.
+      const svgMask = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" fill="none" stroke="black" stroke-width="2"><animate attributeName="stroke-dasharray" values="0,150;21,150;42,150" dur="1.5s" repeatCount="indefinite"/><animate attributeName="stroke-dashoffset" values="0;-29;-59" dur="1.5s" repeatCount="indefinite"/></circle></svg>`
+      await page.setContent(`<style>span{display:block;width:24px;height:24px;background:currentColor;mask-image:url("data:image/svg+xml,${encodeURIComponent(svgMask)}")} *{animation:none!important;transition:none!important} body{margin:0;color:#333}</style><span></span>`)
       await page.evaluate(freezeAnimatedSvgMasks)
-      const svg = await page.locator('.loading').evaluate(element => decodeURIComponent(element.style.maskImage))
+      const svg = await page.locator('span').evaluate(element => decodeURIComponent(element.style.maskImage))
       expect(svg).not.toContain('<animate')
       expect(svg).toContain('stroke-dasharray="42,150"')
       expect(svg).toContain('stroke-dashoffset="-59"')

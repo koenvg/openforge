@@ -5,6 +5,7 @@ import { chromium } from 'playwright'
 import { baselineCases } from './ui-migration-baseline-cases.mjs'
 import { measureTargets } from './ui-migration-baseline-measurements.mjs'
 import { baselineThemeIds, installBaselineThemes, selectBaselineTheme } from './ui-migration-theme-fixtures.mjs'
+import { captureControlStates } from './storybook-migration-browser-harness.mjs'
 
 // Native computed measurements supplement, never replace, pinned raster review.
 const url = process.env.STORYBOOK_URL
@@ -42,18 +43,10 @@ try {
           if (entry.interaction && !knownGap) {
             const control = page.locator(entry.interaction)
             const target = [{ id: 'interaction', selector: entry.interaction }]
-            await control.hover()
-            interactions.push({ state: 'hover', ...await measureTargets(page, target) })
-            await page.mouse.down()
-            try {
-              assert.ok(await control.evaluate(element => element.matches(':active')), 'Pressed sample must be active')
-              interactions.push({ state: 'pressed', ...await measureTargets(page, target) })
-              await page.mouse.move(0, 0)
-            } finally { await page.mouse.up() }
-            await page.keyboard.press('Tab')
-            await control.focus()
-            assert.ok(await control.evaluate(element => element.matches(':focus-visible')), 'Keyboard focus must be visible')
-            interactions.push({ state: 'focus-visible', ...await measureTargets(page, target) })
+            interactions.push(...await captureControlStates(page, {
+              control,
+              sample: async (_page, _control, state) => ({ state, ...await measureTargets(page, target) }),
+            }))
           }
           reports.push({ story: entry.story, theme, viewport, snapshot, interactions, ...(knownGap ? { knownGap } : {}), consoleErrors: [...consoleErrors] })
         }

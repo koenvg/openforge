@@ -5,6 +5,7 @@ import { dirname, posix, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parse } from 'svelte/compiler'
 import { parse as parseScript } from '@babel/parser'
+import { findUiRemovalViolations } from './ui-removal-readiness.mjs'
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -206,6 +207,13 @@ export function inventoryLegacyUiConsumers(sources) {
       const { kind, replacement } = classification
       record(candidate ? kind === 'color' ? 'script-candidate' : `script-${kind}-candidate` : kind, token, replacement, start)
     }
+    function scriptInputs(value, start) {
+      if (/(?:^|\/)daisyui\/|(?:^|\/)viteDaisyUi(?:\.[cm]?[jt]s)?$/.test(value)) record('build-input', value, 'Remove dependency asset read or import', start)
+      for (const match of value.matchAll(/(?<![\w/])\.([a-z][\w-]*)/g)) {
+        const classification = classifyLegacyToken(match[1])
+        if (classification) record('script-selector-candidate', match[1], classification.replacement, start)
+      }
+    }
     if (!isMarkup && !isCss) {
       visit(ast, node => {
         if (node.type === 'VariableDeclarator' && /class/i.test(node.id?.name ?? '')
@@ -214,6 +222,7 @@ export function inventoryLegacyUiConsumers(sources) {
         }
         if (node.type !== 'StringLiteral' && node.type !== 'TemplateElement') return
         const value = node.type === 'TemplateElement' ? node.value.raw : node.value
+        scriptInputs(value, node.start)
         for (const token of value.split(/\s+/)) {
           classConsumer(token, node.start, true)
         }
@@ -268,6 +277,7 @@ export function inventoryLegacyUiConsumers(sources) {
       visit([ast.instance, ast.module], node => {
         const value = node.type === 'Literal' ? node.value : node.type === 'TemplateElement' ? node.value.raw : null
         if (typeof value !== 'string') return
+        scriptInputs(value, node.start)
         for (const token of value.split(/\s+/)) {
           if (!consumed.has(token)) classConsumer(token, node.start, true)
         }
@@ -420,10 +430,19 @@ export function readLegacyUiSources(root = REPO_ROOT) {
 }
 
 function run() {
-  const { values } = parseArgs({ options: { root: { type: 'string', default: REPO_ROOT }, 'legacy-inventory': { type: 'boolean' } } })
+  const { values } = parseArgs({ options: { root: { type: 'string', default: REPO_ROOT }, 'legacy-inventory': { type: 'boolean' }, 'removal-readiness': { type: 'boolean' } } })
   if (values['legacy-inventory']) {
     const sources = readLegacyUiSources(values.root)
     console.log(JSON.stringify({ sources: sources.length, records: inventoryLegacyUiConsumers(sources) }, null, 2))
+    return
+  }
+  if (values['removal-readiness']) {
+    const sources = readLegacyUiSources(values.root)
+    const policy = JSON.parse(readFileSync(resolve(values.root, 'scripts/ui-removal-review.json'), 'utf8'))
+    const violations = findUiRemovalViolations(inventoryLegacyUiConsumers(sources), sources.map(source => source.path), policy)
+    for (const violation of violations) console.error(`- ${violation.path}:${violation.line} ${violation.kind}: ${violation.token}`)
+    if (violations.length) process.exitCode = 1
+    else console.log(`Removal readiness passed for ${sources.length} executable sources.`)
     return
   }
   const sources = readMigratedUiSources(values.root)

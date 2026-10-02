@@ -7,8 +7,8 @@ it('requires the intended feedback and measures it even after a large shell', as
   try {
     const page = await browser.newPage()
     await page.setContent(`${'<button>Shell control</button>'.repeat(40)}
-      <section role="status" aria-live="polite"><span class="loading">spinner</span>Loading diff...</section>`)
-    const targets = [{ id: 'feedback', selector: '[role="status"]' }, { id: 'spinner', selector: '[role="status"] .loading' }]
+      <section role="status" aria-live="polite"><span data-size="sm">spinner</span>Loading diff...</section>`)
+    const targets = [{ id: 'feedback', selector: '[role="status"]' }, { id: 'spinner', selector: '[role="status"] span[data-size]' }]
     const result = await measureTargets(page, targets)
     expect(result.elements.map(element => element.id)).toEqual(['feedback', 'spinner'])
     expect(result.elements[0]).toMatchObject({ selector: '[role="status"]', role: 'status', live: 'polite', text: 'spinnerLoading diff...' })

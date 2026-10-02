@@ -62,7 +62,7 @@
     </header>
 
     {#if error}
-      <p class="border-b border-error/30 bg-error/10 px-4 py-2 text-sm text-error" role="alert">{error}</p>
+      <p class="border-b border-of-danger/30 bg-of-danger/10 px-4 py-2 text-sm text-of-danger" role="alert">{error}</p>
     {/if}
 
     {#if !ready}

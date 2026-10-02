@@ -21,7 +21,7 @@ const targets = [
   { id: 'selected', selector: '[role="switch"]:checked' },
   { id: 'status', selector: '[aria-label="SDK controls"] [role="status"]' },
   { id: 'loading-feedback', selector: '[aria-label="SDK loading feedback"] [role="status"]' },
-  { id: 'loading-spinner', selector: '[aria-label="SDK loading feedback"] .loading', knownInvisibleReason: 'KVG-4865: existing PluginViewState spinner requires legacy host CSS' },
+  { id: 'loading-spinner', selector: '[aria-label="SDK loading feedback"] span[data-size]' },
   { id: 'error-feedback', selector: '[aria-label="SDK error feedback"] [role="alert"]' },
 ]
 const server = await createServer({ root, configFile: false, logLevel: 'error',
@@ -73,7 +73,7 @@ try {
         assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-base-100')), '', 'No compatibility adapter may leak into the token-only fixture')
         const snapshot = await measureTargets(page, targets)
         assert.equal(snapshot.theme, theme)
-        assert.equal(snapshot.elements.find(element => element.id === 'loading-spinner').maskImage, 'none', 'Record the existing spinner dependency rather than supplying host CSS')
+        assert.equal(snapshot.elements.find(element => element.id === 'loading-spinner').maskImage, 'none', 'SDK loading remains a native CSS indicator without host masks')
         await page.keyboard.press('Tab')
         await page.locator('[data-testid="sdk-action"]').focus()
         const focused = await measureTargets(page, [targets[0]])
