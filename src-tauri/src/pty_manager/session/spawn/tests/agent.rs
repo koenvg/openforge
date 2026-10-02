@@ -4,6 +4,7 @@ mod pr_completion;
 use crate::app_events::{AppEventBus, AppEventFrame, InMemoryAppEventAdapter};
 use crate::backend_runtime::AppHandle;
 use crate::pty_manager::session::provider_adapter::AgentPtyProviderAdapter;
+use crate::pty_manager::test_fixture::NativePtyFixtureCleanup;
 use crate::pty_manager::{PtyError, PtyManager, PtySpawnContext};
 use std::collections::HashMap;
 use std::path::Path;
@@ -143,7 +144,7 @@ fn join_thread_with_timeout<T: Send + 'static>(
 async fn agent_spawn_keeps_session_mutex_out_of_provider_and_command_work() {
     let mut manager = PtyManager::new();
     let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(tmp_dir.path().to_path_buf());
+    let mut cleanup = NativePtyFixtureCleanup::new(&mut manager);
     let task_id = "lock-free-agent-spawn";
     let adapter = LockCheckingAgentAdapter {
         sessions: Arc::clone(&manager.sessions),
@@ -169,7 +170,10 @@ async fn agent_spawn_keeps_session_mutex_out_of_provider_and_command_work() {
         .expect("agent PTY should spawn without holding sessions lock during slow setup");
 
     assert!(
-        tmp_dir.path().join(format!("{task_id}-pty.pid")).exists(),
+        cleanup
+            .pid_dir()
+            .join(format!("{task_id}-pty.pid"))
+            .exists(),
         "PID file should still be written after spawn"
     );
     assert!(
@@ -182,20 +186,24 @@ async fn agent_spawn_keeps_session_mutex_out_of_provider_and_command_work() {
         .await
         .expect("test PTY should be cleaned up");
     assert!(
-        !tmp_dir.path().join(format!("{task_id}-pty.pid")).exists(),
+        !cleanup
+            .pid_dir()
+            .join(format!("{task_id}-pty.pid"))
+            .exists(),
         "PID file should be removed on cleanup"
     );
     assert!(
         !manager.output_buffers.lock().await.contains_key(task_id),
         "output buffer should be removed on explicit kill"
     );
+    cleanup.finish().expect("agent fixture PTY cleanup");
 }
 
 #[tokio::test]
 async fn scoped_agent_abort_retains_the_replay_buffer() {
     let mut manager = PtyManager::new();
     let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(tmp_dir.path().to_path_buf());
+    let mut cleanup = NativePtyFixtureCleanup::new(&mut manager);
     let session_key =
         "scoped-agent-v1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
@@ -231,13 +239,14 @@ async fn scoped_agent_abort_retains_the_replay_buffer() {
         .await
         .contains_key(session_key));
     assert!(!manager.sessions.lock().await.contains_key(session_key));
+    cleanup.finish().expect("agent fixture PTY cleanup");
 }
 
 #[tokio::test]
 async fn scoped_agent_child_receives_only_its_issued_identity() {
     let mut manager = PtyManager::new();
     let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(tmp_dir.path().to_path_buf());
+    let mut cleanup = NativePtyFixtureCleanup::new(&mut manager);
     for key in [
         "CLAUDE_TASK_ID",
         "OPENFORGE_AGENT_CONFIG",
@@ -287,13 +296,14 @@ async fn scoped_agent_child_receives_only_its_issued_identity() {
     assert!(!output.contains("CLAUDE_TASK_ID="));
     assert!(!output.contains("NO_COLOR="));
     manager.kill_pty(session_key).await.expect("cleanup probe");
+    cleanup.finish().expect("agent fixture PTY cleanup");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn agent_spawn_waits_for_output_reader_readiness_before_registering_stream_state() {
     let mut manager = PtyManager::new();
     let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(tmp_dir.path().to_path_buf());
+    let mut cleanup = NativePtyFixtureCleanup::new(&mut manager);
     let task_id = "reader-ready-agent-spawn";
     let (reader_ready_tx, reader_ready_rx) = mpsc::channel();
     let (release_reader_tx, release_reader_rx) = mpsc::channel();
@@ -391,13 +401,14 @@ async fn agent_spawn_waits_for_output_reader_readiness_before_registering_stream
         .kill_pty(task_id)
         .await
         .expect("test PTY should be cleaned up");
+    cleanup.finish().expect("agent fixture PTY cleanup");
 }
 
 #[tokio::test]
 async fn ghostty_agent_publishes_model_output_through_runtime_event_adapter() {
     let mut manager = PtyManager::new();
     let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(tmp_dir.path().to_path_buf());
+    let mut cleanup = NativePtyFixtureCleanup::new(&mut manager);
     let task_id = "ghostty-agent-runtime-events";
     let bus = AppEventBus::new(32, 8);
     let app = AppHandle::new();
@@ -448,13 +459,14 @@ async fn ghostty_agent_publishes_model_output_through_runtime_event_adapter() {
         .kill_pty(task_id)
         .await
         .expect("test PTY should be cleaned up");
+    cleanup.finish().expect("agent fixture PTY cleanup");
 }
 
 #[tokio::test]
 async fn agent_attachment_exposes_bounded_replay_then_gap_free_live_output() {
     let mut manager = PtyManager::new();
     let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(tmp_dir.path().to_path_buf());
+    let mut cleanup = NativePtyFixtureCleanup::new(&mut manager);
     let task_id = "companion-agent-attachment";
     let adapter = LockCheckingAgentAdapter {
         sessions: Arc::clone(&manager.sessions),
@@ -535,15 +547,17 @@ async fn agent_attachment_exposes_bounded_replay_then_gap_free_live_output() {
         crate::pty_manager::AgentTerminalEvent::Exited,
     );
     assert!(!manager.agent_terminal_available(task_id).await);
+    cleanup.finish().expect("agent fixture PTY cleanup");
 }
 
 #[tokio::test]
 async fn unresolved_recovery_metadata_blocks_spawn_without_clobbering_record() {
     let mut manager = PtyManager::new();
     let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(tmp_dir.path().to_path_buf());
+    let mut cleanup = NativePtyFixtureCleanup::new(&mut manager);
     let task_id = "recovery-conflict-agent";
-    let pid_file = tmp_dir.path().join(format!("{task_id}-pty.pid"));
+    let pid_file = cleanup.pid_dir().join(format!("{task_id}-pty.pid"));
+    std::fs::create_dir_all(cleanup.pid_dir()).expect("private PID directory should create");
     let unresolved_identity = ManagedProcessIdentity {
         version: 1,
         root_pid: 999_991,
@@ -584,12 +598,15 @@ async fn unresolved_recovery_metadata_blocks_spawn_without_clobbering_record() {
     .expect("recovery metadata should still parse");
     assert_eq!(persisted, unresolved_identity);
     assert!(!manager.sessions.lock().await.contains_key(task_id));
+    // This test owns the synthetic record, not an unconfirmed native process.
+    std::fs::remove_file(pid_file).expect("remove synthetic recovery record");
+    cleanup.finish().expect("agent fixture PTY cleanup");
 }
 
 async fn assert_newer_agent_spawn_wins_when_older_spawn_finishes_setup_late() {
     let mut manager = PtyManager::new();
     let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(tmp_dir.path().to_path_buf());
+    let mut cleanup = NativePtyFixtureCleanup::new(&mut manager);
     let task_id = "concurrent-agent-spawn";
     let (old_prepared_tx, old_prepared_rx) = mpsc::channel();
     let (release_old_command_tx, release_old_command_rx) = mpsc::channel();
@@ -689,7 +706,7 @@ async fn assert_newer_agent_spawn_wins_when_older_spawn_finishes_setup_late() {
         session.managed_process.clone()
     };
     let persisted_identity: ManagedProcessIdentity = serde_json::from_str(
-        &std::fs::read_to_string(tmp_dir.path().join(format!("{task_id}-pty.pid")))
+        &std::fs::read_to_string(cleanup.pid_dir().join(format!("{task_id}-pty.pid")))
             .expect("newer process metadata should remain"),
     )
     .expect("newer process metadata should parse");
@@ -703,6 +720,7 @@ async fn assert_newer_agent_spawn_wins_when_older_spawn_finishes_setup_late() {
         .kill_pty(task_id)
         .await
         .expect("newer test PTY should be cleaned up");
+    cleanup.finish().expect("agent fixture PTY cleanup");
 }
 
 #[tokio::test]
@@ -716,7 +734,7 @@ async fn newer_agent_spawn_wins_when_older_spawn_finishes_setup_late() {
 async fn older_waiting_agent_spawn_cannot_terminate_newer_winner() {
     let mut manager = PtyManager::new();
     let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(temp_dir.path().to_path_buf());
+    let mut cleanup = NativePtyFixtureCleanup::new(&mut manager);
     let task_id = "agent-lock-order-race";
     manager
         .spawn_agent_pty(
@@ -840,13 +858,14 @@ async fn older_waiting_agent_spawn_cannot_terminate_newer_winner() {
         .kill_pty(task_id)
         .await
         .expect("winning Terminal Session should clean up");
+    cleanup.finish().expect("agent fixture PTY cleanup");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn stale_agent_setup_before_event_stream_cleans_only_its_tracking_state() {
     let mut manager = PtyManager::new();
     let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(tmp_dir.path().to_path_buf());
+    let mut cleanup = NativePtyFixtureCleanup::new(&mut manager);
     let task_id = "stale-before-event-stream";
     let (stream_start_tx, stream_start_rx) = mpsc::channel();
     let (release_stream_tx, release_stream_rx) = mpsc::channel();
@@ -992,13 +1011,14 @@ async fn stale_agent_setup_before_event_stream_cleans_only_its_tracking_state() 
         .await
         .expect("newer test PTY should be cleaned up");
     drop(superseding_lock);
+    cleanup.finish().expect("agent fixture PTY cleanup");
 }
 
 #[tokio::test]
 async fn kill_pty_cancels_agent_spawn_before_session_insert() {
     let mut manager = PtyManager::new();
     let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(tmp_dir.path().to_path_buf());
+    let mut cleanup = NativePtyFixtureCleanup::new(&mut manager);
     let task_id = "kill-pending-agent-spawn";
     let (prepared_tx, prepared_rx) = mpsc::channel();
     let (release_command_tx, release_command_rx) = mpsc::channel();
@@ -1065,13 +1085,17 @@ async fn kill_pty_cancels_agent_spawn_before_session_insert() {
         "killed pending spawn must not insert a session"
     );
     assert!(
-        !tmp_dir.path().join(format!("{task_id}-pty.pid")).exists(),
+        !cleanup
+            .pid_dir()
+            .join(format!("{task_id}-pty.pid"))
+            .exists(),
         "killed pending spawn must not leave a PID file"
     );
     assert!(
         !manager.output_buffers.lock().await.contains_key(task_id),
         "killed pending spawn must not register an output buffer"
     );
+    cleanup.finish().expect("agent fixture PTY cleanup");
 }
 
 const CWD_OUTPUT_READY: &str = "openforge-cwd-output=ready";
@@ -1115,7 +1139,7 @@ async fn agent_pty_starts_process_with_actual_workspace_cwd_containing_spaces() 
     let mut manager = PtyManager::new();
     let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
     let (app_event_tx, mut app_event_rx) = tokio::sync::broadcast::channel(8);
-    manager.set_pid_dir(temp_dir.path().join("pids"));
+    let mut cleanup = NativePtyFixtureCleanup::new(&mut manager);
     let workspace_path = temp_dir.path().join("Snooze Vault");
     std::fs::create_dir_all(&workspace_path).expect("workspace with spaces should be created");
     let expected_cwd = workspace_path
@@ -1198,13 +1222,14 @@ async fn agent_pty_starts_process_with_actual_workspace_cwd_containing_spaces() 
                 .any(|line| line.trim_end_matches('\r') == expected_cwd),
             "agent PTY process should start with actual cwd at the workspace even when it contains spaces; output was: {output:?}"
         );
+    cleanup.finish().expect("agent fixture PTY cleanup");
 }
 
 #[tokio::test]
 async fn agent_pty_rejects_missing_workspace_cwd_instead_of_falling_back() {
     let mut manager = PtyManager::new();
     let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(temp_dir.path().join("pids"));
+    let mut cleanup = NativePtyFixtureCleanup::new(&mut manager);
     let missing_workspace = temp_dir.path().join("Missing Vault");
 
     let result = manager
@@ -1233,4 +1258,5 @@ async fn agent_pty_rejects_missing_workspace_cwd_instead_of_falling_back() {
             .contains_key("agent-missing-cwd"),
         "missing cwd must not register an agent session"
     );
+    cleanup.finish().expect("agent fixture PTY cleanup");
 }

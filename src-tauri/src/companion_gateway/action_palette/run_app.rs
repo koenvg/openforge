@@ -126,7 +126,8 @@ mod tests {
             task.id
         };
         let mut pty_manager = crate::pty_manager::PtyManager::new();
-        pty_manager.set_pid_dir(workspace.path().join("pids"));
+        let mut cleanup =
+            crate::pty_manager::test_fixture::NativePtyFixtureCleanup::new(&mut pty_manager);
         let service = DatabaseCompanionActionPaletteService::production(
             database,
             crate::github_client::GitHubClient::new(),
@@ -156,5 +157,6 @@ mod tests {
             .kill_pty(&shell_key)
             .await
             .expect("shell cleanup");
+        cleanup.finish().expect("Run app fixture PTY cleanup");
     }
 }
