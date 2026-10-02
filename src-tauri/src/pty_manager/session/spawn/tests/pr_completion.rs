@@ -34,7 +34,7 @@ impl AgentPtyProviderAdapter for CompletingAgent {
 async fn successful_local_agent_exit_links_first_pr_without_hooks_or_output() {
     let f = Fixture::new(false, Some("test-token")).await;
     let mut manager = PtyManager::new();
-    manager.set_pid_dir(f.dir.path().join("pids"));
+    let mut cleanup = crate::pty_manager::test_fixture::NativePtyFixtureCleanup::new(&mut manager);
     manager.configure_pr_discovery(f.discovery.clone());
     acquire_db(&f.db)
         .create_agent_session(
@@ -66,7 +66,14 @@ async fn successful_local_agent_exit_links_first_pr_without_hooks_or_output() {
         .unwrap();
     manager.write_pty(&f.task_id, b"done\n").await.unwrap();
     tokio::time::timeout(Duration::from_secs(10), async {
-        while events.recv().await.unwrap().event_name != "task-pull-request-updated" {}
+        let mut linked = false;
+        let mut exited = false;
+        while !linked || !exited {
+            let event = events.recv().await.unwrap();
+            linked |= event.event_name == "task-pull-request-updated";
+            exited |= event.event_name == format!("pty-exit-{}", f.task_id)
+                && event.payload["instance_id"] == instance;
+        }
     })
     .await
     .expect("exit-only completion must notify without polling");
@@ -77,4 +84,5 @@ async fn successful_local_agent_exit_links_first_pr_without_hooks_or_output() {
             .len(),
         1
     );
+    cleanup.finish().expect("PR completion PTY cleanup");
 }
