@@ -23,6 +23,11 @@ name = "openforge-session-daemon-fixture-exec-fails"
 path = "src/replacement_fixture_exec_fails.rs"
 required-features = ["replacement-fixtures"]
 
+[[bin]]
+name = "openforge-session-daemon-fixture-startup"
+path = "src/replacement_fixture_startup.rs"
+required-features = ["replacement-fixtures"]
+
 [dependencies]
 axum = "0.7"
 hyper = { version = "1", features = ["client", "server", "http1"] }

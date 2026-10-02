@@ -11,6 +11,9 @@ function cargo(args) {
 for (const kind of ['host', 'protocol', 'client', 'daemon']) {
   cargo(['test', '--manifest-path', layout.sessionCrates[kind].manifestPath])
 }
+if (process.platform === 'darwin' && process.arch === 'arm64') {
+  cargo(['build', '--manifest-path', layout.sessionCrates.daemon.manifestPath, '--features', 'replacement-fixtures', '--bin', 'openforge-session-daemon-fixture-startup'])
+}
 cargo(['build', '--manifest-path', layout.sessionCrates.daemon.manifestPath])
 cargo(['test', '--manifest-path', layout.manifestPath, 'pty_manager::host::'])
 cargo(['test', '--manifest-path', layout.manifestPath, 'pty_manager::daemon_shells::completion_tests', '--', '--ignored'])

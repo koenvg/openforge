@@ -11,6 +11,7 @@ fn maintenance_capacity_preserves_original_failure_receipts_and_conflicts() {
     };
     let mut manager = Manager {
         current: Some(image),
+        bootstrap: None,
         running_version: "current".into(),
         jobs: Vec::new(),
         pending: None,
