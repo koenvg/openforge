@@ -263,7 +263,7 @@ describe('idle resource sampler', () => {
     expect(result.passed).toBe(false)
   })
 
-  it('samples through injected process, event, footprint, and clock dependencies', async () => {
+  it('samples through injected process, event, footprint, wakeup, and clock dependencies', async () => {
     const rows = [processRows(), processRows({
       100: { cpuSeconds: 10.1 },
       101: { cpuSeconds: 5.1 },
@@ -280,9 +280,11 @@ describe('idle resource sampler', () => {
       topEventTypes: [],
     }))
     const collectFootprint = vi.fn(async pid => ({ currentBytes: pid * 10, peakBytes: pid * 20 }))
+    const readWakeups = vi.fn(async () => new Map())
 
     const result = await sampleIdleResources({ durationSeconds: 1, sidecarPid: 101 }, {
       readProcesses,
+      readWakeups,
       collectEvents,
       collectFootprint,
       wait: vi.fn(async () => {}),
@@ -291,6 +293,9 @@ describe('idle resource sampler', () => {
     })
 
     expect(readProcesses).toHaveBeenCalledTimes(2)
+    expect(readWakeups).toHaveBeenCalledTimes(2)
+    expect(readWakeups).toHaveBeenNthCalledWith(1, [100, 101, 102, 103, 104])
+    expect(readWakeups).toHaveBeenNthCalledWith(2, [100, 101, 102, 103, 104])
     expect(collectEvents).toHaveBeenCalledWith(expect.objectContaining({ pid: 101 }), 1)
     expect(collectFootprint).toHaveBeenCalledTimes(5)
     expect(result.measuredAt).toBe('2026-01-02T03:04:05.000Z')
