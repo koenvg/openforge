@@ -65,7 +65,30 @@ pub(crate) fn measure_previous(root: &Path) -> Result<String, String> {
     )
 }
 
+/// Snapshot inert legacy bytes. Links are recorded but never followed or executed.
+/// # Errors
+/// Refuses unsafe files, permissions, unsupported entries and missing legacy components.
+pub fn cold_source_sha256(root: &Path) -> Result<String, String> {
+    measure_tree(
+        root,
+        &[
+            ("Contents/MacOS/Open Forge", true),
+            ("Contents/MacOS/openforge-sidecar", true),
+            ("Contents/Resources/app/dist-electron/main.js", false),
+        ],
+        true,
+    )
+}
+
 fn measure_components(root: &Path, required: &[(&str, bool)]) -> Result<String, String> {
+    measure_tree(root, required, false)
+}
+
+fn measure_tree(
+    root: &Path,
+    required: &[(&str, bool)],
+    inert_source: bool,
+) -> Result<String, String> {
     if !fs::symlink_metadata(root)
         .map_err(|e| e.to_string())?
         .is_dir()
@@ -92,11 +115,12 @@ fn measure_components(root: &Path, required: &[(&str, bool)]) -> Result<String, 
         };
         if metadata.is_symlink() {
             let target = fs::read_link(&path).map_err(|e| e.to_string())?;
-            if target.is_absolute()
-                || !path
-                    .canonicalize()
-                    .map_err(|e| e.to_string())?
-                    .starts_with(&canonical)
+            if !inert_source
+                && (target.is_absolute()
+                    || !path
+                        .canonicalize()
+                        .map_err(|e| e.to_string())?
+                        .starts_with(&canonical))
             {
                 return Err("bundle symlink escapes bundle".into());
             }

@@ -3,6 +3,7 @@ import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
+import { coldRecoveryHelper } from './cold-install/recovery.mjs'
 
 const roots = []
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))) })
@@ -51,4 +52,36 @@ it('refuses source replacement without trusted handoff support and leaves instal
   expect(await readFile(join(installed, 'identity'), 'utf8')).toBe('current-app')
   expect(await readFile(cli, 'utf8')).toBe('current-cli')
   expect(await readFile(join(retained, 'daemon'), 'utf8')).toBe('live-daemon-asset')
+})
+
+it('exposes an explicit cold-install command without enabling ordinary replacement', async () => {
+  const result = await run('/bin/bash', [join(import.meta.dirname, 'install-electron-mac.sh'), '--cold', '--help'], process.env)
+  expect(result.status).toBe(0)
+  expect(result.stdout).toContain('--skip-build')
+  expect(result.stdout).toContain('local build approval')
+  expect(result.stdout).toContain('running OpenForge')
+})
+
+it('rejects a caller-supplied approval switch before touching an installation', async () => {
+  const result = await run('/bin/bash', [join(import.meta.dirname, 'install-electron-mac.sh'), '--cold', '--approved'], process.env)
+  expect(result.status).not.toBe(0)
+  expect(result.stderr).toContain('Unknown cold-install option')
+})
+
+it.runIf(process.platform !== 'darwin' || process.arch !== 'arm64')('refuses cold recovery on unsupported platforms', async () => {
+  const result = await run('/bin/bash', [join(import.meta.dirname, 'install-electron-mac.sh'), '--cold', '--recover'], process.env)
+  expect(result.status).not.toBe(0)
+  expect(result.stderr).toContain('Cold installation supports macOS arm64 only')
+})
+
+it('refuses forged recovery state before returning a retained helper', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'openforge-cold-recovery-'))
+  roots.push(root)
+  const profile = join(root, 'profile')
+  const native = join(profile, 'updates/native')
+  await mkdir(native, { recursive: true, mode: 0o700 })
+  await writeFile(join(native, 'journal.key'), Buffer.alloc(32, 42), { mode: 0o600 })
+  await writeFile(join(native, 'current.json'), JSON.stringify({ payload: '{}', mac: '00'.repeat(32) }), { mode: 0o600 })
+  await expect(coldRecoveryHelper(profile, join(root, 'Open Forge.app')))
+    .rejects.toThrow('Invalid cold recovery authentication')
 })

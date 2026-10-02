@@ -1,6 +1,9 @@
 //! Authenticated app replacement. This crate does not own sessions or authorize interruption.
 mod authorization;
 mod bundle;
+mod cold_command;
+mod cold_install;
+mod cold_processes;
 mod exchange;
 mod files;
 mod handoff;
@@ -16,6 +19,12 @@ mod replacement;
 mod runtime_update;
 mod sidecar_startup;
 mod startup;
+pub use bundle::cold_source_sha256;
+pub use cold_command::{run_cold_install, run_cold_recovery, run_cold_startup};
+pub use cold_install::assert_cold_launch_roots;
+pub use cold_install::assert_cold_startup_allowed;
+pub use cold_install::cold_target_sha256;
+pub use cold_processes::assert_cold_source_stopped;
 pub use handoff::run_helper;
 pub use host_exit::{exit_with_host, parent_exit_guard_armed};
 pub use journal::Phase;
@@ -36,10 +45,51 @@ pub struct InstallTransaction {
     destination: PathBuf,
 }
 
+/// Temporary exclusion, without assigning an unapproved recovery identity.
+/// Dropping this reservation leaves the permanent lock inode unbound.
+pub struct InstallReservation {
+    transaction: InstallTransaction,
+}
+
+impl InstallReservation {
+    /// Assign the approved installation identity while retaining both locks.
+    /// # Errors
+    /// Refuses foreign bindings and unsafe ownership records.
+    pub fn bind(self) -> Result<InstallTransaction, String> {
+        let transaction = self.transaction;
+        files::bind_destination(
+            &transaction._destination_lock,
+            &transaction.root,
+            &transaction.installation,
+        )?;
+        files::sync_directory(
+            transaction
+                .destination
+                .parent()
+                .ok_or("missing installation parent")?,
+        )?;
+        Ok(transaction)
+    }
+
+    fn record(&self) -> Result<Option<journal::Record>, String> {
+        self.transaction.record()
+    }
+}
 impl InstallTransaction {
     /// # Errors
     /// Rejects unsafe storage or another live installer. No process is signalled.
     pub fn open(root: &Path, installation: &str, destination: &Path) -> Result<Self, String> {
+        Self::reserve(root, installation, destination)?.bind()
+    }
+
+    /// Reserve the destination and recovery storage without committing an identity.
+    /// # Errors
+    /// Refuses conflicting owners, unsafe storage and an existing foreign binding.
+    pub fn reserve(
+        root: &Path,
+        installation: &str,
+        destination: &Path,
+    ) -> Result<InstallReservation, String> {
         if installation.is_empty()
             || installation.len() > 128
             || !installation
@@ -73,15 +123,17 @@ impl InstallTransaction {
             files::exclusive_lock(&parent.join(format!(".{name}.openforge-update.lock")))?;
         files::private_directory(root)?;
         let lock = files::exclusive_lock(&root.join("owner.lock"))?;
-        files::bind_destination(&destination_lock, root, installation)?;
+        files::check_destination(&destination_lock, root, installation)?;
         files::sync_directory(&parent)?;
         journal::initialize(root)?;
-        Ok(Self {
-            _lock: lock,
-            _destination_lock: destination_lock,
-            root: normalized_root,
-            installation: installation.into(),
-            destination: normalized_destination,
+        Ok(InstallReservation {
+            transaction: Self {
+                _lock: lock,
+                _destination_lock: destination_lock,
+                root: normalized_root,
+                installation: installation.into(),
+                destination: normalized_destination,
+            },
         })
     }
 
@@ -95,10 +147,12 @@ impl InstallTransaction {
         operation: &str,
     ) -> Result<(), String> {
         authorization::identity(operation)?;
-        if self
-            .record()?
-            .is_some_and(|r| !matches!(r.phase, Phase::RolledBack | Phase::Committed))
-        {
+        if self.record()?.is_some_and(|r| {
+            !matches!(
+                r.phase,
+                Phase::RolledBack | Phase::Committed | Phase::ColdCommitted
+            )
+        }) {
             return Err("an update operation is already pending".into());
         }
         files::check_private_directory(authorization_root)?;
@@ -219,7 +273,10 @@ impl InstallTransaction {
         controller: Option<openforge_session_protocol::Controller>,
     ) -> Result<(), String> {
         let mut record = self.require(operation)?;
-        if !record.phase.may_own_domain() {
+        if !matches!(
+            record.phase,
+            Phase::LaunchStarted | Phase::RelaunchStarted | Phase::Committed
+        ) {
             return Err("update has not launched".into());
         }
         let authority = authorization::read(
