@@ -497,7 +497,7 @@ const inventory = {
     { source: 'plugins/github-sync/src/review/pr/__fixtures__/ReviewWorkspaceHarness.svelte', kind: 'nonvisual-provider', reason: 'Creates isolated review workspace state without rendering UI.' },
     ...[
       'AnchoredMenuKeyboardFixture', 'BitsMenuOpeningBrowserFixture', 'CoreControlsThemeFixture',
-      'SearchPaletteBrowserFixture', 'SplitButtonBrowserFixture',
+      'SearchPaletteBrowserFixture', 'SplitButtonBrowserFixture', 'StatusBadgeThemeFixture',
     ].map(name => ({
       source: `packages/plugin-sdk/src/ui/${name}.svelte`, kind: /** @type {const} */ ('test-only-wrapper'),
       reason: 'Exercises SDK controls in isolated browser or theme tests; never used by production.',
