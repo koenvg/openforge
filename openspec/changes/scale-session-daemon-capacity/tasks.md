@@ -17,8 +17,10 @@
 - [x] 3.3 Scale the coordinated pause/serialization window for 256 live readers without unbounded interruption; verify measured handoff duration and timeout/rollback tests under concurrent output and input.
 - [ ] 3.4 Migrate validated legacy 32-session checkpoint limits only after a compatible successful handoff; verify old-image rollback before commit, new admission after commit, explicit incompatible downgrade rejection, and no restart of existing PTYs.
 
+  KVG-5263 blocker: KVG-5206 is merged as a disabled checkpoint, but production live replacement remains gated and no validated legacy 32-session executable is available for this work. Host restore and current-image fixture evidence do not demonstrate this task. Await the actual compatible updater, identified legacy image, and KVG-4730 packaged acceptance; do not duplicate activation or KVG-1789 publisher verification.
+
 ## 4. Validate and document
 
 - [x] 4.1 Run full affected-system test/check/build/clippy for session-host, session-protocol, session-client, session-daemon and applicable backend IPC contracts; verify all pass and report any platform-only coverage gaps.
 - [x] 4.2 Run the isolated 256-PTY macOS arm64 spawn, turnover, recovery, and supported replacement workload with recorded FD/memory/checkpoint/pause measurements and full cleanup; verify all processes retain identity and no fixture-owned process leaks.
-- [ ] 4.3 Update daemon capacity and compatibility documentation with measured safe envelope, observable refusal/expiry behavior, supported upgrade/downgrade matrix, and unsupported legacy-daemon handling; verify docs match the final tests and protocol diagnostics.
+- [x] 4.3 Update daemon capacity and compatibility documentation with measured safe envelope, observable refusal/expiry behavior, supported upgrade/downgrade matrix, and unsupported legacy-daemon handling; verify docs match the final tests and protocol diagnostics.
