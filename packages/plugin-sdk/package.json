@@ -1,6 +1,6 @@
 {
   "name": "@openforge-app/plugin-sdk",
-  "version": "0.3.1",
+  "version": "0.3.9",
   "description": "TypeScript SDK for building trusted OpenForge frontend and backend plugins.",
   "homepage": "https://github.com/koenvg/openforge/blob/main/docs/plugin-authoring.md",
   "keywords": [
