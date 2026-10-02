@@ -38,13 +38,98 @@ describe('capture readiness', () => {
         expect(await page.locator('#ready').textContent()).toBe('pnpm preview')
       } })
     })
-  })
+  }, 15_000)
 
   it('fails readiness rather than accepting a failed play with a visible ready selector', async () => {
     await withCatalog(`window.__STORYBOOK_PREVIEW__ = { currentRender: { phase: 'errored' } };`, async url => {
       await expect(capture(browser, url, entry, { timeout: 1000 })).rejects.toThrow(/missing readiness/)
     })
   })
+
+  it('times out and closes the context when play never finishes despite a visible ready selector', async () => {
+    await withCatalog(`window.__STORYBOOK_PREVIEW__ = { currentRender: { phase: 'playing' } };`, async url => {
+      await expect(capture(browser, url, entry, { timeout: 500 })).rejects.toThrow('missing readiness')
+      expect(browser.contexts()).toHaveLength(0)
+    })
+  })
+  it('preserves the deadline and closes the context when a timer callback blocks the renderer', async () => {
+    const stalledBrowser = await chromium.launch({ headless: true })
+    let watchdog
+    try {
+      await withCatalog(`
+        window.__STORYBOOK_PREVIEW__ = { currentRender: { phase: 'playing' } };
+        setTimeout(() => { while (true) {} }, 10);
+      `, async url => {
+        const failure = await Promise.race([
+          capture(stalledBrowser, url, entry, { timeout: 500 }).catch(error => error),
+          // Bound the regression itself so a broken runner cannot hang the suite.
+          new Promise(resolve => { watchdog = setTimeout(() => resolve(new Error('capture is still pending')), 5000) }),
+        ])
+        expect(failure.message).toContain('Timeout 500ms exceeded')
+        expect(failure.message).toContain('page did not respond within 1000ms')
+        expect(stalledBrowser.contexts()).toHaveLength(0)
+      })
+    } finally {
+      clearTimeout(watchdog)
+      await stalledBrowser.close()
+    }
+  }, 15_000)
+
+  it('does not accelerate application deadlines ahead of an asynchronous host response', async () => {
+    await withCatalog(`
+      window.__STORYBOOK_PREVIEW__ = { currentRender: { phase: 'playing' } };
+      const deadline = setTimeout(() => { window.__STORYBOOK_PREVIEW__.currentRender.phase = 'errored'; }, 500);
+      window.loadResponse().then(() => {
+        clearTimeout(deadline);
+        document.querySelector('#ready').textContent = 'Response loaded';
+        window.__STORYBOOK_PREVIEW__.currentRender.phase = 'finished';
+      });
+    `, async url => {
+      await capture(browser, url, { ...entry, ready: 'text=Response loaded' }, {
+        prepare: page => page.exposeFunction('loadResponse', () => new Promise(resolve => setTimeout(resolve, 300))),
+        mutate: async page => {
+          expect(await page.getByText('Response loaded', { exact: true }).isVisible()).toBe(true)
+        },
+      })
+    })
+  })
+  it('preserves a transient final state when the host observes play completion slowly', async () => {
+    await withCatalog(`
+      window.__STORYBOOK_PREVIEW__ = { currentRender: { phase: 'playing' } };
+      setTimeout(() => {
+        document.querySelector('#ready').textContent = 'Feedback sent to agent!';
+        window.__STORYBOOK_PREVIEW__.currentRender.phase = 'finished';
+        setTimeout(() => { document.querySelector('#ready').textContent = 'Expired'; }, 3000);
+      }, 100);
+    `, async url => {
+      const result = await capture(browser, url, { ...entry, ready: 'text=Feedback sent to agent!' }, {
+        timeout: 5000,
+        prepare: async page => {
+          const wait = page.waitForFunction.bind(page)
+          let first = true
+          page.waitForFunction = async (...args) => {
+            const result = await wait(...args)
+            if (first) {
+              first = false
+              // Model a slow host/CDP round trip after the real interaction finishes.
+              await new Promise(resolve => setTimeout(resolve, 3200))
+            }
+            return result
+          }
+        },
+        mutate: async page => {
+          expect(await page.getByText('Feedback sent to agent!', { exact: true }).isVisible()).toBe(true)
+          await page.waitForTimeout(3200)
+          expect(await page.getByText('Feedback sent to agent!', { exact: true }).isVisible()).toBe(true)
+          expect(await page.evaluate(() => new Date().toISOString())).toBe('2026-01-02T09:30:00.000Z')
+          await page.clock.runFor(3000)
+          expect(await page.getByText('Expired', { exact: true }).isVisible()).toBe(true)
+        },
+      })
+      expect(result.diagnostics).toEqual([])
+      expect(browser.contexts()).toHaveLength(0)
+    })
+  }, 15_000)
 })
 
 const entry = {
@@ -63,7 +148,7 @@ function browserFixture(frames) {
   const page = {
     setDefaultTimeout: vi.fn(), on: vi.fn(),
     clock: { setFixedTime: vi.fn(), pauseAt: vi.fn(), runFor: vi.fn() },
-    goto: vi.fn(), waitForFunction: vi.fn(),
+    goto: vi.fn(), waitForFunction: vi.fn().mockResolvedValue(undefined),
     locator: () => ({ count: async () => 0, first: () => ({ waitFor: vi.fn() }) }),
     evaluate: vi.fn(), addStyleTag: vi.fn(), waitForTimeout: vi.fn(),
     screenshot: vi.fn(async () => pngFrame(frames.length > 1 ? frames.shift() : frames[0])),
@@ -131,7 +216,7 @@ it.each([[undefined, 30000], [3000, 3000]])('uses the capture deadline %s and re
   const page = {
     setDefaultTimeout: vi.fn(),
     on: vi.fn(),
-    clock: { setFixedTime: vi.fn() },
+    clock: { setFixedTime: vi.fn(), pauseAt: vi.fn() },
     goto: vi.fn().mockRejectedValue(new Error('load failed')),
   }
   const context = { route: vi.fn(), newPage: vi.fn().mockResolvedValue(page), close: vi.fn() }
