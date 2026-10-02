@@ -1,0 +1,55 @@
+{
+  "afterInputScreenVt": "\u001b[0m\u001b[38;5;2mFINAL CORRECT SCREEN\u001b[0m\r\nGhostty owns terminal state\r\nHistory is paused\r\nFixture only, no PTY\r\nFixed 48 x 8 cells\r\nInput: k\r\nLive output lands here\r\nLIVE OUTPUT 1k\u001b[0m\u001b[8;15H",
+  "afterLiveScreenVt": "\u001b[0m\u001b[38;5;2mFINAL CORRECT SCREEN\u001b[0m\r\nGhostty owns terminal state\r\nHistory is paused\r\nFixture only, no PTY\r\nFixed 48 x 8 cells\r\nInput: k\r\nLive output lands here\r\nLIVE OUTPUT 1\u001b[0m\u001b[8;14H",
+  "costsMs": {
+    "encode": 0.07012499999999999,
+    "historyExport": 0.030459,
+    "parse": 0.455167,
+    "ready": 0.187917,
+    "screenExport": 0.099666
+  },
+  "geometry": {
+    "cols": 48,
+    "rows": 8
+  },
+  "historyRows": 16,
+  "inputVt": "OLDER HISTORY 01\r\nOLDER HISTORY 02\r\nOLDER HISTORY 03\r\nOLDER HISTORY 04\r\nOLDER HISTORY 05\r\nOLDER HISTORY 06\r\nOLDER HISTORY 07\r\nOLDER HISTORY 08\r\nOLDER HISTORY 09\r\nOLDER HISTORY 10\r\nOLDER HISTORY 11\r\nOLDER HISTORY 12\r\nOLDER HISTORY 13\r\nOLDER HISTORY 14\r\nOLDER HISTORY 15\r\nOLDER HISTORY 16\r\n\u001b[32mFINAL CORRECT SCREEN\u001b[0m\r\nGhostty owns terminal state\r\nHistory is paused\r\nFixture only, no PTY\r\nFixed 48 x 8 cells\r\nInput: k\r\nLive output lands here\r\nready> ",
+  "label": "Frozen Ghostty fixture, not an agent or PTY integration test",
+  "liveVt": "\r\u001b[2KLIVE OUTPUT 1",
+  "pages": [
+    {
+      "index": 0,
+      "rows": [
+        "OLDER HISTORY 01",
+        "OLDER HISTORY 02",
+        "OLDER HISTORY 03",
+        "OLDER HISTORY 04",
+        "OLDER HISTORY 05",
+        "OLDER HISTORY 06",
+        "OLDER HISTORY 07",
+        "OLDER HISTORY 08",
+        "OLDER HISTORY 09",
+        "OLDER HISTORY 10",
+        "OLDER HISTORY 11",
+        "OLDER HISTORY 12",
+        "OLDER HISTORY 13",
+        "OLDER HISTORY 14",
+        "OLDER HISTORY 15",
+        "OLDER HISTORY 16"
+      ],
+      "snapshotId": "edafc96dea0daa2f150c5da9cf13f0bee8fc348b415ff90da8f1e33852827297",
+      "watermark": 1
+    }
+  ],
+  "readyHistoryRows": 16,
+  "retention": 64,
+  "schemaVersion": 1,
+  "screenVt": "\u001b[0m\u001b[38;5;2mFINAL CORRECT SCREEN\u001b[0m\r\nGhostty owns terminal state\r\nHistory is paused\r\nFixture only, no PTY\r\nFixed 48 x 8 cells\r\nInput: k\r\nLive output lands here\r\nready> \u001b[0m\u001b[8;8H",
+  "snapshotBytes": 1690,
+  "watermark": 1,
+  "snapshotId": "edafc96dea0daa2f150c5da9cf13f0bee8fc348b415ff90da8f1e33852827297",
+  "authority": {
+    "ghosttyCommit": "22d13172cde98a0a4dda05d3d6a3fcb0dd8ed018",
+    "bindingsCommit": "de9fd9b0fa4ab53faebd3d489f4c74fe0ec832ec"
+  }
+}

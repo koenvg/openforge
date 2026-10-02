@@ -1,0 +1,43 @@
+{
+  "baseline": "5e652939c23c567e9d519f759402e3df0f4ad251",
+  "scope": "Complete isolated xterm-screen-first experiment, complete pinned patched xterm browser dependency graph, standalone native exporter crate, root script test discovery",
+  "commands": [
+    { "command": "pnpm i", "result": "passed before investigation" },
+    { "command": "node scripts/experiments/xterm-screen-first/launch.mjs", "result": "passed, isolated install/build and tab opened in existing Arc at http://127.0.0.1:5251" },
+    { "command": "pnpm --ignore-workspace install --frozen-lockfile", "result": "passed" },
+    { "command": "pnpm --ignore-workspace run build", "result": "passed, source archive verified and source patch applied with zero fuzz" },
+    { "command": "pnpm --ignore-workspace run check", "result": "passed, adapter and complete patched browser-source dependency graph" },
+    { "command": "RECORD_EVIDENCE=1 pnpm --ignore-workspace test", "result": "passed, 10 browser behavior tests in existing Arc, including both completion-review race regressions, actual page navigation, trusted keyboard/mouse input, intermediate screenshots and narrow-window controls" },
+    { "command": "pnpm --ignore-workspace test", "result": "passed, 10 browser behavior tests after both completion-review fixes" },
+    { "command": "node export-fixture.mjs --check", "result": "passed, snapshot identity and all exported data reproduce exactly, timing fields excluded" },
+    { "command": "cargo test --release --locked", "result": "passed, crate has 0 separate Rust unit tests; behavior covered by exporter reproducibility and browser fixture checks" },
+    { "command": "cargo check --locked", "result": "passed" },
+    { "command": "cargo build --release --locked", "result": "passed" },
+    { "command": "cargo clippy --all-targets --locked -- -D warnings", "result": "passed" },
+    { "command": "cargo fmt -- --check", "result": "passed" },
+    { "command": "node --check", "result": "passed on all 9 JavaScript scripts and test files" },
+    { "command": "git diff --no-index --check /dev/null <each authored file>", "result": "passed for authored files except three intentional single-space blank context rows in xterm.patch; those rows are required by unified-diff syntax" },
+    { "command": "git diff --name-only 5e652939c23c567e9d519f759402e3df0f4ad251 -- package.json pnpm-lock.yaml pnpm-workspace.yaml src packages src-tauri scripts/experiments/terminal-restoration", "result": "empty, production and parallel native experiment unchanged" }
+  ],
+  "browser": "Arc existing session, Chromium 153.0.8010.53",
+  "manualEvidence": "Trusted mouse clicks covered visible controls at 720 CSS pixels. Initial desktop, live-input and narrow-window screenshots inspected visually.",
+  "resolvedValidationFailures": ["Page.navigate returned before the target document/module was ready; synchronous readiness polling and foregrounding only the owned tab fixed it.", "Browser preconnect sockets held server.close open; the isolated server now closes its own remaining connections during teardown.", "The new scrollbar changed the last 14 screenshot pixels; pixel checks exclude a documented 16-pixel gutter and public cell checks still cover all columns."],
+  "notRun": ["Full renderer and application Rust/backend suites locally", "Electron and real PTY integration", "WebGL or addons", "IME", "Images", "Resize/reflow adoption checks"],
+  "remainingLimits": ["Frozen fixture and controlled ASCII continuations only", "All 16 native history rows are already present at READY and withheld from xterm, not streamed over a network", "No production adoption or speedup claim"],
+  "cleanupTask": "KVG-5319",
+  "completionReview": {
+    "runId": "94d7e480-3bf6-41ef-a8d7-a1afc855c3f9",
+    "passes": 1,
+    "reviewerVerdict": "Request changes: two confirmed baseline replay/reset races",
+    "blockingFindings": "Both resolved with red/green Arc regressions and the complete experiment validation rerun; no second review pass"
+  },
+  "ciFollowup": {
+    "failedRun": "https://github.com/koenvg/openforge/actions/runs/36992831660",
+    "failures": ["Root Vitest discovered three Arc-only node:test suites and reported no test suite found", "The installer authentication fixture reached the macOS-only platform guard on Linux before testing authentication"],
+    "fixes": ["Name Arc-only suites *.browser.mjs and retain all ten tests under the isolated Node runner", "Keep native installer platform guards intact. Main now tests recovery authentication directly in c4a3401a6afac5046ccee64c6bc6e6d8b6dc742b; remove the temporary broad platform override and retain no installer-file changes"],
+    "verification": ["Root Vitest discovery returns zero Arc suites", "Latest merged installer snapshot: four tests pass and one platform-specific test skips on macOS; all five pass when the existing unsupported-platform case is exercised with a Linux child in a temporary preview", "Isolated build, full patched-source checks and all ten Arc tests pass", "Installer fixture JavaScript syntax passes"],
+    "broaderLocalRun": "Merged Node project: 124 files passed, one skipped and two timed out. Both stdio transport cases pass in a focused one-worker rerun; the remaining macOS idle-resource sampler timeout is already tracked as KVG-5338. No unrelated source was changed.",
+    "integrationFollowup": "Run 37016672661 exposed the temporary platform override conflicting with main's new unsupported-platform test. The override was removed completely; scripts/coordinated-install.test.mjs is identical to the original feature branch. Authentication is now tested directly by main, and the unsupported-platform guard is preserved.",
+    "review": "The task's single completion review already ran; no second pass launched"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "seamsConfirmedBy": "Koen",
+  "seams": ["isolated public xterm extension", "fixture comparison page"],
+  "cycles": [
+    { "test": "current screen renders and accepts keyboard input with all history withheld", "red": "TypeError: terminal.restoreScreenFirst is not a function", "green": "passed after public restoreScreenFirst implementation" },
+    { "test": "an older parsed page becomes scrollable without changing live cells or cursor", "red": "TypeError: terminal.prependHistoryPage is not a function", "green": "passed after public parsed-history prepend implementation" },
+    { "test": "frozen Ghostty screen paints before history and stays unchanged when a page arrives", "red": "Failed to fetch dynamically imported module: page.js", "green": "passed with real xterm rendering, all cells and cursor unchanged, zero differing cell pixels outside the scrollbar gutter" },
+    { "test": "reset supersedes controlled output that is still parsing", "red": "candidate and baseline cells diverged, stale LIVE OUTPUT survived reset", "green": "passed after queued screen clear and generation fencing" },
+    { "test": "pausing history cancels a scheduled page without hiding the current screen", "red": "TypeError: demo.resumeHistory is not a function", "green": "passed after cancellable one-second history schedule" },
+    { "test": "a controlled key reaches both terminals while baseline presentation waits for paint", "red": "candidate last row ready> k; baseline last row ready> , key lost while painting", "green": "passed after synchronous pending-output drain and separate mirroring/presentation states" },
+    { "test": "reset supersedes scheduled replay and the next release has only the new snapshot history", "red": "baseline retained 16 history rows after Reset; expected 0", "green": "passed after queued baseline parser reset and shared reset/release operation ownership" },
+    { "test": "root Vitest does not discover Arc-only Node browser suites", "red": "CI reports No test suite found for three .test.mjs files; local Vitest discovery lists all three", "green": "zero discovered Arc suites after .browser.mjs rename; the isolated Node runner still passes all ten tests" },
+    { "test": "installer authentication and native platform guards remain independent", "red": "GitHub merged fixture with a Linux child platform reports Cold installation supports macOS arm64 only instead of Invalid cold recovery authentication", "green": "the initial four-case probe passed, but main then added an unsupported-platform case that exposed the broad override; remove it after main's direct authentication fix, and all five merged cases pass in a Linux-child preview" }
+  ],
+  "limitations": ["The first page test used explicit module bootstrap while the page did not exist. The final test navigates the normal launch page.", "Early setup runs hit a browser navigation timeout and a scrollbar-only pixel difference. Neither is counted as proof of the missing product behavior.", "The first reset-race clock probe matched explicit zero-delay timers only and passed before the fix. It was corrected to include omitted-delay timers; only the subsequent 16-versus-0 failure counts as the regression's red checkpoint."]
+}
