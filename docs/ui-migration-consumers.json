@@ -1,5 +1,5 @@
 {
-  "sources": 2252,
+  "sources": 2272,
   "records": [
     {
       "path": "packages/plugin-runtime/src/commandValidation.test.ts",
@@ -263,7 +263,7 @@
       "kind": "script-component-candidate",
       "token": "tab",
       "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
-      "line": 124
+      "line": 125
     },
     {
       "path": "packages/plugin-sdk/scripts/check-published-contract.mjs",
@@ -271,7 +271,7 @@
       "kind": "script-component-candidate",
       "token": "tabs",
       "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
-      "line": 124
+      "line": 125
     },
     {
       "path": "packages/plugin-sdk/scripts/check-published-contract.mjs",
@@ -279,7 +279,7 @@
       "kind": "script-component-candidate",
       "token": "modal",
       "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
-      "line": 124
+      "line": 125
     },
     {
       "path": "packages/plugin-sdk/scripts/check-published-contract.mjs",
@@ -287,7 +287,7 @@
       "kind": "script-component-candidate",
       "token": "tooltip",
       "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
-      "line": 124
+      "line": 125
     },
     {
       "path": "packages/plugin-sdk/scripts/feedback-browser-contract.mjs",
@@ -1522,6 +1522,14 @@
       "line": 62
     },
     {
+      "path": "packages/plugin-sdk/src/ui/StatusBadge.browser.test.ts",
+      "subsystem": "packages/plugin-sdk",
+      "kind": "script-component-candidate",
+      "token": "progress",
+      "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
+      "line": 163
+    },
+    {
       "path": "packages/plugin-sdk/src/ui/StatusBadge.svelte",
       "subsystem": "packages/plugin-sdk",
       "kind": "unresolved",
@@ -1536,14 +1544,6 @@
       "token": "class={className}",
       "replacement": "Manual review required",
       "line": 34
-    },
-    {
-      "path": "packages/plugin-sdk/src/ui/StatusBadge.test.ts",
-      "subsystem": "packages/plugin-sdk",
-      "kind": "script-component-candidate",
-      "token": "progress",
-      "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
-      "line": 39
     },
     {
       "path": "packages/plugin-sdk/src/ui/Switch.svelte",
@@ -4855,7 +4855,7 @@
       "kind": "script-component-candidate",
       "token": "kbd",
       "replacement": "Preserve native kbd semantics with token-driven keyboard hints; shared packages use scoped styles",
-      "line": 31
+      "line": 34
     },
     {
       "path": "scripts/check-host-presentation-inventory.test.mjs",
@@ -4863,7 +4863,7 @@
       "kind": "script-component-candidate",
       "token": "kbd-xs\">Small",
       "replacement": "Preserve native kbd semantics with token-driven keyboard hints; shared packages use scoped styles",
-      "line": 33
+      "line": 36
     },
     {
       "path": "scripts/check-host-presentation-inventory.test.mjs",
@@ -4871,7 +4871,7 @@
       "kind": "script-component-candidate",
       "token": "kbd",
       "replacement": "Preserve native kbd semantics with token-driven keyboard hints; shared packages use scoped styles",
-      "line": 35
+      "line": 38
     },
     {
       "path": "scripts/check-host-presentation-inventory.test.mjs",
@@ -4879,7 +4879,7 @@
       "kind": "script-component-candidate",
       "token": "kbd-xs",
       "replacement": "Preserve native kbd semantics with token-driven keyboard hints; shared packages use scoped styles",
-      "line": 35
+      "line": 38
     },
     {
       "path": "scripts/check-host-presentation-inventory.test.mjs",
@@ -4887,7 +4887,7 @@
       "kind": "script-candidate",
       "token": "'hover:text-primary/50'}></div>",
       "replacement": "'hover:text-of-accent/50'}></div>",
-      "line": 39
+      "line": 42
     },
     {
       "path": "scripts/check-host-presentation-inventory.test.mjs",
@@ -4895,7 +4895,7 @@
       "kind": "script-arbitrary-variable-candidate",
       "token": "var(--radius-field);",
       "replacement": "var(--of-radius-control);",
-      "line": 39
+      "line": 42
     },
     {
       "path": "scripts/check-host-presentation-inventory.test.mjs",
@@ -4903,7 +4903,7 @@
       "kind": "script-arbitrary-variable-candidate",
       "token": "var(--color-base-content);",
       "replacement": "var(--of-text);",
-      "line": 39
+      "line": 42
     },
     {
       "path": "scripts/check-host-presentation-inventory.test.mjs",
@@ -4911,7 +4911,7 @@
       "kind": "script-variable-candidate",
       "token": "--radius-field",
       "replacement": "--of-radius-control",
-      "line": 39
+      "line": 42
     },
     {
       "path": "scripts/check-host-presentation-inventory.test.mjs",
@@ -4919,7 +4919,7 @@
       "kind": "script-variable-candidate",
       "token": "--color-base-content",
       "replacement": "--of-text",
-      "line": 39
+      "line": 42
     },
     {
       "path": "scripts/check-host-presentation-inventory.test.mjs",
@@ -4927,7 +4927,7 @@
       "kind": "script-candidate",
       "token": "bg-base-100",
       "replacement": "bg-of-surface",
-      "line": 45
+      "line": 48
     },
     {
       "path": "scripts/check-host-presentation-inventory.test.mjs",
@@ -4935,7 +4935,7 @@
       "kind": "script-candidate",
       "token": "hover:text-primary/50",
       "replacement": "hover:text-of-accent/50",
-      "line": 45
+      "line": 48
     },
     {
       "path": "scripts/check-host-presentation-inventory.test.mjs",
@@ -4943,7 +4943,7 @@
       "kind": "script-arbitrary-variable-candidate",
       "token": "--radius-field",
       "replacement": "--of-radius-control",
-      "line": 45
+      "line": 48
     },
     {
       "path": "scripts/check-host-presentation-inventory.test.mjs",
@@ -4951,7 +4951,7 @@
       "kind": "script-variable-candidate",
       "token": "--radius-field",
       "replacement": "--of-radius-control",
-      "line": 45
+      "line": 48
     },
     {
       "path": "scripts/check-host-presentation-inventory.test.mjs",
@@ -4959,7 +4959,7 @@
       "kind": "script-arbitrary-variable-candidate",
       "token": "--color-base-content",
       "replacement": "--of-text",
-      "line": 45
+      "line": 48
     },
     {
       "path": "scripts/check-host-presentation-inventory.test.mjs",
@@ -4967,7 +4967,7 @@
       "kind": "script-variable-candidate",
       "token": "--color-base-content",
       "replacement": "--of-text",
-      "line": 45
+      "line": 48
     },
     {
       "path": "scripts/check-pr-review-presentation.mjs",
@@ -6354,6 +6354,46 @@
       "line": 105
     },
     {
+      "path": "scripts/experiments/xterm-screen-first/adapter.ts",
+      "subsystem": "scripts/experiments",
+      "kind": "script-component-candidate",
+      "token": "tab",
+      "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
+      "line": 19
+    },
+    {
+      "path": "scripts/experiments/xterm-screen-first/index.html",
+      "subsystem": "scripts/experiments",
+      "kind": "component",
+      "token": "loading",
+      "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
+      "line": 39
+    },
+    {
+      "path": "scripts/experiments/xterm-screen-first/index.html",
+      "subsystem": "scripts/experiments",
+      "kind": "component",
+      "token": "loading",
+      "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
+      "line": 44
+    },
+    {
+      "path": "scripts/experiments/xterm-screen-first/launch.mjs",
+      "subsystem": "scripts/experiments",
+      "kind": "script-component-candidate",
+      "token": "tab",
+      "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
+      "line": 22
+    },
+    {
+      "path": "scripts/experiments/xterm-screen-first/test/extension.browser.mjs",
+      "subsystem": "scripts/experiments",
+      "kind": "script-component-candidate",
+      "token": "input",
+      "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
+      "line": 9
+    },
+    {
       "path": "scripts/file-viewer-ui-migration.test.mjs",
       "subsystem": "scripts/file-viewer-ui-migration.test.mjs",
       "kind": "script-component-candidate",
@@ -6488,6 +6528,22 @@
       "token": "className = `${upperCamel(kind)}ResourceIdentityData`",
       "replacement": "Review script class producer",
       "line": 332
+    },
+    {
+      "path": "scripts/legacy-ui-source-discovery.test.mjs",
+      "subsystem": "scripts/legacy-ui-source-discovery.test.mjs",
+      "kind": "script-selector-candidate",
+      "token": "text-error",
+      "replacement": "text-of-danger",
+      "line": 80
+    },
+    {
+      "path": "scripts/legacy-ui-source-discovery.test.mjs",
+      "subsystem": "scripts/legacy-ui-source-discovery.test.mjs",
+      "kind": "script-candidate",
+      "token": "text-error",
+      "replacement": "text-of-danger",
+      "line": 103
     },
     {
       "path": "scripts/native-impact.mjs",
@@ -9632,6 +9688,14 @@
       "token": "loading",
       "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
       "line": 84
+    },
+    {
+      "path": "src/components/task-detail/selfReviewFileStateController.svelte.test.ts",
+      "subsystem": "host",
+      "kind": "script-component-candidate",
+      "token": "loading",
+      "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
+      "line": 189
     },
     {
       "path": "src/components/task-detail/SelfReviewRepositoryPreview.test.ts",
@@ -13720,6 +13784,38 @@
       "token": "loading",
       "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
       "line": 22
+    },
+    {
+      "path": "storybook/taskBrowserPages.browser.test.ts",
+      "subsystem": "storybook/taskBrowserPages.browser.test.ts",
+      "kind": "script-component-candidate",
+      "token": "loading",
+      "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
+      "line": 9
+    },
+    {
+      "path": "storybook/taskBrowserPages.browser.test.ts",
+      "subsystem": "storybook/taskBrowserPages.browser.test.ts",
+      "kind": "script-component-candidate",
+      "token": "input",
+      "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
+      "line": 53
+    },
+    {
+      "path": "storybook/taskBrowserPages.browser.test.ts",
+      "subsystem": "storybook/taskBrowserPages.browser.test.ts",
+      "kind": "script-component-candidate",
+      "token": "loading",
+      "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
+      "line": 74
+    },
+    {
+      "path": "storybook/taskBrowserPages.browser.test.ts",
+      "subsystem": "storybook/taskBrowserPages.browser.test.ts",
+      "kind": "script-component-candidate",
+      "token": "loading",
+      "replacement": "Use the corresponding SDK control; preserve caller semantics and bounds",
+      "line": 75
     }
   ]
 }

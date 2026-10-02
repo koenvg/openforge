@@ -181,7 +181,7 @@ See [Task Browser migration validation](task-browser-presentation-migration.md) 
 
 `scripts/ui-removal-review.json` records exact, counted non-consumer dispositions. These cover native roles/elements, command/state identifiers, SDK caller-owned CSS and attribute forwarding, finite local/semantic class composition, classifier vocabulary, and intentional poisoned-variable assertions. The two `tooltip-story` records are a locally defined scoped class, not a daisyUI modifier. New expressions, extra occurrences, missing sources, duplicate reviews, and stale records fail. The gate does not silently ignore unresolved expressions or all test files.
 
-Five exact negative-test sources are excluded with reasons in that policy. They seed rejected classes, variables, dependency inputs, or unreviewed producers. Real fixture styles remain checked. Existing shader/color palette variables and the `--color-of-*` namespace remain valid; the guard does not ban every `--color-*` name.
+Six exact negative-test sources are excluded with reasons in that policy. They seed rejected classes, variables, dependency inputs, or unreviewed producers. Real fixture styles remain checked. Existing shader/color palette variables and the `--color-of-*` namespace remain valid; the guard does not ban every `--color-*` name.
 
 The unused `getTaskStateBadgeClass` has no imports or callers, so its old strings are not executable consumers. KVG-5335 tracks its reintroduction after KVG-4627. No task-state logic was changed to clean it up here. All executable color, geometry, component and dependency consumers outside deliberate negative probes have been removed or migrated. The refreshed machine-readable ledger remains a classification report, not a raw-count removal threshold.
 

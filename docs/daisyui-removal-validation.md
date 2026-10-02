@@ -12,7 +12,7 @@ Implementation is present. The complete affected-system run passed 35 of 36 comm
 
 The starting commit was `3a78e23096cbf05344d45fcf6b5f390cfb285b57`. Planning PR [#2373](https://github.com/koenvg/openforge/pull/2373) was merged and all ten native prerequisites were done. The shared OpenSpec checklist was not treated as executable readiness evidence. Parent KVG-4687 and KVG-4522 settings logic were not changed.
 
-The agreed public test boundaries are the inventory CLI, mounted settings/theme selection, packed SDK publication, and production rendering. `pnpm check:ui-migration` combines the established presentation guard with removal readiness across 2,252 executable sources. The [inventory guide](ui-migration-inventory.md#removal-readiness-kvg-4874) describes exact negative-test exclusions and counted non-consumer dispositions. Imperative `className`, `setAttribute('class', ...)`, and `classList` mutations are distinguished from native role/state vocabulary. Compatibility stylesheet reads cannot hide behind an absence-test disposition.
+The agreed public test boundaries are the inventory CLI, mounted settings/theme selection, packed SDK publication, and production rendering. `pnpm check:ui-migration` combines the established presentation guard with removal readiness across 2,272 executable sources after integration with `main`. The [inventory guide](ui-migration-inventory.md#removal-readiness-kvg-4874) describes exact negative-test exclusions and counted non-consumer dispositions. Imperative `className`, `setAttribute('class', ...)`, and `classList` mutations are distinguished from native role/state vocabulary. Compatibility stylesheet reads cannot hide behind an absence-test disposition.
 
 Negative guard strings and the machine-readable inventory ledger are excluded from Tailwind stylesheet discovery, not from source analysis. A production CSS test verifies that neither can generate compatibility-variable readers. The refreshed [consumer ledger](ui-migration-consumers.json) includes classifications of deliberate negative inputs; its raw count is not a removal threshold.
 
@@ -52,11 +52,11 @@ Set `TMPDIR=/tmp TEMP=/tmp TMP=/tmp` for detached Playwright jobs. Default Story
 
 ## Affected-system validation
 
-Scope includes the renderer/shared presentation, SDK publication, PR-review UI, terminal runtime, all five bundled plugins, Storybook, source discovery, and production assets. Root dependency/build configuration and test infrastructure warrant full affected-system checks. No Rust, Electron-main, website, or mobile source changed; their independent suites and packaged application builds were not run.
+Scope includes the renderer/shared presentation, SDK publication, PR-review UI, terminal runtime, all five bundled plugins, Storybook, source discovery, and production assets. Root dependency/build configuration and test infrastructure warrant full affected-system checks. The removal and CI-fix commits do not change Rust, Electron-main, website, or mobile code; their independent suites and packaged application builds were not run. The later merge incorporates existing upstream changes without claiming new validation of those independent systems.
 
 The first post-removal host run found two missed test migrations: a browser test still read the deleted adapter and a motion fixture still used `.loading`. They were corrected and the guard received five red/green regression cases. A subsequent compiled-CSS regression demonstrated and removed an unused compatibility reader generated from negative-test metadata. The 36-command affected-system run passed 35 checks; the unchanged Task Browser typecheck failed. After the review fix, full host validation passed **897 files and 7,747 tests**, with 18 skipped files, 100 skipped tests, and three expected failures. Root TypeScript, plugin-host/Storybook typechecks, lint and inventory also passed again. Logs are in `validation-final/` and `validation-post-review/`.
 
-| Command group | Final result |
+| Command group | Original removal result |
 | --- | --- |
 | `pnpm test --maxWorkers=3` | Passed after review fix: 897 files, 7,747 tests; skips and expected failures above. |
 | `pnpm exec tsc --noEmit`, `pnpm plugin-host:typecheck`, `pnpm lint` | Passed. |
@@ -76,6 +76,18 @@ The first post-removal host run found two missed test migrations: a browser test
 - `pnpm i` ran first. A forced frozen installation timed out after 120 seconds; the subsequent `pnpm i --frozen-lockfile` completed. The separate packed-SDK consumer installation passed. Initial dependency build scripts for `@vgpu/adapter-node`, `esbuild`, and `webgpu` were ignored.
 - Chromium/Storybook and compiled fixtures prove browser paint, not every Electron OS surface or signed-in remote integration. No packaged Electron smoke run, canonical screenshot approval, or repository-wide Rust/mobile/website run is claimed. Test-run skips and expected failures remain visible in the logs.
 - KVG-5335 tracks the unused legacy badge helper reintroduced after KVG-4627. It has no callers and was not removed inline. KVG-5339 tracks the unrelated Task Browser typecheck failures. No follow-up task was started.
+
+## CI follow-up on PR #2703
+
+CI tested the branch merged with `main`. Its static gate found a stale `progress` disposition after the upstream StatusBadge test rewrite. Integrating `main` through `99ca455c8` also added executable experiments and tests. Their candidates were inspected and recorded with exact counts; the owned-source discovery negative test is the sixth explicit exclusion. Readiness now passes across 2,272 executable sources without weakening its checks.
+
+Six dark review screenshots exposed a hidden paint dependency. daisyUI had colored the diff renderer's private `data-theme="dark"` container, which shows through transparent annotation rows. `DiffViewerTheme.css` now owns the approved light and dark annotation backgrounds. The browser regression failed before this change and passes while the host surface changes. No canonical PNG or tolerance changed.
+
+The integration validation repeated the affected systems. After the reruns, 36 of 37 command groups pass; the remaining failure is the same six Task Browser type errors tracked by KVG-5339. Full host tests pass with **899 files and 7,772 tests**, plus 19 skipped files, 125 skipped tests and three expected failures. The first full run timed out in one idle-resource sampler test at five seconds. Its isolated 23-test repeat and the complete two-worker run both passed. A bounds command initially could not run because its relocated baseline input was missing; after restoring that input, all 60 cases passed. Terminal-runtime tests and build were repeated under unique log names after a runner log-name collision.
+
+Pinned ARM Linux validation passes all **432 canonical comparisons and 432 independent repeatability captures**, plus all five regression-probe phases. Storybook coverage reports 225 covered, 47 explicitly excluded, zero uncovered/errors. SDK tests/build/entrypoints/clean publication, review UI, terminal runtime/conformance, plugin tests/builds, root lint/types/build, Storybook types/build and both 12-case settings checks pass. The focused guard/discovery/paint suite passes 65 tests.
+
+Logs are in `artifacts/storybook-visual/daisyui-removal/validation-ci/`. Visual evidence is in `artifacts/storybook-visual-runs/shard-1-of-1-1rGumE/` and `probes-qMXrIU/`. Both record merge commit `efb146394baffb4ea76b802ce24ac3fc80d3afcf` with the pending CI fix as a dirty checkout. The earlier 180-case before/after measurements describe the original removal state, before upstream integration. No second completion reviewer was launched.
 
 ## Completion review
 

@@ -1,3 +1,12 @@
+/* Preserve the approved annotation canvas in both renderer appearances.
+   Its foreign data-theme must not depend on host base paint. */
+.diff-tailwindcss-wrapper[data-theme='light'] {
+  background-color: #fff;
+}
+
+.diff-tailwindcss-wrapper[data-theme='dark'] {
+  background-color: #1d232a;
+}
 /* Flash highlight when scrolling to a comment via sidebar click */
 @keyframes diff-comment-flash {
   0% { background-color: color-mix(in oklch, var(--of-info) 40%, transparent); }

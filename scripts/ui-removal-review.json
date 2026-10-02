@@ -1,12 +1,69 @@
 {
   "negativeTests": {
     "scripts/check-ui-migration-inventory.test.mjs": "Intentional rejected class, selector, variable, dependency and malformed-source inputs for the inventory guard.",
+    "scripts/legacy-ui-source-discovery.test.mjs": "Intentional rejected color, malformed-source and dependency inputs for owned-source discovery.",
     "scripts/check-host-presentation-inventory.test.mjs": "Intentional rejected keyboard-hint and legacy paint inputs for the migrated-host guard.",
     "scripts/ui-removal-readiness.test.mjs": "Intentional rejected dependency, class, dynamic-producer and policy inputs for the removal CLI.",
     "scripts/sdk-ui-migration.test.mjs": "Intentional rejected unreviewed dynamic SDK class producer.",
     "src/components/task-controls-migration.test.ts": "Intentional legacy button source and lexical guard definitions, not mounted controls."
   },
   "reviewed": [
+    {
+      "path": "packages/plugin-sdk/src/ui/StatusBadge.browser.test.ts",
+      "kind": "script-component-candidate",
+      "token": "progress",
+      "count": 1,
+      "reason": "Browser scenario title describing icon animation, not a class passed to a styling sink."
+    },
+    {
+      "path": "scripts/experiments/xterm-screen-first/adapter.ts",
+      "kind": "script-component-candidate",
+      "token": "tab",
+      "count": 1,
+      "reason": "Error message identifying the active Arc browser tab, not a styling class."
+    },
+    {
+      "path": "scripts/experiments/xterm-screen-first/index.html",
+      "kind": "component",
+      "token": "loading",
+      "count": 2,
+      "reason": "Fixture-local CSS class whose inline stylesheet defines only min-height: 24px. This standalone experiment loads xterm CSS, not host or daisyUI CSS."
+    },
+    {
+      "path": "scripts/experiments/xterm-screen-first/launch.mjs",
+      "kind": "script-component-candidate",
+      "token": "tab",
+      "count": 1,
+      "reason": "Error message about opening an Arc browser tab, not a styling class."
+    },
+    {
+      "path": "scripts/experiments/xterm-screen-first/test/extension.browser.mjs",
+      "kind": "script-component-candidate",
+      "token": "input",
+      "count": 1,
+      "reason": "Keyboard-input scenario title, not a styling class."
+    },
+    {
+      "path": "src/components/task-detail/selfReviewFileStateController.svelte.test.ts",
+      "kind": "script-component-candidate",
+      "token": "loading",
+      "count": 1,
+      "reason": "Scenario title describing a diff loading state, not a styling class."
+    },
+    {
+      "path": "storybook/taskBrowserPages.browser.test.ts",
+      "kind": "script-component-candidate",
+      "token": "loading",
+      "count": 3,
+      "reason": "Page state identifier, state comparison and accessible Stop loading action; not classes passed to styling sinks."
+    },
+    {
+      "path": "storybook/taskBrowserPages.browser.test.ts",
+      "kind": "script-component-candidate",
+      "token": "input",
+      "count": 1,
+      "reason": "Native input in the button, input selector used to measure toolbar bounds, not a styling class."
+    },
     {
       "path": "packages/plugin-runtime/src/commandValidation.test.ts",
       "kind": "script-component-candidate",
@@ -615,13 +672,6 @@
       "token": "class={className}",
       "count": 1,
       "reason": "Supported SDK caller-owned class/attribute forwarding, or test-only data. SDK consumers remain covered by the full scan."
-    },
-    {
-      "path": "packages/plugin-sdk/src/ui/StatusBadge.test.ts",
-      "kind": "script-component-candidate",
-      "token": "progress",
-      "count": 1,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "packages/plugin-sdk/src/ui/Switch.svelte",
