@@ -19,6 +19,13 @@ pub(crate) struct HostPause {
     _ingress: Paused,
 }
 impl HostCheckpoint {
+    pub fn verify_credentials(
+        &self,
+        runtime: &crate::agent_config::AgentRuntime,
+        deadline: &crate::pause_deadline::PauseDeadline,
+    ) -> Result<(), Error> {
+        self.backend.verify_credentials(runtime, Some(deadline))
+    }
     pub fn validate_for_image(
         &self,
         installation: &InstallationId,
@@ -39,21 +46,26 @@ impl HostCheckpoint {
     }
 }
 impl Host {
-    pub fn checkpoint(&self) -> Result<(HostCheckpoint, HostPause), Error> {
-        // Reject resource pressure while the old image is still freely serving.
-        self.backend.preflight_checkpoint()?;
-        // Ingress drains before the ledger/table gates: active forwarding and notification
-        // transactions may themselves need the table. Readers drain before the model barriers.
-        let ingress = self.ingress_gate.pause(Duration::from_secs(32))?;
-        let state = self.runtime.block_on(self.state.lock());
-        let (backend, readers) = self.backend.checkpoint()?;
-        let ledger = state.checkpoint()?;
+    pub fn checkpoint(
+        &self,
+        deadline: &crate::pause_deadline::PauseDeadline,
+    ) -> Result<(HostCheckpoint, HostPause), Error> {
+        // Ingress drains before ledger/table gates; forwarding may itself need the table.
+        let ingress = self.ingress_gate.pause(deadline.remaining()?)?;
+        let state = self.runtime.block_on(async {
+            tokio::time::timeout(deadline.remaining()?, self.state.lock())
+                .await
+                .map_err(|_| crate::pause_deadline::PauseDeadline::expired())
+        })?;
+        let (backend, readers) = self.backend.checkpoint(deadline)?;
+        let ledger = state.checkpoint_before(deadline.instant())?;
         let sidecar = self
             .sidecar
             .read()
             .map_err(|_| Error::OutcomeUnknown)?
             .as_ref()
             .map(|endpoint| (**endpoint).clone());
+        deadline.check()?;
         Ok((
             HostCheckpoint {
                 format: 1,

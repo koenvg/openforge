@@ -1,5 +1,5 @@
 use super::{
-    descriptors::{self, Resources, Roots},
+    descriptors::{self, Roots},
     images::Image,
     Snapshot, STATE_FORMAT,
 };
@@ -51,7 +51,8 @@ pub(super) struct Body {
 impl Header {
     pub fn capture(
         runtime: &RuntimeDirectory,
-        resources: &Resources,
+        roots: Roots,
+        port: u16,
         host: &HostCheckpoint,
         manager: &Snapshot,
         operation: OperationId,
@@ -64,11 +65,7 @@ impl Header {
         RuntimeDirectory::reopen(&root, runtime.credentials())?;
         let agent_runtime = AgentRuntime {
             directory: runtime.path().into(),
-            port: resources
-                .agent
-                .local_addr()
-                .map_err(|_| Error::RecoveryUnavailable)?
-                .port(),
+            port,
         };
         let target = manager.target(&operation)?.clone();
         let header = Self {
@@ -79,7 +76,7 @@ impl Header {
             root,
             credentials: runtime.credentials().clone(),
             agent_runtime,
-            roots: Roots::capture(resources)?,
+            roots,
             masters: host.descriptors(),
             operation,
             recovery: manager.current.clone(),
@@ -187,7 +184,11 @@ pub(super) fn body(header: &Header, bytes: &[u8], start: usize) -> Result<Body, 
     }
     serde_json::from_slice(body).map_err(|_| Error::Version)
 }
-pub(super) fn create(directory: &Path, bytes: &[u8]) -> Result<File, Error> {
+pub(super) fn create(
+    directory: &Path,
+    bytes: &[u8],
+    deadline: &crate::pause_deadline::PauseDeadline,
+) -> Result<File, Error> {
     let path = directory.join(format!("replacement-{}.tmp", uuid::Uuid::new_v4()));
     let mut writer = OpenOptions::new()
         .write(true)
@@ -200,6 +201,7 @@ pub(super) fn create(directory: &Path, bytes: &[u8]) -> Result<File, Error> {
         writer
             .write_all(bytes)
             .map_err(|_| Error::RecoveryUnavailable)?;
+        deadline.stage("file")?;
         writer.sync_all().map_err(|_| Error::RecoveryUnavailable)?;
         let file = OpenOptions::new()
             .read(true)

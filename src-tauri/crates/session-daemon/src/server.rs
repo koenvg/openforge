@@ -138,13 +138,23 @@ pub(crate) fn serve(
             std::fs::remove_file(&socket).map_err(io_error)?;
         }
         // A lost reply does not roll back an accepted operation or controller generation.
-        let _ = write_frame(
-            &mut stream,
-            &Envelope {
-                version: VERSION,
-                body: result,
-            },
-        );
+        let can_reply = match activation.as_ref() {
+            Some(activation) => activation.reply_budget().is_ok_and(|remaining| {
+                stream
+                    .set_write_timeout(Some(remaining.min(Duration::from_secs(1))))
+                    .is_ok()
+            }),
+            None => true,
+        };
+        if can_reply {
+            let _ = write_frame(
+                &mut stream,
+                &Envelope {
+                    version: VERSION,
+                    body: result,
+                },
+            );
+        }
         if let Some(activation) = activation {
             activation.execute(&mut manager);
         }

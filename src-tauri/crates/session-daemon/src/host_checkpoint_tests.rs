@@ -89,7 +89,9 @@ fn host_checkpoint_preserves_journal_credentials_registration_and_retry_outcomes
         })
         .unwrap();
     let credential = std::fs::read(&credential_path).unwrap();
-    let (checkpoint, pause) = host.checkpoint().unwrap();
+    let deadline =
+        crate::pause_deadline::PauseDeadline::new(Arc::new(std::sync::atomic::AtomicUsize::new(0)));
+    let (checkpoint, pause) = host.checkpoint(&deadline).unwrap();
     let mut missing_backend = serde_json::to_value(&checkpoint).unwrap();
     missing_backend["backend"]["records"] = serde_json::json!([]);
     assert!(
@@ -198,7 +200,9 @@ fn backend_checkpoint_without_a_profile_restores_the_light_fallback() {
     };
     let mut host = Host::new(installation.clone(), runtime.clone()).unwrap();
     connect(&mut host, installation.clone());
-    let (checkpoint, pause) = host.checkpoint().unwrap();
+    let deadline =
+        crate::pause_deadline::PauseDeadline::new(Arc::new(std::sync::atomic::AtomicUsize::new(0)));
+    let (checkpoint, pause) = host.checkpoint(&deadline).unwrap();
     let mut value = serde_json::to_value(checkpoint).unwrap();
     value["backend"]
         .as_object_mut()

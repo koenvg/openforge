@@ -52,15 +52,35 @@ pub(super) fn describe(state: Option<&[u8]>) -> Result<(), Error> {
     serde_json::to_writer(std::io::stdout().lock(), &contract).map_err(|_| refused())
 }
 pub(super) fn run(path: &Path, state: Option<&[u8]>) -> Result<Contract, Error> {
-    run_cancellable(path, state, &std::sync::atomic::AtomicBool::new(false))
+    run_inner(path, state, None, None, "")
 }
 pub(super) fn run_cancellable(
     path: &Path,
     state: Option<&[u8]>,
     cancelled: &std::sync::atomic::AtomicBool,
 ) -> Result<Contract, Error> {
-    if cancelled.load(std::sync::atomic::Ordering::Acquire) {
+    run_inner(path, state, Some(cancelled), None, "")
+}
+pub(super) fn run_paused(
+    path: &Path,
+    state: &[u8],
+    deadline: &crate::pause_deadline::PauseDeadline,
+    stage: &str,
+) -> Result<Contract, Error> {
+    run_inner(path, Some(state), None, Some(deadline), stage)
+}
+fn run_inner(
+    path: &Path,
+    state: Option<&[u8]>,
+    cancelled: Option<&std::sync::atomic::AtomicBool>,
+    pause: Option<&crate::pause_deadline::PauseDeadline>,
+    stage: &str,
+) -> Result<Contract, Error> {
+    if cancelled.is_some_and(|cancelled| cancelled.load(std::sync::atomic::Ordering::Acquire)) {
         return Err(refused());
+    }
+    if let Some(pause) = pause {
+        pause.check()?;
     }
     // Compute the descriptor ceiling before fork, outside the async-signal-safe section.
     let descriptor_limit = unsafe { libc::getdtablesize() };
@@ -86,6 +106,16 @@ pub(super) fn run_cancellable(
         } else {
             Stdio::piped()
         });
+    #[cfg(feature = "replacement-fixtures")]
+    if pause.is_some() {
+        command.env(
+            "OPENFORGE_TEST_STATE_PROBE_DELAY_MS",
+            crate::pause_deadline::stage_delay(stage)
+                .as_millis()
+                .to_string(),
+        );
+    }
+    let _ = stage;
     // SAFETY: only async-signal-safe libc calls run after fork. CLOEXEC preserves
     // Command's error pipe while lending no protected/session/checkpoint descriptors.
     unsafe {
@@ -115,21 +145,25 @@ pub(super) fn run_cancellable(
         refused()
     })?));
     let child = helper.0.as_mut().ok_or_else(refused)?;
-    let result = probe_child(child, state, cancelled);
+    let result = probe_child(child, state, cancelled, pause);
     helper.finish()?;
     result
 }
 fn probe_child(
     child: &mut std::process::Child,
     state: Option<&[u8]>,
-    cancelled: &std::sync::atomic::AtomicBool,
+    cancelled: Option<&std::sync::atomic::AtomicBool>,
+    pause: Option<&crate::pause_deadline::PauseDeadline>,
 ) -> Result<Contract, Error> {
     let mut pipes = ProbePipes::new(child, state.unwrap_or_default())?;
     let expected_digest = state.map(|bytes| format!("{:x}", Sha256::digest(bytes)));
     let mut deadlines = ProbeDeadlines::new(state.is_some());
     loop {
-        if cancelled.load(std::sync::atomic::Ordering::Acquire) {
+        if cancelled.is_some_and(|cancelled| cancelled.load(std::sync::atomic::Ordering::Acquire)) {
             return Err(refused());
+        }
+        if let Some(pause) = pause {
+            pause.check()?;
         }
         pipes.send_input()?;
         pipes.read_readiness(&mut deadlines)?;

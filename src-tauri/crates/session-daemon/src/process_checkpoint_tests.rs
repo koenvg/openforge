@@ -31,9 +31,11 @@ fn abandoned_restore_does_not_consume_output_close_the_master_or_kill_the_servin
     .unwrap();
     wait_for_text(&process, b"READY");
     let pid = process.pid();
-    let pause = process.pause().unwrap();
+    let deadline =
+        crate::pause_deadline::PauseDeadline::new(Arc::new(std::sync::atomic::AtomicUsize::new(0)));
+    let pause = process.pause(deadline.remaining().unwrap()).unwrap();
     let before = process.recover(0).unwrap();
-    let checkpoint = process.checkpoint(&pause).unwrap();
+    let checkpoint = process.checkpoint(&pause, &deadline).unwrap();
     let checkpoint = serde_json::from_slice(&serde_json::to_vec(&checkpoint).unwrap()).unwrap();
     let restored = Process::restore(checkpoint, journal).unwrap();
     assert_eq!(restored.pid(), pid);

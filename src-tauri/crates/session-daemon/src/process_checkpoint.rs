@@ -57,17 +57,20 @@ impl ProcessCheckpoint {
 }
 
 impl Process {
-    pub fn pause(&self) -> Result<Paused, Error> {
-        self.reader_gate.pause(Duration::from_secs(5))
+    pub fn pause(&self, budget: Duration) -> Result<Paused, Error> {
+        self.reader_gate.pause(budget)
     }
-    pub fn checkpoint(&self, pause: &Paused) -> Result<ProcessCheckpoint, Error> {
+    pub fn checkpoint(
+        &self,
+        pause: &Paused,
+        deadline: &crate::pause_deadline::PauseDeadline,
+    ) -> Result<ProcessCheckpoint, Error> {
         if !pause.protects(&self.reader_gate) {
             return Err(Error::InvalidRequest);
         }
-        let model = self
-            .model
-            .checkpoint()
-            .map_err(|_| Error::RecoveryUnavailable)?;
+        let model = Arc::clone(&self.model);
+        let model =
+            deadline.run(move || model.checkpoint().map_err(|_| Error::RecoveryUnavailable))?;
         Ok(ProcessCheckpoint {
             format: 1,
             descriptor: self.master.checkpoint()?,

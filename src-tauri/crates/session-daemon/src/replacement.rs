@@ -11,6 +11,7 @@ mod resume;
 mod tests;
 mod version;
 use crate::host::{Host, HostPause};
+use crate::pause_deadline::PauseDeadline;
 pub(crate) use descriptors::Resources;
 use openforge_session_client::runtime::RuntimeDirectory;
 use openforge_session_host::CapacityKind;
@@ -23,7 +24,7 @@ use std::{
     os::{fd::AsRawFd, unix::process::CommandExt},
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
     },
     time::{Duration, Instant},
@@ -137,6 +138,7 @@ pub(crate) struct Manager {
     jobs: Vec<Job>,
     pending: Option<Pending>,
     directory: PathBuf,
+    pause_workers: Arc<AtomicUsize>,
 }
 pub(crate) struct Dispatch {
     pub response: Response,
@@ -148,6 +150,7 @@ pub(crate) struct Activation {
     image: images::Image,
     operation: OperationId,
     checkpoint_bytes: usize,
+    deadline: PauseDeadline,
     paused_at: Instant,
     _spare_descriptors: Vec<File>,
     _pause: HostPause,
@@ -178,6 +181,7 @@ impl Manager {
             running_version: version::current().unwrap_or_else(|_| IMAGE_VERSION.into()),
             jobs: Vec::new(),
             pending: None,
+            pause_workers: Arc::new(AtomicUsize::new(0)),
             directory: runtime.path().join("images"),
         }
     }
@@ -229,6 +233,7 @@ impl Manager {
     }
     fn busy(&self) -> bool {
         self.pending.is_some()
+            || self.pause_workers.load(Ordering::Acquire) != 0
             || self.jobs.iter().any(|job| {
                 matches!(
                     job.state,
@@ -399,8 +404,10 @@ impl Manager {
         resources: &Resources,
         operation: OperationId,
     ) -> Result<Activation, Error> {
+        host.backend.preflight_checkpoint()?;
         let paused_at = Instant::now();
-        let (host, pause) = host.checkpoint()?;
+        let deadline = PauseDeadline::new(Arc::clone(&self.pause_workers));
+        let (host, pause) = host.checkpoint(&deadline)?;
         // Reserve initialization headroom while refusal can still reopen the old owner.
         // Exec closes these CLOEXEC descriptors before rebuilding reader/writer/runtime wrappers.
         let spare = File::open("/dev/null")
@@ -417,15 +424,44 @@ impl Manager {
             current: self.current.clone().ok_or(Error::UnsupportedReplacement)?,
             jobs: self.jobs.clone(),
         };
-        let header =
-            checkpoint::Header::capture(runtime, resources, &host, &manager, operation.clone())?;
-        let image = header.target.clone();
-        let recovery = header.recovery.clone();
-        let mut retained = header.descriptors();
-        let bytes = checkpoint::encode(header, &checkpoint::Body { host, manager })?;
-        images::verify(&image, Some(&bytes))?;
-        images::verify(&recovery, Some(&bytes))?;
-        let file = checkpoint::create(runtime.path(), &bytes)?;
+        let root = runtime
+            .path()
+            .parent()
+            .ok_or(Error::InvalidRequest)?
+            .to_path_buf();
+        let credentials = runtime.credentials().clone();
+        let roots = descriptors::Roots::capture(resources)?;
+        let port = resources
+            .agent
+            .local_addr()
+            .map_err(|_| Error::RecoveryUnavailable)?
+            .port();
+        let directory = runtime.path().to_path_buf();
+        let worker_operation = operation.clone();
+        let worker_deadline = deadline.clone();
+        let (file, checkpoint_bytes, image, mut retained) = deadline.run(move || {
+            worker_deadline.stage("header")?;
+            let runtime = RuntimeDirectory::reopen(&root, &credentials)?;
+            let header = checkpoint::Header::capture(
+                &runtime,
+                roots,
+                port,
+                &host,
+                &manager,
+                worker_operation,
+            )?;
+            host.verify_credentials(&header.agent_runtime, &worker_deadline)?;
+            let image = header.target.clone();
+            let recovery = header.recovery.clone();
+            let retained = header.descriptors();
+            worker_deadline.stage("encode")?;
+            let bytes = checkpoint::encode(header, &checkpoint::Body { host, manager })?;
+            images::verify_paused(&image, &bytes, &worker_deadline, "target-probe")?;
+            images::verify_paused(&recovery, &bytes, &worker_deadline, "recovery-probe")?;
+            let file = checkpoint::create(&directory, &bytes, &worker_deadline)?;
+            worker_deadline.check()?;
+            Ok((file, bytes.len(), image, retained))
+        })?;
         retained.push(file.as_raw_fd());
         descriptors::validate_list(&retained)?;
         Ok(Activation {
@@ -433,7 +469,8 @@ impl Manager {
             retained,
             image,
             operation,
-            checkpoint_bytes: bytes.len(),
+            checkpoint_bytes,
+            deadline,
             paused_at,
             _spare_descriptors: spare_descriptors,
             _pause: pause,
@@ -458,6 +495,7 @@ impl Manager {
             jobs: snapshot.jobs,
             pending: None,
             directory,
+            pause_workers: Arc::new(AtomicUsize::new(0)),
         };
         let job = manager
             .jobs
@@ -476,8 +514,17 @@ impl Manager {
     }
 }
 impl Activation {
+    pub fn reply_budget(&self) -> Result<Duration, Error> {
+        self.deadline.remaining()
+    }
     pub fn execute(self, manager: &mut Manager) {
         let result = (|| {
+            #[cfg(feature = "replacement-fixtures")]
+            if !crate::pause_deadline::stage_delay("pre-exec").is_zero() {
+                let deadline = self.deadline.clone();
+                self.deadline.run(move || deadline.stage("pre-exec"))?;
+            }
+            self.deadline.check()?;
             let _inheritance = descriptors::Inheritance::prepare(&self.retained)?;
             #[cfg(feature = "replacement-fixtures")]
             if self
@@ -495,6 +542,7 @@ impl Activation {
                 self.retained.len(),
                 self.paused_at.elapsed().as_millis()
             );
+            self.deadline.check()?;
             let error = std::process::Command::new(&self.image.path)
                 .arg("--resume")
                 .arg(self.file.as_raw_fd().to_string())
@@ -502,10 +550,17 @@ impl Activation {
                 .exec();
             Err::<(), Error>(Error::Transport(error.to_string()))
         })();
-        if result.is_err() {
-            manager.fail(&self.operation, ReplacementStage::Exec);
+        if let Err(error) = result {
+            let stage = if error == PauseDeadline::expired() {
+                ReplacementStage::Checkpoint
+            } else {
+                ReplacementStage::Exec
+            };
+            let operation = self.operation.clone();
+            // Inheritance rollback has finished. Reopen old I/O before filesystem cleanup.
+            drop(self);
+            manager.fail(&operation, stage);
         }
-        // On failed exec, flag rollback precedes dropping the checkpoint and reopening gates.
     }
 }
 pub(crate) fn run() -> Result<(), Error> {
@@ -530,6 +585,12 @@ pub(crate) fn run() -> Result<(), Error> {
         }
         Some("--check-image") if args.len() == 1 => probe::describe(None),
         Some("--check-state") if args.len() == 1 => {
+            #[cfg(feature = "replacement-fixtures")]
+            if let Ok(milliseconds) = std::env::var("OPENFORGE_TEST_STATE_PROBE_DELAY_MS") {
+                if let Ok(milliseconds) = milliseconds.parse::<u64>() {
+                    std::thread::sleep(Duration::from_millis(milliseconds.min(30_000)));
+                }
+            }
             let mut bytes = Vec::new();
             std::io::stdin()
                 .take(checkpoint::MAX_FILE as u64 + 1)
