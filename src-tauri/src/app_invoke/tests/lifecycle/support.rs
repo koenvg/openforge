@@ -41,6 +41,8 @@ impl ProviderTestSandbox {
 }
 
 pub(super) struct ProviderLifecycleFixture {
+    // Must drop before state, temporary directories, and the provider lock.
+    cleanup: crate::pty_manager::test_fixture::NativePtyFixtureCleanup,
     state: crate::http_server::AppState,
     _db_temp_dir: tempfile::TempDir,
     app_dir: Option<tempfile::TempDir>,
@@ -70,7 +72,11 @@ impl ProviderLifecycleFixture {
         };
         configure_provider_test_path(&mut state, &sandbox.bin_dir);
 
+        let cleanup = crate::pty_manager::test_fixture::NativePtyFixtureCleanup::new(
+            state.pty_manager.as_mut().expect("fixture PTY manager"),
+        );
         Self {
+            cleanup,
             state,
             _db_temp_dir: db_temp_dir,
             app_dir,
@@ -78,6 +84,13 @@ impl ProviderLifecycleFixture {
         }
     }
 
+    pub(super) fn finish(mut self) -> Result<(), String> {
+        self.cleanup.finish()
+    }
+
+    pub(super) fn pid_dir(&self) -> PathBuf {
+        self.cleanup.pid_dir()
+    }
     pub(super) fn state(&self) -> &crate::http_server::AppState {
         &self.state
     }
