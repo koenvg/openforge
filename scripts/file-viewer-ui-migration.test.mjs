@@ -18,10 +18,11 @@ const candidates = {
 }
 
 describe('File Viewer semantic presentation inventory', () => {
-  // This reads the full legacy tree before filtering the plugin; it competes with other scans.
+  // Recursively scan the plugin and its shared executable frame.
   it('has no legacy consumers or unexplained dynamic classes in the plugin and its executable frame', () => {
-    const sources = readLegacyUiSources().filter(source =>
-      source.path.startsWith('plugins/file-viewer/') || source.path === 'storybook/shared/frames/FileViewerModule.svelte')
+    const sources = readLegacyUiSources(undefined, {
+      roots: ['plugins/file-viewer', 'storybook/shared/frames/FileViewerModule.svelte'],
+    })
     expect(sources.length).toBeGreaterThan(10)
     const unexplained = inventoryLegacyUiConsumers(sources).filter(record => {
       const filename = record.path.split('/').at(-1)

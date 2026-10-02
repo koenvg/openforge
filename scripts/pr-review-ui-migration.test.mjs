@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { inventoryLegacyUiConsumers, readLegacyUiSources } from './check-ui-migration-inventory.mjs'
 
-const owned = path => path.startsWith('packages/pr-review-ui/')
 const stylingKinds = new Set([
   'color',
   'color-variable',
@@ -41,9 +40,9 @@ function isReviewed(record) {
 }
 
 describe('PR review UI semantic presentation inventory', () => {
-  // This reads the full legacy tree before filtering the package; give the scan its own budget.
+  // Recursively scan the package without reading unrelated owners.
   it('has no legacy styling consumers or unexplained dynamic class expressions', () => {
-    const sources = readLegacyUiSources().filter(source => owned(source.path))
+    const sources = readLegacyUiSources(undefined, { roots: ['packages/pr-review-ui'] })
     expect(sources.length).toBeGreaterThan(20)
     expect(inventoryLegacyUiConsumers(sources).filter(record => stylingKinds.has(record.kind) && !isReviewed(record))).toEqual([])
   }, 30_000)

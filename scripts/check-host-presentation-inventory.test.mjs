@@ -19,12 +19,15 @@ const dependency = record => record.kind === 'unresolved'
   ? record.token.startsWith('Parse error:')
   : !['script-component-candidate', 'build-input'].includes(record.kind)
 
+const sharedFixtures = ['storybook/shared/ThemeFixture.svelte', 'storybook/shared/frames/ComponentFrame.svelte',
+  'storybook/shared/fixtures/HostFeedback.svelte']
 describe('remaining host presentation inventory', () => {
   // Scans the repository rather than a fixture; allow CPU contention without relaxing coverage.
   it('has no legacy classes or aliases outside the explicitly owned pending batches', () => {
-    const sources = readLegacyUiSources().filter(source => migratedHostSource(source.path)
-      || ['storybook/shared/ThemeFixture.svelte', 'storybook/shared/frames/ComponentFrame.svelte',
-        'storybook/shared/fixtures/HostFeedback.svelte'].includes(source.path))
+    const sources = readLegacyUiSources(undefined, {
+      roots: ['src', ...sharedFixtures],
+      include: path => migratedHostSource(path) || sharedFixtures.includes(path),
+    })
     expect(inventoryLegacyUiConsumers(sources).filter(dependency)).toEqual([])
   }, 30_000)
 
