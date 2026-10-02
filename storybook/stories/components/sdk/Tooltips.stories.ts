@@ -44,7 +44,10 @@ export const Dialog: Story = {
 export const Menu: Story = {
   args: { state: 'menu' },
   play: async ({ canvasElement }) => {
-    await userEvent.hover(within(canvasElement).getByRole('button', { name: 'More actions' }))
+    const trigger = within(canvasElement).getByRole('button', { name: 'More actions' })
+    // The previous dialog's body lock restores pointers after its DOM has unmounted.
+    await waitFor(() => expect(canvasElement.ownerDocument.defaultView!.getComputedStyle(trigger).pointerEvents).not.toBe('none'))
+    await userEvent.hover(trigger)
     await waitFor(() => expect(within(canvasElement.ownerDocument.body).getByRole('tooltip', { name: 'More actions' })).toBeVisible())
   },
 }
