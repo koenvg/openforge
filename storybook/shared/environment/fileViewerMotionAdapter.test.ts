@@ -9,7 +9,7 @@ afterEach(() => {
 describe('File Viewer deterministic media resources', () => {
   it('freezes an SVG mask from production markup and restores it on normal motion and disposal', async () => {
     const indicator = document.createElement('span')
-    indicator.className = 'loading'
+    indicator.dataset.size = 'md'
     const svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle><animate attributeName="stroke-dasharray" values="0,150;42,150;42,150"/></circle></svg>'
     indicator.style.maskImage = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
     const original = indicator.style.maskImage

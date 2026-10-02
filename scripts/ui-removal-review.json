@@ -5279,13 +5279,6 @@
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
-      "path": "storybook/shared/environment/fileViewerMotionAdapter.test.ts",
-      "kind": "script-component-candidate",
-      "token": "loading",
-      "count": 1,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
-    },
-    {
       "path": "storybook/shared/environment/storyBrowserSurfaceAdapter.ts",
       "kind": "script-component-candidate",
       "token": "alert",
