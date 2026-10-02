@@ -1,4 +1,6 @@
 //! Isolated real-process contract. Never launches or stops the installed desktop app.
+#[path = "session_daemon_sidecar/cleanup.rs"]
+mod cleanup;
 #[path = "session_daemon_sidecar/pi.rs"]
 mod pi;
 #[path = "session_daemon_sidecar/pi-live.rs"]
@@ -257,29 +259,7 @@ impl Drop for Fixture {
             if self.source_owner {
                 source_owner::wait_for_fixture_exit(self.root.path())?;
             }
-            if !self.daemon_root().join("session-v1/control.sock").exists() {
-                return Ok(());
-            }
-            let client = openforge_session_client::Client::connect(&self.daemon_root())
-                .map_err(|e| e.to_string())?;
-            client
-                .enable_operation_retirement()
-                .map_err(|e| e.to_string())?;
-            for session in client.inventory().map_err(|e| e.to_string())?.sessions {
-                client
-                    .terminate_ordered(&session.pty)
-                    .map_err(|e| e.to_string())?;
-            }
-            let deadline = Instant::now() + Duration::from_secs(5);
-            loop {
-                if client.shutdown_empty().is_ok() {
-                    return Ok(());
-                }
-                if Instant::now() > deadline {
-                    return Err("fixture daemon did not stop".into());
-                }
-                std::thread::sleep(Duration::from_millis(20));
-            }
+            cleanup::stop(&self.daemon_root())
         })();
         if std::thread::panicking() || cleanup.is_err() {
             eprintln!(
