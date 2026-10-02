@@ -126,10 +126,7 @@ mod tests {
 
     #[test]
     fn activity_snapshot_limit_counts_utf8_bytes() {
-        assert_eq!(
-            envelope_with_activity("🙂".repeat(2048)).validate(),
-            Ok(())
-        );
+        assert_eq!(envelope_with_activity("🙂".repeat(2048)).validate(), Ok(()));
         assert_eq!(
             envelope_with_activity("🙂".repeat(2049)).validate(),
             Err(Error::InvalidRequest)

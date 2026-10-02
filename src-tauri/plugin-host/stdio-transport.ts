@@ -58,7 +58,7 @@ export class StdioHostCallbackBridge {
 // Electron's Node readline treats U+2028 and U+2029 as line endings even though JSON permits
 // both unescaped. The plugin-host protocol is LF-framed, so split only on LF.
 export function readJsonLines(input: Readable, handleLine: (line: string) => void): void {
-  let buffer = ''
+  let fragments: string[] = []
 
   const emitLine = (line: string): void => {
     handleLine(line.endsWith('\r') ? line.slice(0, -1) : line)
@@ -66,16 +66,22 @@ export function readJsonLines(input: Readable, handleLine: (line: string) => voi
 
   input.setEncoding('utf8')
   input.on('data', (chunk: string) => {
-    buffer += chunk
-    let lineEnd = buffer.indexOf('\n')
+    // Search only new input. Scanning the accumulated prefix on every chunk makes
+    // large callback frames quadratic; join their fragments only at a delimiter.
+    let start = 0
+    let lineEnd = chunk.indexOf('\n')
     while (lineEnd !== -1) {
-      emitLine(buffer.slice(0, lineEnd))
-      buffer = buffer.slice(lineEnd + 1)
-      lineEnd = buffer.indexOf('\n')
+      fragments.push(chunk.slice(start, lineEnd))
+      const line = fragments.join('')
+      fragments = []
+      emitLine(line)
+      start = lineEnd + 1
+      lineEnd = chunk.indexOf('\n', start)
     }
+    if (start < chunk.length) fragments.push(chunk.slice(start))
   })
   input.on('end', () => {
-    if (buffer.length > 0) emitLine(buffer)
+    if (fragments.length > 0) emitLine(fragments.join(''))
   })
 }
 

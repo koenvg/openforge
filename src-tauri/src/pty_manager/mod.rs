@@ -17,6 +17,8 @@ mod pids;
 mod session;
 mod terminal_color_profile;
 mod terminal_model_bridge;
+#[cfg(test)]
+pub(crate) mod test_fixture;
 
 #[cfg(test)]
 use crate::terminal_model::TerminalModelTestFault;

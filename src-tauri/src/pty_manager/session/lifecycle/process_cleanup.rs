@@ -278,7 +278,38 @@ impl PtyManager {
             .remove(session_key);
         let lifecycle_lock = self.lifecycle_lock_for(session_key).await;
         let _lifecycle_guard = lifecycle_lock.lock().await;
+        self.terminate_locked_pty_with_output_policy(session_key, remove_output_buffer)
+            .await
+    }
 
+    #[cfg(test)]
+    pub(crate) async fn try_cleanup_native_fixture_pty(
+        &self,
+        session_key: &str,
+    ) -> Result<(), PtyError> {
+        self.terminal_sessions
+            .agent_spawn_generations
+            .lock()
+            .await
+            .remove(session_key);
+        let lifecycle_lock = self.lifecycle_lock_for(session_key).await;
+        // Fixture Drop blocks its original executor. Never wait for a lifecycle
+        // operation that may need that executor to finish. Leave its private
+        // identity metadata available for verified recovery instead.
+        let _lifecycle_guard = lifecycle_lock.try_lock().map_err(|_| {
+            PtyError::CleanupFailed(format!(
+                "cleanup for {session_key} is already in flight; completion is unknown"
+            ))
+        })?;
+        self.terminate_locked_pty_with_output_policy(session_key, true)
+            .await
+    }
+
+    async fn terminate_locked_pty_with_output_policy(
+        &self,
+        session_key: &str,
+        remove_output_buffer: bool,
+    ) -> Result<(), PtyError> {
         let session = self
             .terminal_sessions
             .sessions

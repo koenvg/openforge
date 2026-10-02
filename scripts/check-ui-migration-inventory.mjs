@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { UI_MIGRATION_ROOTS, isInventorySource, checksPresentation } from './ui-migration-scope.mjs'
 import { dirname, posix, resolve } from 'node:path'
@@ -428,23 +428,36 @@ export function readMigratedUiSources(root = REPO_ROOT) {
   return paths.sort().map((path) => ({ path, contents: readFileSync(resolve(root, path), 'utf8'), presentation: checksPresentation(path) }))
 }
 
-export function readLegacyUiSources(root = REPO_ROOT) {
+// roots may select recursive owner directories and individual shared files.
+// Omitting roots retains the repository-wide legacy inventory, including root build inputs.
+export function readLegacyUiSources(root = REPO_ROOT, { roots, include = () => true } = {}) {
   const sources = []
   const skipped = new Set(['node_modules', 'dist', 'build', 'coverage', '.git', '.svelte-kit', 'target', 'storybook-static'])
+  function addSource(path) {
+    if (include(path)) sources.push({ path, contents: readFileSync(resolve(root, path), 'utf8') })
+  }
   function collect(directory) {
     if (!existsSync(resolve(root, directory))) return
     for (const entry of readdirSync(resolve(root, directory), { withFileTypes: true })) {
       const path = `${directory}/${entry.name}`
       if (entry.isDirectory() && !skipped.has(entry.name)) collect(path)
       else if (entry.isFile() && (/\.(?:svelte|css|html|[cm]?[jt]sx?)$/.test(path) || entry.name === 'package.json')) {
-        sources.push({ path, contents: readFileSync(resolve(root, path), 'utf8') })
+        addSource(path)
       }
     }
   }
-  for (const directory of ['src', 'packages', 'plugins', 'storybook', 'scripts', 'tests']) collect(directory)
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    if (entry.isFile() && (entry.name === 'package.json' || /\.(?:[cm]?[jt]s|html)$/.test(entry.name))) {
-      sources.push({ path: entry.name, contents: readFileSync(resolve(root, entry.name), 'utf8') })
+  for (const path of roots ?? ['src', 'packages', 'plugins', 'storybook', 'scripts', 'tests']) {
+    if (!existsSync(resolve(root, path))) continue
+    if (statSync(resolve(root, path)).isDirectory()) collect(path)
+    else if (/\.(?:svelte|css|html|[cm]?[jt]sx?)$/.test(path) || posix.basename(path) === 'package.json') {
+      addSource(path)
+    }
+  }
+  if (roots === undefined) {
+    for (const entry of readdirSync(root, { withFileTypes: true })) {
+      if (entry.isFile() && (entry.name === 'package.json' || /\.(?:[cm]?[jt]s|html)$/.test(entry.name))) {
+        addSource(entry.name)
+      }
     }
   }
   return sources.sort((a, b) => a.path.localeCompare(b.path))

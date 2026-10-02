@@ -3,6 +3,8 @@ use super::*;
 use crate::app_events::AppEventEnvelope;
 use base64::Engine;
 use tokio::sync::broadcast::Receiver;
+mod subscription_gate;
+use subscription_gate::SubscriptionGate;
 const JOURNAL_OVERFLOW_BYTES: usize = 540_000;
 
 struct Consumer {
@@ -113,6 +115,7 @@ async fn daemon_bridge_forwards_ordered_output_and_reconciles_gap_and_exit_after
         )
         .unwrap();
     tokio::time::sleep(Duration::from_millis(100)).await;
+    let transport = SubscriptionGate::new(fixture.0.path());
     let (mut second, _db2) = test_state("daemon-events-second");
     let (sender, mut events) = tokio::sync::broadcast::channel(2048);
     second.app_event_tx = Some(sender);
@@ -123,6 +126,12 @@ async fn daemon_bridge_forwards_ordered_output_and_reconciles_gap_and_exit_after
     );
     let snapshot = invoke_ok(&second, "get_pty_buffer", json!({"shellSessionKey":key})).await;
     assert_eq!(snapshot["instanceId"], instance);
+    assert_eq!(snapshot["isLive"], true);
+    let reattached = invoke_ok(&second, "pty_spawn_shell", json!({"taskId":"T-events", "terminalIndex":0, "cwd":fixture.0.path(), "cols":80, "rows":24})).await;
+    assert_eq!(
+        reattached, instance,
+        "replacement must reuse the live session"
+    );
     let vt = base64::engine::general_purpose::STANDARD
         .decode(snapshot["snapshot"]["data"].as_str().unwrap())
         .unwrap();
@@ -136,57 +145,98 @@ async fn daemon_bridge_forwards_ordered_output_and_reconciles_gap_and_exit_after
     .await;
     receive_marker(&mut events, &mut consumer, "LIVE_TWO").await;
 
-    // Stall only this owned daemon's request loop. PTY output continues on its reader,
-    // overflowing the bounded journal while the bridge cannot poll it.
-    invoke_ok(&second, "pty_write", json!({"shellSessionKey":key, "data":format!("while [ ! -e run-burst ]; do sleep 0.01; done; head -c {JOURNAL_OVERFLOW_BYTES} /dev/zero; {}; exit 19\n", print_command("GAP_FINAL"))})).await;
-    let root = fixture.0.path().to_owned();
-    let blocker = tokio::task::spawn_blocking(move || {
-        use std::io::Write;
-        let runtime = openforge_session_client::runtime::RuntimeDirectory::open(&root).unwrap();
-        let mut sockets = Vec::new();
-        for _ in 0..3 {
-            let mut socket =
-                std::os::unix::net::UnixStream::connect(runtime.socket_path()).unwrap();
-            socket.write_all(&[0]).unwrap();
-            sockets.push(socket);
-        }
-        std::thread::sleep(Duration::from_millis(100));
-        std::fs::write(root.join("run-burst"), b"go").unwrap();
-        std::thread::sleep(Duration::from_millis(3100));
-        drop(sockets);
-    });
-    let mut gap = false;
-    let mut forwarded_bytes = 0;
-    let mut tail = String::new();
     let exit_name = format!("pty-exit-{key}");
-    tokio::time::timeout(DAEMON_SHELL_CONTRACT_TIMEOUT, async {
+    let raw_gap = tokio::time::timeout(DAEMON_SHELL_CONTRACT_TIMEOUT, async {
+        let pause = transport.pause_next_batch();
+        // Wake the real pushed stream, then wait for a complete delivered prefix.
+        invoke_ok(&second, "pty_write", json!({"shellSessionKey":key, "data":"\n"})).await;
+        let prefix = pause.parked.await.unwrap();
+        assert!(!prefix.gap);
+        let prefix_sequence = prefix.events.iter().filter_map(|event| match event {
+            openforge_session_protocol::Event::Output { pty, sequence, .. } => {
+                assert_eq!(pty, &session.pty);
+                Some(*sequence)
+            }
+            _ => None,
+        }).max().unwrap();
+        while consumer.last < prefix_sequence {
+            consumer.apply(&events.recv().await.unwrap());
+        }
+        assert_eq!(consumer.last, prefix_sequence);
+
+        // The subscription is now interrupted at prefix.cursor. Commands and PTY
+        // output remain live; journal overflow cannot depend on subscriber speed.
+        invoke_ok(&second, "pty_write", json!({"shellSessionKey":key, "data":format!("head -c {JOURNAL_OVERFLOW_BYTES} /dev/zero; {}; exit 19\n", print_command("GAP_FINAL"))})).await;
+        loop {
+            let inventory = invoke_ok(&second, "get_restart_terminal_inventory", json!({})).await;
+            assert_eq!(inventory["sessions"].as_array().unwrap().len(), 1);
+            assert_eq!(inventory["sessions"][0]["key"], key);
+            assert_eq!(inventory["sessions"][0]["instanceId"], instance);
+            if inventory["sessions"][0]["isLive"] == false {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        pause.release.send(()).unwrap();
+        let raw_gap = pause.resumed.await.unwrap();
+        assert!(raw_gap.gap, "the real daemon must report the missing prefix");
+        assert!(raw_gap.cursor > prefix.cursor);
+        let mut reconciled = false;
         loop {
             let event = events.recv().await.unwrap();
-            if event.event_name.starts_with("pty-model-output-") {
-                let data = base64::engine::general_purpose::STANDARD
-                    .decode(event.payload["data"].as_str().unwrap())
-                    .unwrap();
-                forwarded_bytes += data.len();
-                tail = String::from_utf8_lossy(&data)
-                    .chars()
-                    .rev()
-                    .take(200)
-                    .collect::<String>()
-                    .chars()
-                    .rev()
-                    .collect();
-            }
-            gap |= event.event_name == "openforge-app-events-reconnected";
-            if event.event_name == exit_name {
+            if event.event_name.starts_with("pty-") {
+                assert!(event.event_name.ends_with(key), "unselected session was routed");
                 assert_eq!(event.payload["instance_id"], instance);
+            }
+            if event.event_name.starts_with("pty-model-output-") {
+                assert!(!reconciled, "gap suffix must not be forwarded as ordered output");
+                consumer.apply(&event);
+            }
+            if event.event_name == "openforge-app-events-reconnected" {
+                assert!(!reconciled, "gap requested reconciliation twice");
+                reconciled = true;
+            }
+            if event.event_name == exit_name {
+                assert!(reconciled, "exit must follow genuine gap reconciliation");
                 break;
             }
         }
-    })
-    .await
-    .unwrap();
-    blocker.await.unwrap();
-    assert!(gap, "journal overflow did not request existing transport reconciliation; forwarded={forwarded_bytes}; tail={tail:?}");
+        raw_gap
+    }).await.unwrap();
+    let mut suffix = Vec::new();
+    let mut last = None;
+    let mut exits = 0;
+    for event in raw_gap.events {
+        match event {
+            openforge_session_protocol::Event::Output {
+                pty,
+                sequence,
+                data,
+            } => {
+                assert_eq!(pty, session.pty);
+                if let Some(previous) = last {
+                    assert_eq!(sequence, previous + 1);
+                } else {
+                    assert!(
+                        sequence > consumer.last + 1,
+                        "a genuine prefix must be missing"
+                    );
+                }
+                assert_eq!(exits, 0, "daemon output followed exit");
+                last = Some(sequence);
+                suffix.extend(data);
+            }
+            openforge_session_protocol::Event::Exited { pty, code } => {
+                assert_eq!(pty, session.pty);
+                assert_eq!(code, 19);
+                exits += 1;
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(exits, 1);
+    assert!(String::from_utf8_lossy(&suffix).contains("GAP_FINAL"));
+    assert!(!String::from_utf8_lossy(&consumer.bytes).contains("GAP_FINAL"));
     tokio::time::sleep(Duration::from_millis(100)).await;
     while let Ok(event) = events.try_recv() {
         assert!(
@@ -202,11 +252,14 @@ async fn daemon_bridge_forwards_ordered_output_and_reconciles_gap_and_exit_after
     let snapshot = invoke_ok(&second, "get_pty_buffer", json!({"shellSessionKey":key})).await;
     assert_eq!(snapshot["instanceId"], instance);
     assert_eq!(snapshot["isLive"], false);
+    assert_eq!(snapshot["snapshot"]["watermark"].as_u64(), last);
+    assert!(snapshot["snapshot"]["watermark"].as_u64().unwrap() > consumer.last);
     let vt = base64::engine::general_purpose::STANDARD
         .decode(snapshot["snapshot"]["data"].as_str().unwrap())
         .unwrap();
     assert!(String::from_utf8_lossy(&vt).contains("GAP_FINAL"));
     drop(second);
+    drop(transport);
 }
 
 #[tokio::test]

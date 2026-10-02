@@ -1,5 +1,7 @@
+import { once } from 'node:events'
 import { readFile } from 'node:fs/promises'
-import { PassThrough } from 'node:stream'
+import { Readable, PassThrough } from 'node:stream'
+import { setImmediate } from 'node:timers/promises'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { unicodeLineSeparatorFixturePath } from './backend-module.test-fixtures'
 import { readJsonLines, StdioHostCallbackBridge, writeJsonRpcResponse } from './stdio-transport'
@@ -35,6 +37,71 @@ describe('plugin-host stdio transport', () => {
     expect(result.data.length).toBe(data.length)
     expect(Buffer.from(result.data, 'base64').equals(Buffer.alloc(16_777_216, 32))).toBe(true)
     stdout.restore()
+  })
+
+  it('reassembles a maximum-size task callback in small scheduled chunks before the following frame', async ({ onTestFinished }) => {
+    const stdout = captureStdout()
+    const bridge = new StdioHostCallbackBridge()
+    const controller = new AbortController()
+    const pending = Promise.all([
+      bridge.request({ method: 'openforge.fs.task.readDocument', params: { taskId: 'T-1', path: 'large.pdf' } }, { signal: controller.signal }),
+      bridge.request({ method: 'openforge.tasks.detail', params: { projectId: 'P-1', taskId: 'T-1' } }, { signal: controller.signal }),
+    ])
+    const data = Buffer.alloc(16_777_216, 32).toString('base64')
+    expect(data.length).toBe(22_369_624)
+    const wire = JSON.stringify({ jsonrpc: '2.0', id: 1, result: { status: 'ready', data, size: 16_777_216 } }) + '\n'
+      + JSON.stringify({ jsonrpc: '2.0', id: 2, result: { id: 'T-1' } }) + '\n'
+    const input = Readable.from((async function* () {
+      for (let offset = 0; offset < wire.length; offset += 4096) {
+        await setImmediate()
+        yield Buffer.from(wire.slice(offset, offset + 4096))
+      }
+    })())
+    onTestFinished(() => {
+      input.destroy()
+      controller.abort(new Error('Transport fixture stopped'))
+      stdout.restore()
+    })
+    const ids: number[] = []
+    readJsonLines(input, line => {
+      const response = JSON.parse(line)
+      ids.push(response.id)
+      bridge.handleResponse(response)
+    })
+
+    const [document, following] = await pending as [{ status: string; data: string; size: number }, unknown]
+    expect(ids).toEqual([1, 2])
+    expect(document.status).toBe('ready')
+    expect(document.size).toBe(16_777_216)
+    expect(document.data.length).toBe(22_369_624)
+    expect(Buffer.from(document.data, 'base64').equals(Buffer.alloc(16_777_216, 32))).toBe(true)
+    expect(following).toEqual({ id: 'T-1' })
+  })
+
+  it.each([1, 1024])('preserves ordered LF frames, split UTF-8, CRLF, empty lines, and an EOF tail with %i-byte chunks', async chunkSize => {
+    const input = new PassThrough()
+    const lines: string[] = []
+    const first = '{"id":1,"result":"café🙂\u2028\u2029"}'
+    const second = '{"id":2,"result":"second"}'
+    const tail = '{"id":3,"result":"tail"}'
+    const wire = Buffer.from(`${first}\r\n\n${second}\n${tail}\r`)
+    readJsonLines(input, line => lines.push(line))
+    const ended = once(input, 'end')
+    for (let offset = 0; offset < wire.length; offset += chunkSize) input.write(wire.subarray(offset, offset + chunkSize))
+    input.end()
+    await ended
+
+    expect(lines).toEqual([first, '', second, tail])
+  })
+
+  it('does not emit a frame for an empty stream', async () => {
+    const input = new PassThrough()
+    const lines: string[] = []
+    readJsonLines(input, line => lines.push(line))
+    const ended = once(input, 'end')
+    input.end()
+    await ended
+    expect(lines).toEqual([])
   })
 
   it('keeps valid JSON with Unicode line separators in one LF-framed message', async () => {

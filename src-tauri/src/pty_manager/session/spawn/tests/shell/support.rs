@@ -12,6 +12,7 @@ use std::time::Duration;
 use tempfile::TempDir;
 
 pub(super) struct ShellTestHarness {
+    _cleanup: crate::pty_manager::test_fixture::NativePtyFixtureCleanup,
     pub(super) manager: PtyManager,
     pub(super) temp_dir: TempDir,
     pub(super) pid_dir: PathBuf,
@@ -21,9 +22,10 @@ impl ShellTestHarness {
     pub(super) fn new() -> Self {
         let mut manager = PtyManager::new();
         let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
-        let pid_dir = temp_dir.path().join("pids");
-        manager.set_pid_dir(pid_dir.clone());
+        let cleanup = crate::pty_manager::test_fixture::NativePtyFixtureCleanup::new(&mut manager);
+        let pid_dir = cleanup.pid_dir();
         Self {
+            _cleanup: cleanup,
             manager,
             temp_dir,
             pid_dir,

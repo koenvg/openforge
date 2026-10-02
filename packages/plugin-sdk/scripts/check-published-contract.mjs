@@ -14,6 +14,7 @@ import { assertPackedTextFieldDocumentation } from './text-field-documentation-c
 import { buildReplacementAuthoringContract } from './view-replacement-authoring-contract.mjs'
 import { checkPackedFeedback } from './feedback-publication-contract.mjs'
 import { checkPackedSdkViews } from './sdk-views-publication-contract.mjs'
+import { checkPackedCollapsibleSection } from './collapsible-section-publication-contract.mjs'
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoRoot = resolve(packageRoot, '..', '..')
@@ -311,6 +312,7 @@ try {
   const feedbackAuthoringFiles = await checkPackedFeedback({ packageRoot, consumerRoot, installedPackageRoot, readme: packedReadme })
 
   await checkPackedSdkViews({ packageRoot, consumerRoot, installedPackageRoot })
+  await checkPackedCollapsibleSection({ packageRoot, consumerRoot, installedPackageRoot })
   assertPublicUiDeclarationsHideBitsUi(
     OPENFORGE_PLUGIN_SDK_PUBLIC_UI_EXPORTS.map(({ componentName, distPath }) => ({
       componentName,

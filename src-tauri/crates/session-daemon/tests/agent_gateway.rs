@@ -277,6 +277,31 @@ fn raw_request(
 }
 
 #[test]
+fn authenticated_agent_can_forward_single_dependency_removal() {
+    let fixture = Fixture::new();
+    let client = fixture.connect();
+    let (session, config) = agent_config(&fixture, &client);
+    let (endpoint, served) = sidecar("{\"task_id\":\"KVG-5232\",\"status\":\"updated\"}");
+    client.register_sidecar(Some(endpoint)).unwrap();
+    let response = raw_request(
+        &config,
+        "POST",
+        "/remove_task_dependency",
+        "Content-Type: application/json\r\n",
+        "{\"task_id\":\"KVG-5232\",\"depends_on\":\"KVG-5266\"}",
+    );
+    assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+    let body: serde_json::Value =
+        serde_json::from_str(response.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+    assert_eq!(
+        body,
+        serde_json::json!({"task_id": "KVG-5232", "status": "updated"})
+    );
+    served.join().unwrap();
+    client.terminate("cleanup", &session.pty).unwrap();
+}
+
+#[test]
 fn notification_is_accepted_during_outage_and_duplicate_keeps_its_position() {
     let fixture = Fixture::new();
     let client = fixture.connect();
@@ -458,6 +483,14 @@ fn ingress_rejects_forgery_stale_credentials_foreign_installations_and_invalid_r
             String::new(),
             "403",
         ),
+        (
+            "POST",
+            "/remove_task_dependency",
+            "x-openforge-agent-task: forged\r\n",
+            "{}".into(),
+            "403",
+        ),
+        ("GET", "/remove_task_dependency", "", String::new(), "403"),
         ("POST", "/create_task", "", "not-json".into(), "400"),
         ("POST", "/create_task", "", "x".repeat(65537), "413"),
         (
