@@ -96,16 +96,40 @@ Minimum expectations:
 
 If a copied component has weaker accessibility behavior than the app-private version, do not promote it as-is. Create or use a follow-up task to design a plugin-safe primitive with the stronger behavior.
 
-## Tailwind and daisyUI token usage
+## Styling by ownership layer
 
-OpenForge uses Tailwind CSS v4 and daisyUI v5 with CSS-first configuration in `src/app.css`.
+### Host-only Tailwind and daisyUI guidance
 
-- Prefer Tailwind utilities and daisyUI semantic classes over component-specific CSS.
-- Use daisyUI semantic tokens (`base-*`, `primary`, `secondary`, `accent`, `neutral`, `info`, `success`, `warning`, `error`) instead of hardcoded hex colors.
+The desktop renderer uses Tailwind CSS v4 and daisyUI v5 with CSS-first configuration in `src/app.css`. This guidance applies to app-private components compiled into the host, not public SDK UI or independently built plugins.
+
+- Prefer Tailwind utilities and daisyUI semantic classes over component-specific CSS in host-only UI.
+- Use daisyUI semantic tokens (`base-*`, `primary`, `secondary`, `accent`, `neutral`, `info`, `success`, `warning`, `error`) instead of hardcoded hex colors in that layer.
 - Use established app focus treatment (`ring-2 ring-primary rounded`) for keyboard focus when a custom focus affordance is needed.
 - `<style>` blocks are acceptable for component-scoped keyframes or `:global()` resets around rendered HTML/markdown content.
-- Do not extract a component only to hide a common class list. Extract when the component carries behavior, accessibility, package-boundary value, or a repeated semantic shell.
-- Public/plugin-safe components should expose semantic variants sparingly. Avoid leaking app-only color semantics or feature-specific status mappings into generic SDK UI.
+- Do not extract a component only to hide a common class list. Extract when it carries behavior, accessibility, package-boundary value, or a repeated semantic shell.
+
+### Plugin-safe SDK and plugin styles
+
+External plugin builds cannot add utility classes to the desktop host's CSS. A class that happens to work in the workspace is not a published styling contract. Public SDK UI and plugin-local UI must not rely on the host scanning their source or on host Tailwind/daisyUI classes being present.
+
+- Write component-scoped Svelte `<style>` rules for plugin-safe components, including layout, spacing, focus, and reduced-motion treatment. Scope any necessary `:global()` rules to the component's content so they do not restyle the host or other plugins.
+- Read the host's canonical `--of-*` theme properties, such as `--of-surface`, `--of-text`, `--of-border`, `--of-accent`, `--of-space4`, and `--of-focus-ring`. Do not use daisyUI's `--color-*` variables as a public theme API or hardcode theme colors. See the [theme token contract](../plugins/theming.md#complete-token-contract) and the SDK's `THEME_TOKEN_CSS_PROPERTIES` mapping.
+- Keep semantic variants small and stable. Avoid app-only color semantics or feature-specific status mappings in generic SDK UI. Use supported props and documented CSS properties for customization, not private SDK selectors.
+- Build and ship the emitted CSS, including styles from imported SDK components. Declare each built, package-relative `.css` artifact in `package.json#openforge.frontendStyles`, and include it in the published package. OpenForge does not compile plugin source or generate utilities during installation. See [plugin package metadata](../plugin-authoring.md#package-metadata) and the [SDK Vite helpers](../plugins/sdk-reference.md#vitebuild-exports).
+- A plugin may use its own utility build, but it must ship that CSS through `frontendStyles` and avoid global resets or selectors that affect other UI. The host's utility build is not a substitute.
+
+For example, a plugin build that emits `dist/frontend.js` and `dist/plugin.css` declares:
+
+```json
+{
+  "openforge": {
+    "frontend": "./dist/frontend.js",
+    "frontendStyles": ["./dist/plugin.css"]
+  }
+}
+```
+
+This is a metadata excerpt, not a complete plugin manifest. `frontendStyles` loads ordinary view CSS for the plugin's activation. Theme-specific `stylesheets` apply only while an application theme is selected and are a separate contract. Do not put selected-theme CSS in `frontendStyles`.
 
 ## Public export and package rules
 
@@ -116,8 +140,8 @@ Before adding an export under `@openforge-app/plugin-sdk/ui/*`, confirm:
 1. The component is plugin-safe: no imports from `src/`, Electron main/preload, app stores, Rust sidecar code, or undocumented package internals.
 2. The component solves a repeated plugin-safe need, not an app-only or one-plugin need.
 3. The props form a small stable contract that plugin authors can rely on.
-4. Accessibility and behavior are tested at the package boundary.
-5. Documentation/examples explain the supported import path and expected usage.
+4. Accessibility, behavior, and plugin-safe styling are tested at the package boundary without host utility CSS.
+5. Documentation/examples explain the supported import path, expected usage, and how the consuming plugin ships emitted CSS through `frontendStyles`.
 
 Package guidance:
 
@@ -139,11 +163,13 @@ Examples should show the supported import path and a realistic usage. Do not cre
 
 ## Testing expectations
 
-Tests should cover behavior and package boundaries, not visual styling.
+Tests should cover user-visible behavior and package boundaries. Routine behavior tests should not lock down visual-only implementation details. Published style contracts are part of the package boundary and need focused checks.
 
-- For Svelte components, test user-visible behavior: callbacks, keyboard interactions, focus/close behavior, state persistence, disabled/destructive flows, sanitized rendering, and registration/lifecycle behavior.
-- Do not assert on Tailwind utility strings, daisyUI class names, or visual-only details.
+- For Svelte components, test callbacks, keyboard interactions, focus/close behavior, state persistence, disabled/destructive flows, sanitized rendering, and registration/lifecycle behavior.
+- Do not assert on Tailwind utility strings, daisyUI class names, private variant classes, or arbitrary visual details in behavior tests.
 - Add package-boundary tests for public SDK UI exports. The tests should fail if SDK UI imports app renderer internals, IPC, Electron/preload, Rust-sidecar paths, or undocumented package internals.
+- Preserve and extend the browser package-publication style contracts when changing public UI styling. Build a consumer outside the workspace against the packed SDK's public exports, with host theme tokens but without host Tailwind/daisyUI CSS. Verify emitted CSS and package metadata where applicable, then check computed styles or geometry needed to prove the contract: usable spacing, visible focus, token-driven appearance, mounted theme changes, and reduced motion. Keep these assertions separate from routine behavior tests; they are not a requirement for broad visual snapshots or exact class lists.
+- Existing contracts cover [CollapsibleSection CSS emission and default/inspector spacing](../../packages/plugin-sdk/scripts/collapsible-section-publication-contract.mjs), [SDK view theme switching](../../packages/plugin-sdk/scripts/sdk-views-publication-contract.mjs), and [feedback styling, motion, and behavior](../../packages/plugin-sdk/scripts/feedback-publication-contract.mjs). Run them through `pnpm --filter @openforge-app/plugin-sdk check:contract`. Source-level token checks can supplement these browser contracts, but do not prove that a published plugin ships working CSS.
 - For plugin components, use `@openforge-app/plugin-sdk/testing` fakes/mocks for registrations and host-facing calls.
 - For domain components, test domain rules in the layer that owns them. For example, task lifecycle actions belong in task-domain tests, not generic `ContextMenu` tests.
 - For exact duplicates being deduplicated later, preserve or move the behavior tests before deleting a copy.
