@@ -4,7 +4,7 @@
 
 This is a fixture-based vertical slice, not an agent or PTY integration test. The candidate displays the current Ghostty screen and accepts the controlled `k` key while every older page is withheld. Releasing the 16-row plain-text page makes history scrollable without changing any live cell or the cursor. Both panels are real xterm DOM renderers.
 
-Everything lives in this directory. No production build, renderer, shared dependency, Terminal Runtime API, live session, or KVG-5198 native experiment changes. The baseline uses official unpatched xterm with the current concealment policy reproduced by the small adapter, not the production app itself.
+The experiment lives in this directory. CI portability also updates `scripts/coordinated-install.test.mjs` to declare macOS-arm64 in its test child, not the host. No production build, renderer, shared dependency, Terminal Runtime API, live session, or KVG-5198 native experiment changes. The baseline uses official unpatched xterm with the current concealment policy reproduced by the small adapter, not the production app itself.
 
 ## Run in your existing Arc session
 
@@ -106,6 +106,8 @@ node export-fixture.mjs --check
 ```
 
 Ordinary test screenshots go to ignored `dist/evidence/`. Browser tests create and close only their own Arc tabs. No other browser runs. `check` covers the adapter and the complete patched xterm browser dependency graph. The standalone native crate also requires `cargo test --release --locked`, `cargo check --locked`, `cargo build --release --locked`, `cargo clippy --all-targets --locked -- -D warnings`, and `cargo fmt -- --check` from `native/`, with the same Ghostty environment paths.
+
+The Arc-only suites use `test/*.browser.mjs` and this package's explicit `node --test` command. Root Vitest's `scripts/**/*.test.mjs` discovery deliberately does not include them. Renaming the files keeps both runners separate without changing shared Vitest configuration.
 
 Recorded actual frames:
 - [Correct screen while all history is withheld](evidence/01-history-withheld.png)

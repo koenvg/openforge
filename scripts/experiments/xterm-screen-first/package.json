@@ -6,7 +6,7 @@
   "engines": { "node": "24.14.0" },
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --test --test-concurrency=1 --test-timeout=20000 test/*.test.mjs",
+    "test": "node --test --test-concurrency=1 --test-timeout=20000 test/*.browser.mjs",
     "check": "tsc --noEmit -p tsconfig.json && node check-source.mjs",
     "start": "node launch.mjs"
   },

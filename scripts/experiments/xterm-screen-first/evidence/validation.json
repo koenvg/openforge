@@ -1,6 +1,6 @@
 {
   "baseline": "5e652939c23c567e9d519f759402e3df0f4ad251",
-  "scope": "Complete isolated xterm-screen-first experiment, complete pinned patched xterm browser dependency graph, standalone native exporter crate",
+  "scope": "Complete isolated xterm-screen-first experiment, complete pinned patched xterm browser dependency graph, standalone native exporter crate, root script test discovery and existing installer CLI fixture",
   "commands": [
     { "command": "pnpm i", "result": "passed before investigation" },
     { "command": "node scripts/experiments/xterm-screen-first/launch.mjs", "result": "passed, isolated install/build and tab opened in existing Arc at http://127.0.0.1:5251" },
@@ -22,7 +22,7 @@
   "browser": "Arc existing session, Chromium 153.0.8010.53",
   "manualEvidence": "Trusted mouse clicks covered visible controls at 720 CSS pixels. Initial desktop, live-input and narrow-window screenshots inspected visually.",
   "resolvedValidationFailures": ["Page.navigate returned before the target document/module was ready; synchronous readiness polling and foregrounding only the owned tab fixed it.", "Browser preconnect sockets held server.close open; the isolated server now closes its own remaining connections during teardown.", "The new scrollbar changed the last 14 screenshot pixels; pixel checks exclude a documented 16-pixel gutter and public cell checks still cover all columns."],
-  "notRun": ["Production frontend/backend suites", "Electron and real PTY integration", "WebGL or addons", "IME", "Images", "Resize/reflow adoption checks"],
+  "notRun": ["Full renderer and application Rust/backend suites locally", "Electron and real PTY integration", "WebGL or addons", "IME", "Images", "Resize/reflow adoption checks"],
   "remainingLimits": ["Frozen fixture and controlled ASCII continuations only", "All 16 native history rows are already present at READY and withheld from xterm, not streamed over a network", "No production adoption or speedup claim"],
   "cleanupTask": "KVG-5319",
   "completionReview": {
@@ -30,5 +30,13 @@
     "passes": 1,
     "reviewerVerdict": "Request changes: two confirmed baseline replay/reset races",
     "blockingFindings": "Both resolved with red/green Arc regressions and the complete experiment validation rerun; no second review pass"
+  },
+  "ciFollowup": {
+    "failedRun": "https://github.com/koenvg/openforge/actions/runs/36992831660",
+    "failures": ["Root Vitest discovered three Arc-only node:test suites and reported no test suite found", "The installer authentication fixture reached the macOS-only platform guard on Linux before testing authentication"],
+    "fixes": ["Name Arc-only suites *.browser.mjs and retain all ten tests under the isolated Node runner", "Declare the supported macOS-arm64 target only in each installer fixture's Node child"],
+    "verification": ["Root Vitest discovery returns zero Arc suites", "All four installer tests from the GitHub merged snapshot pass, including a Linux child-platform simulation", "Isolated build, full patched-source checks and all ten Arc tests pass", "Installer fixture JavaScript syntax passes"],
+    "broaderLocalRun": "Merged Node project: 124 files passed, one skipped and two timed out. Both stdio transport cases pass in a focused one-worker rerun; the remaining macOS idle-resource sampler timeout is already tracked as KVG-5338. No unrelated source was changed.",
+    "review": "The task's single completion review already ran; no second pass launched"
   }
 }
