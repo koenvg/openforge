@@ -1,8 +1,10 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { expect, it } from 'vitest'
+import { inventoryLegacyUiConsumers } from './check-ui-migration-inventory.mjs'
+import { findUiRemovalViolations } from './ui-removal-readiness.mjs'
 
 const command = resolve(import.meta.dirname, 'check-ui-migration-inventory.mjs')
 
@@ -164,4 +166,34 @@ it('does not confuse package metadata and stylesheet absence checks with module 
     seed('src/absence.test.ts', `const removedPackage = 'daisyui'; expect(existsSync(new URL('../styles/theme-adapter.css', import.meta.url))).toBe(false)`)
     expect(check().status).toBe(0)
   })
+})
+
+const reviewedFixturePaths = [
+  'packages/plugin-sdk/src/ui/AnchoredMenu.browser.test.ts',
+  'packages/plugin-sdk/src/ui/BitsMenuLifecycleBrowserFixture.svelte',
+  'scripts/experiments/terminal-restoration/arc-cdp.test.mjs',
+  'storybook/stories/components/sdk/check.mjs',
+]
+
+function reviewedFixtures() {
+  const root = resolve(import.meta.dirname, '..')
+  const sources = reviewedFixturePaths.map(path => ({ path, contents: readFileSync(join(root, path), 'utf8') }))
+  const policy = JSON.parse(readFileSync(join(root, 'scripts/ui-removal-review.json'), 'utf8'))
+  return { sources, policy: { reviewed: policy.reviewed.filter(entry => reviewedFixturePaths.includes(entry.path)) } }
+}
+
+it('accounts for current fixture roles, scenario titles and Bits UI attribute forwarding with exact reviews', () => {
+  const { sources, policy } = reviewedFixtures()
+  expect(findUiRemovalViolations(inventoryLegacyUiConsumers(sources), reviewedFixturePaths, policy)).toEqual([])
+})
+
+it.each(reviewedFixturePaths)('does not exempt real legacy paint in the reviewed fixture %s', path => {
+  const { sources, policy } = reviewedFixtures()
+  const poisoned = sources.map(source => source.path !== path ? source : {
+    ...source,
+    contents: source.contents + (path.endsWith('.svelte') ? '\n<div class="menu" />' : '\ndocument.body.className = "menu"'),
+  })
+  expect(findUiRemovalViolations(inventoryLegacyUiConsumers(poisoned), reviewedFixturePaths, policy)).toEqual(
+    expect.arrayContaining([expect.objectContaining({ path, kind: 'component', token: 'menu' })]),
+  )
 })
