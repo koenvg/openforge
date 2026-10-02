@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { PullRequestInfo } from './types'
 import { getBoardStatusPresentation, getTaskReasonText, TASK_STATE_LABELS, getTaskListItemPresentation } from './taskStatePresentation'
+import * as taskStatePresentation from './taskStatePresentation'
 
 function makePr(overrides: Partial<PullRequestInfo> & { id: number }): PullRequestInfo {
   return {
@@ -37,6 +38,12 @@ function makePr(overrides: Partial<PullRequestInfo> & { id: number }): PullReque
     ...overrides,
   }
 }
+
+describe('task state presentation exports', () => {
+  it('does not expose the removed legacy helper', () => {
+    expect(taskStatePresentation).not.toHaveProperty('getTaskStateBadgeClass')
+  })
+})
 
 describe('getBoardStatusPresentation', () => {
   it.each([

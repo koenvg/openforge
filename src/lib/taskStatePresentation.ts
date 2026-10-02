@@ -107,18 +107,6 @@ export function getTaskListItemPresentation(
   }
 }
 
-export function getTaskStateBadgeClass(state: TaskState): string {
-  if (state === 'backlog') return 'badge-ghost'
-
-  switch (getTaskStateBadgeVariant(state)) {
-    case 'success': return 'badge-success'
-    case 'warning': return 'badge-warning'
-    case 'danger': return 'badge-error'
-    case 'info': return 'badge-info'
-    case 'neutral': return ''
-  }
-}
-
 const STATE_REASONS: Record<TaskState, string> = {
   'backlog': 'In backlog — not started yet.',
   'idle': 'No agent running. Start when ready.',
