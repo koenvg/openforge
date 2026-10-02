@@ -65,6 +65,20 @@ node scripts/session-daemon-contract.mjs
 
 The combined runner executes the shared behavioral contracts against the deterministic, existing and daemon adapters. Existing-IPC tests also consume forwarded model events across Sidecar-state replacement, exercise a real journal gap plus exit, reject output after exit, and recover final output from an exited shell without respawning.
 
+The event-gap IPC fixture uses a test-only Unix-socket relay inside its private runtime. It interrupts an authenticated push subscription after a confirmed delivered cursor, while ordinary commands and PTY output continue. After output and exit have overflowed the real journal, the relay resumes `Subscribe` from that cursor and forwards the daemon's reply. The test requires a genuine `gap` batch, a missing output-sequence prefix, reconciliation before the single exit, and final snapshot recovery. It does not stall request sockets or rely on a fast live subscriber overflowing. The interruption shares the existing 30-second deadline, and the suite retains default parallelism.
+
+To run only this fixture, first build the exact daemon path it selects. No installed or developer runtime is used:
+
+```sh
+CARGO_TARGET_DIR="$PWD/src-tauri/crates/session-daemon/target" cargo build \
+  --manifest-path src-tauri/crates/session-daemon/Cargo.toml
+cargo test --manifest-path src-tauri/Cargo.toml \
+  daemon_bridge_forwards_ordered_output_and_reconciles_gap_and_exit_after_replacement \
+  -- --ignored --nocapture
+```
+
+Relay teardown closes only its own sockets and restores the daemon's socket before fixture cleanup. Cleanup uses authenticated termination and empty-daemon shutdown; unknown outcomes retain the temporary runtime as evidence. Do not signal a PID found in retained inventory or logs.
+
 `session-daemon/tests/root_exit.rs` verifies that a descendant attests an open slave after observing root exit, while inventory reports the root as exited. macOS revokes that descriptor at session-leader exit, so this stronger no-EOF fixture is explicitly skipped there. It passed in an isolated Linux arm64 container; the normal macOS exit and detached-descendant cleanup checks remain in the native suite.
 
 The real-process fixture uses a private temporary HOME and app-data root, an allocated loopback port and a per-Sidecar backend token. It launches the built Sidecar, opens the indexed shell through `/app/invoke`, kills only its own Sidecar child handle, starts another Sidecar, and checks unchanged shell PID, PTY device, instance, cwd, environment, shell variable, output and resize. This is not a headed Electron UI test.
