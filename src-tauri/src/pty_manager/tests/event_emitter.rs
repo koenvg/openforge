@@ -3,8 +3,10 @@ use crate::pty_manager::events::PtyExitPolicy;
 
 #[tokio::test]
 async fn test_emitter_uses_runtime_app_event_adapter_once_when_app_and_sender_share_bus() {
-    let manager = PtyManager::new();
+    let mut manager = PtyManager::new();
+    let mut fixture = test_fixture::NativePtyFixtureCleanup::new(&mut manager);
     register_emitter_test_session(
+        &mut fixture,
         &manager,
         "task-dedupe-shell-0",
         7,
@@ -19,7 +21,7 @@ async fn test_emitter_uses_runtime_app_event_adapter_once_when_app_and_sender_sh
     let mut events = bus.subscribe(None).expect("subscribe should work");
     let (output_tx, output_rx) = pty_output_channel();
     let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(128)));
-    let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+    let pid_dir = fixture.pid_dir();
 
     spawn_batched_pty_event_emitter(
         output_rx,
@@ -35,7 +37,7 @@ async fn test_emitter_uses_runtime_app_event_adapter_once_when_app_and_sender_sh
             terminal_sessions: manager.terminal_sessions.clone(),
             exit_action: PtyExitAction::Cleanup {
                 lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
-                pid_file: tmp_dir.path().join("task-dedupe-shell-0.pid"),
+                pid_file: pid_dir.join("task-dedupe-shell-0.pid"),
                 policy: PtyExitPolicy::Shell,
             },
         },
@@ -68,6 +70,7 @@ async fn test_emitter_uses_runtime_app_event_adapter_once_when_app_and_sender_sh
     }
 
     drop(output_tx);
+    fixture.finish().expect("fixture cleanup");
 }
 
 async fn collect_bus_events_until_quiet(
@@ -122,12 +125,13 @@ fn count_events(events: &[crate::app_events::AppEventEnvelope], event_name: &str
 }
 
 async fn register_emitter_test_session(
+    fixture: &mut test_fixture::NativePtyFixtureCleanup,
     manager: &PtyManager,
     session_key: &str,
     instance_id: u64,
     pid_file_name: &str,
 ) {
-    let mut session = test_pty_session(PtySessionKind::Agent, pid_file_name.to_string());
+    let mut session = test_pty_session(fixture, PtySessionKind::Agent, pid_file_name.to_string());
     session.instance_id = instance_id;
     manager
         .sessions
@@ -165,8 +169,10 @@ async fn release_test_child_and_wait_for_exit(
 
 #[tokio::test]
 async fn test_runtime_adapter_dedupes_pty_exit_when_sender_shares_bus() {
-    let manager = PtyManager::new();
+    let mut manager = PtyManager::new();
+    let mut fixture = test_fixture::NativePtyFixtureCleanup::new(&mut manager);
     register_emitter_test_session(
+        &mut fixture,
         &manager,
         "task-dedupe-exit-shell-0",
         8,
@@ -181,7 +187,7 @@ async fn test_runtime_adapter_dedupes_pty_exit_when_sender_shares_bus() {
     let mut events = bus.subscribe(None).expect("subscribe should work");
     let (output_tx, output_rx) = pty_output_channel();
     let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(128)));
-    let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+    let pid_dir = fixture.pid_dir();
 
     spawn_batched_pty_event_emitter(
         output_rx,
@@ -197,7 +203,7 @@ async fn test_runtime_adapter_dedupes_pty_exit_when_sender_shares_bus() {
             terminal_sessions: manager.terminal_sessions.clone(),
             exit_action: PtyExitAction::Cleanup {
                 lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
-                pid_file: tmp_dir.path().join("task-dedupe-exit-shell-0.pid"),
+                pid_file: pid_dir.join("task-dedupe-exit-shell-0.pid"),
                 policy: PtyExitPolicy::Shell,
             },
         },
@@ -221,12 +227,21 @@ async fn test_runtime_adapter_dedupes_pty_exit_when_sender_shares_bus() {
         .find(|event| event.event_name == "pty-exit-task-dedupe-exit-shell-0")
         .expect("pty-exit event should be received");
     assert_eq!(exit_event.payload["instance_id"], 8);
+    fixture.finish().expect("fixture cleanup");
 }
 
 #[tokio::test]
 async fn test_runtime_adapter_dedupes_agent_pty_exited_when_sender_shares_bus() {
-    let manager = PtyManager::new();
-    register_emitter_test_session(&manager, "agent-dedupe-exit", 9, "agent-dedupe-exit.pid").await;
+    let mut manager = PtyManager::new();
+    let mut fixture = test_fixture::NativePtyFixtureCleanup::new(&mut manager);
+    register_emitter_test_session(
+        &mut fixture,
+        &manager,
+        "agent-dedupe-exit",
+        9,
+        "agent-dedupe-exit.pid",
+    )
+    .await;
     let bus = crate::app_events::AppEventBus::new(16, 16);
     let app = crate::backend_runtime::AppHandle::new();
     app.set_app_event_adapter(Arc::new(crate::app_events::InMemoryAppEventAdapter::new(
@@ -235,7 +250,7 @@ async fn test_runtime_adapter_dedupes_agent_pty_exited_when_sender_shares_bus() 
     let mut events = bus.subscribe(None).expect("subscribe should work");
     let (output_tx, output_rx) = pty_output_channel();
     let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(128)));
-    let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+    let pid_dir = fixture.pid_dir();
 
     spawn_batched_pty_event_emitter(
         output_rx,
@@ -251,7 +266,7 @@ async fn test_runtime_adapter_dedupes_agent_pty_exited_when_sender_shares_bus() 
             terminal_sessions: manager.terminal_sessions.clone(),
             exit_action: PtyExitAction::Cleanup {
                 lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
-                pid_file: tmp_dir.path().join("agent-dedupe-exit.pid"),
+                pid_file: pid_dir.join("agent-dedupe-exit.pid"),
                 policy: PtyExitPolicy::TaskAgent,
             },
         },
@@ -276,13 +291,15 @@ async fn test_runtime_adapter_dedupes_agent_pty_exited_when_sender_shares_bus() 
         .expect("agent-pty-exited event should be received");
     assert_eq!(agent_event.payload["task_id"], "agent-dedupe-exit");
     assert_eq!(agent_event.payload["success"], false);
+    fixture.finish().expect("fixture cleanup");
 }
 
 #[tokio::test]
 async fn test_scoped_agent_exit_retains_output_without_emitting_task_exit() {
-    let manager = PtyManager::new();
+    let mut manager = PtyManager::new();
+    let mut fixture = test_fixture::NativePtyFixtureCleanup::new(&mut manager);
     let key = "plugin:review:project:project-1:session:session-1";
-    register_emitter_test_session(&manager, key, 11, "scoped-agent.pid").await;
+    register_emitter_test_session(&mut fixture, &manager, key, 11, "scoped-agent.pid").await;
     let bus = crate::app_events::AppEventBus::new(16, 16);
     let mut events = bus.subscribe(None).expect("subscribe should work");
     let (output_tx, output_rx) = pty_output_channel();
@@ -292,7 +309,7 @@ async fn test_scoped_agent_exit_retains_output_without_emitting_task_exit() {
         .lock()
         .await
         .insert(key.to_string(), Arc::clone(&ring));
-    let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+    let pid_dir = fixture.pid_dir();
     let (observer_tx, observer_rx) = tokio::sync::oneshot::channel();
     let observer_tx = Arc::new(std::sync::Mutex::new(Some(observer_tx)));
 
@@ -310,7 +327,7 @@ async fn test_scoped_agent_exit_retains_output_without_emitting_task_exit() {
             terminal_sessions: manager.terminal_sessions.clone(),
             exit_action: PtyExitAction::Cleanup {
                 lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
-                pid_file: tmp_dir.path().join("scoped-agent.pid"),
+                pid_file: pid_dir.join("scoped-agent.pid"),
                 policy: PtyExitPolicy::ScopedAgent(Arc::new(move |instance_id, success| {
                     if let Some(sender) = observer_tx.lock().expect("observer lock").take() {
                         let _ = sender.send((instance_id, success));
@@ -329,12 +346,15 @@ async fn test_scoped_agent_exit_retains_output_without_emitting_task_exit() {
     let received = collect_bus_events_until_quiet(&mut events).await;
     assert_eq!(count_events(&received, "agent-pty-exited"), 0);
     assert!(manager.output_buffers.lock().await.contains_key(key));
+    fixture.finish().expect("fixture cleanup");
 }
 
 #[tokio::test]
 async fn test_exit_events_fallback_to_sender_without_runtime_adapter() {
-    let manager = PtyManager::new();
+    let mut manager = PtyManager::new();
+    let mut fixture = test_fixture::NativePtyFixtureCleanup::new(&mut manager);
     register_emitter_test_session(
+        &mut fixture,
         &manager,
         "agent-fallback-exit",
         10,
@@ -345,7 +365,7 @@ async fn test_exit_events_fallback_to_sender_without_runtime_adapter() {
     let (app_event_tx, mut app_event_rx) = tokio::sync::broadcast::channel(8);
     let (output_tx, output_rx) = pty_output_channel();
     let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(128)));
-    let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+    let pid_dir = fixture.pid_dir();
 
     spawn_batched_pty_event_emitter(
         output_rx,
@@ -361,7 +381,7 @@ async fn test_exit_events_fallback_to_sender_without_runtime_adapter() {
             terminal_sessions: manager.terminal_sessions.clone(),
             exit_action: PtyExitAction::Cleanup {
                 lifecycle_lock: LifecycleLockRegistry::default().lock_for("test-session"),
-                pid_file: tmp_dir.path().join("agent-fallback-exit.pid"),
+                pid_file: pid_dir.join("agent-fallback-exit.pid"),
                 policy: PtyExitPolicy::TaskAgent,
             },
         },
@@ -380,6 +400,7 @@ async fn test_exit_events_fallback_to_sender_without_runtime_adapter() {
         1,
         "agent PTY exit should be published exactly once through the fallback sender"
     );
+    fixture.finish().expect("fixture cleanup");
 }
 
 #[tokio::test]
@@ -595,15 +616,17 @@ async fn test_agent_pty_exit_preserves_output_buffer_for_later_replay() {
 #[tokio::test]
 async fn test_finalize_pty_exit_terminates_live_root_before_nonblocking_reap() {
     let mut manager = PtyManager::new();
-    let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(tmp_dir.path().to_path_buf());
+    let mut fixture = test_fixture::NativePtyFixtureCleanup::new(&mut manager);
+    let pid_dir = fixture.pid_dir();
     let key = "live-eof-agent";
+    let session = test_agent_pty_session(&mut fixture, key);
+    let instance_id = session.instance_id;
     manager
         .sessions
         .lock()
         .await
-        .insert(key.to_string(), test_agent_pty_session(key));
-    let pid_file = tmp_dir.path().join(format!("{key}-pty.pid"));
+        .insert(key.to_string(), session);
+    let pid_file = pid_dir.join(format!("{key}-pty.pid"));
     write_test_session_metadata(&manager, key, &pid_file).await;
     let lifecycle_lock = LifecycleLockRegistry::default().lock_for("test-session");
 
@@ -616,7 +639,7 @@ async fn test_finalize_pty_exit_terminates_live_root_before_nonblocking_reap() {
                 pid_file: &pid_file,
             },
             key,
-            1,
+            instance_id,
             false,
         ),
     )
@@ -629,6 +652,7 @@ async fn test_finalize_pty_exit_terminates_live_root_before_nonblocking_reap() {
     );
     assert!(!manager.sessions.lock().await.contains_key(key));
     assert!(!pid_file.exists());
+    fixture.finish().expect("fixture cleanup");
 }
 
 #[tokio::test]
@@ -733,12 +757,11 @@ async fn test_finalize_pty_exit_ignores_stale_instance() {
 #[tokio::test]
 async fn passive_cleanup_failure_becomes_managed_recovery_and_blocks_spawn() {
     let mut manager = PtyManager::new();
-    let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(temp_dir.path().to_path_buf());
+    let mut fixture = test_fixture::NativePtyFixtureCleanup::new(&mut manager);
+    let pid_dir = fixture.pid_dir();
     let session_key = "passive-cleanup-recovery";
-    let mut session = test_agent_pty_session(session_key);
+    let mut session = test_agent_pty_session(&mut fixture, session_key);
     let instance_id = session.instance_id;
-    let pid = session.child.process_id().expect("test child PID");
     session.managed_process.root_start_time += 1;
     manager
         .sessions
@@ -747,7 +770,7 @@ async fn passive_cleanup_failure_becomes_managed_recovery_and_blocks_spawn() {
         .insert(session_key.to_string(), session);
 
     let lifecycle_lock = manager.lifecycle_lock_for(session_key).await;
-    let pid_file = temp_dir.path().join(format!("{session_key}-pty.pid"));
+    let pid_file = pid_dir.join(format!("{session_key}-pty.pid"));
     let success = finalize_pty_exit(
         PtyExitCleanupContext {
             terminal_sessions: &manager.terminal_sessions,
@@ -774,7 +797,11 @@ async fn passive_cleanup_failure_becomes_managed_recovery_and_blocks_spawn() {
                 && diagnostic.lifecycle_state == TerminalSessionLifecycleState::ManagedRecovery
         }));
     let spawn_result = manager
-        .spawn_companion_test_agent_pty(session_key, temp_dir.path(), "printf should-not-spawn")
+        .spawn_companion_test_agent_pty(
+            session_key,
+            pid_dir.parent().unwrap(),
+            "printf should-not-spawn",
+        )
         .await;
     assert!(matches!(
         spawn_result,
@@ -782,13 +809,13 @@ async fn passive_cleanup_failure_becomes_managed_recovery_and_blocks_spawn() {
             if message.contains("managed cleanup is still pending")
     ));
 
-    let mut recovery = manager
+    let recovery = manager
         .terminal_sessions
         .take_managed_recovery_for_test(session_key, instance_id)
         .await
         .expect("failed passive cleanup should retain ownership");
-    crate::pty_manager::managed_process::force_kill_unverified_spawn(pid)
-        .expect("recovery process tree should accept SIGKILL");
-    let _ = recovery.child.kill();
-    let _ = recovery.child.try_wait();
+    // Evidence is checked above. The fixture still owns the original identity
+    // and reaper, even though this test deliberately corrupted the session copy.
+    drop(recovery);
+    fixture.finish().expect("fixture cleanup");
 }
