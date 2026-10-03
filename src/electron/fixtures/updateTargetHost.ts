@@ -10,7 +10,9 @@ import { strict as assert } from 'node:assert'
 import { app } from 'electron'
 import type { Writable } from 'node:stream'
 import type { RestartTerminalController } from '../restartWorkspace.js'
+import { FixtureProcess } from './updateFixtureProcess.js'
 
+const ownedSidecars = new Set<FixtureProcess>()
 const userData = process.env.OPENFORGE_ELECTRON_USER_DATA_DIR!
 app.setPath('userData', userData)
 app.setPath('sessionData', userData)
@@ -19,7 +21,9 @@ app.commandLine.appendSwitch('disable-gpu')
 const config = JSON.parse(await readFile(join(userData, 'host.json'), 'utf8'))
 await writeFile(join(userData, 'target-entered'), 'entered')
 const deadline = setTimeout(() => {
-  void readFile(join(userData, 'target-entered'), 'utf8').then(progress => writeFile(config.marker, `refused: fixture transaction deadline at ${progress}`)).finally(() => app.exit(1))
+  void Promise.allSettled([...ownedSidecars].map(sidecar => sidecar.stop()))
+    .then(results => writeFile(config.marker, `refused: fixture transaction deadline; cleanup=${JSON.stringify(results)}`))
+    .finally(() => app.exit(1))
 }, 60_000)
 deadline.unref()
 try {
@@ -52,10 +56,13 @@ try {
       await rename(path, saved)
       await rename(substitute, path)
     }
-    const sidecar = spawn(path, ['--openforge-update-startup', ...(options.runtime ? [`--${options.runtime}-runtime`] : [])], {
-      env: { ...process.env, OPENFORGE_RESTART_OPERATION: config.target.operationId }, stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
-    })
-    const sidecarExit = new Promise<number | null>(resolve => sidecar.once('exit', resolve))
+    const ownsColdGroup = options.runtime === 'cold' || options.runtime === 'wrong-cold'
+    const owned = new FixtureProcess(spawn(path, ['--openforge-update-startup', ...(options.runtime ? [`--${options.runtime}-runtime`] : [])], {
+      detached: ownsColdGroup, env: { ...process.env, OPENFORGE_RESTART_OPERATION: config.target.operationId }, stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
+    }), userData, 'target-sidecar', { ownedProcessGroup: ownsColdGroup })
+    ownedSidecars.add(owned)
+    const sidecar = owned.child
+    const sidecarExit = owned.exited.then(() => sidecar.exitCode)
     let output = ''
     let errors = ''
     let ready!: () => void
@@ -63,13 +70,13 @@ try {
     let runtimeReady!: (controller: RestartTerminalController) => void
     const runtimeWaiting = new Promise<RestartTerminalController>(resolve => { runtimeReady = resolve })
     const prefix = 'sidecar-awaiting-admission\n'
-    sidecar.stdout.on('data', chunk => {
+    sidecar.stdout!.on('data', chunk => {
       output += String(chunk)
       if (output.startsWith(prefix)) ready()
       const runtime = output.match(/runtime-ready:(\{[^\n]+\})\n/)
       if (runtime) runtimeReady(JSON.parse(runtime[1]))
     })
-    sidecar.stderr.on('data', chunk => { errors += String(chunk) })
+    sidecar.stderr!.on('data', chunk => { errors += String(chunk) })
     try {
       let timer: NodeJS.Timeout | undefined
       try {
@@ -88,7 +95,7 @@ try {
         for (const file of ['journal.key', 'current.json']) await cp(join(config.recovery, file), join(root, file))
         admission = JSON.stringify({ ...JSON.parse(admission), root })
       }
-      sidecar.stdin.end(admission)
+      sidecar.stdin!.end(admission)
       if (options.ready) {
         let timer: NodeJS.Timeout | undefined
         try {
@@ -96,21 +103,28 @@ try {
             new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Runtime readiness probe timed out')), 10_000) })])
           clearTimeout(timer)
           await options.ready(controller)
+          if (config.scenario === 'cold-stall' || config.scenario === 'wrong-cold-stall') {
+            sidecar.kill('SIGSTOP')
+            throw new Error('fixture deliberately stopped its cold Sidecar')
+          }
         } finally {
           clearTimeout(timer)
           ;(sidecar.stdio[3] as Writable).end()
         }
       }
       await writeFile(join(userData, 'target-entered'), `waiting for Sidecar exit: ${options.runtime ?? options.mode ?? 'admission'}`)
-      const code = await sidecarExit
+      await owned.waitForExit(15_000)
+      const code = sidecar.exitCode
       return { code, output: output.slice(prefix.length), errors, admission }
     } catch (error) {
       throw new Error(`${String(error)}; owned Sidecar code=${sidecar.exitCode} signal=${sidecar.signalCode}: ${errors}`)
     } finally {
       ;(sidecar.stdio[3] as Writable).end()
       // Runtime fixtures observe EOF and reap their owned cold daemon before exiting.
-      if (options.runtime) await sidecarExit
-      else { sidecar.kill('SIGKILL'); await sidecarExit }
+      if (options.runtime) {
+        try { await owned.waitForExit(config.scenario.endsWith('-stall') ? 250 : 10_000) }
+        finally { await owned.stop(); ownedSidecars.delete(owned) }
+      } else { await owned.stop(); ownedSidecars.delete(owned) }
     }
   }
   if (config.scenario === 'admission') {
@@ -130,6 +144,13 @@ try {
     const replay = await runSidecar({ replay: valid.admission })
     assert.notEqual(replay.code, 0)
     assert.match(replay.errors, /not the authenticated launched process/)
+  } else if (config.scenario === 'cold-stall' || config.scenario === 'wrong-cold-stall') {
+    await assert.rejects(runSidecar({ runtime: config.scenario === 'cold-stall' ? 'cold' : 'wrong-cold', ready: async controller => {
+      if (config.scenario === 'cold-stall') await verifyNativeUpdateReadiness({ ...update, controller })
+    } }), /exit timed out/)
+    const log = await readFile(join(userData, 'target-sidecar.log'), 'utf8')
+    assert.match(log, /owned-daemon:\d+/)
+    assert.match(log, /owned group=\d+ retired/)
   } else if (config.scenario === 'cold-image') {
     const wrongRuntime = await runSidecar({ runtime: 'wrong-cold', ready: async controller => {
       await writeFile(join(userData, 'target-entered'), 'checking wrong daemon readiness')

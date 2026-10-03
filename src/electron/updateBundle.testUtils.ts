@@ -1,15 +1,19 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { UpdateBundleStore } from './updateBundleStore.js'
 
 const roots: string[] = []
+export function retainUpdateBundle(root: string): void {
+  const index = roots.indexOf(root)
+  if (index !== -1) roots.splice(index, 1)
+}
 export async function cleanupUpdateBundles(): Promise<void> {
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })))
 }
 
 export async function updateBundleFixture() {
-  const root = await mkdtemp(join(tmpdir(), 'of-update-bundle-'))
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'of-update-bundle-')))
   roots.push(root)
   const source = join(root, 'source.app')
   for (const [name, value] of Object.entries({
