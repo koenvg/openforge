@@ -4792,44 +4792,9 @@
     {
       "path": "src/lib/taskStatePresentation.ts",
       "kind": "script-component-candidate",
-      "token": "badge-error",
-      "count": 1,
-      "reason": "Unused getTaskStateBadgeClass has no imports or callers and is not an executable styling consumer. Reintroduction cleanup is KVG-5335."
-    },
-    {
-      "path": "src/lib/taskStatePresentation.ts",
-      "kind": "script-component-candidate",
-      "token": "badge-ghost",
-      "count": 1,
-      "reason": "Unused getTaskStateBadgeClass has no imports or callers and is not an executable styling consumer. Reintroduction cleanup is KVG-5335."
-    },
-    {
-      "path": "src/lib/taskStatePresentation.ts",
-      "kind": "script-component-candidate",
-      "token": "badge-info",
-      "count": 1,
-      "reason": "Unused getTaskStateBadgeClass has no imports or callers and is not an executable styling consumer. Reintroduction cleanup is KVG-5335."
-    },
-    {
-      "path": "src/lib/taskStatePresentation.ts",
-      "kind": "script-component-candidate",
-      "token": "badge-success",
-      "count": 1,
-      "reason": "Unused getTaskStateBadgeClass has no imports or callers and is not an executable styling consumer. Reintroduction cleanup is KVG-5335."
-    },
-    {
-      "path": "src/lib/taskStatePresentation.ts",
-      "kind": "script-component-candidate",
-      "token": "badge-warning",
-      "count": 1,
-      "reason": "Unused getTaskStateBadgeClass has no imports or callers and is not an executable styling consumer. Reintroduction cleanup is KVG-5335."
-    },
-    {
-      "path": "src/lib/taskStatePresentation.ts",
-      "kind": "script-component-candidate",
       "token": "input",
       "count": 1,
-      "reason": "Unused getTaskStateBadgeClass has no imports or callers and is not an executable styling consumer. Reintroduction cleanup is KVG-5335."
+      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
       "path": "src/lib/terminalPluginPackage.test.ts",
