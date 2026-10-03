@@ -45,7 +45,8 @@ impl Provider {
                 stream
                     .set_read_timeout(Some(Duration::from_secs(2)))
                     .unwrap();
-                let (headers, body) = super::http::read(&mut stream, 1024 * 1024).unwrap();
+                let (headers, body) =
+                    super::http::read(&mut stream, 1024 * 1024, 1024 * 1024 + 8192).unwrap();
                 assert!(headers.starts_with("POST /v1/chat/completions "));
                 let request: Value = serde_json::from_slice(&body).unwrap();
                 let (delta, reason) = if index == 0 {
