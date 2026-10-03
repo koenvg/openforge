@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { BrowserWindow, protocol, session } from 'electron'
-import type { IpcMain } from 'electron'
+import type { IpcMain, Session, WebContents } from 'electron'
 import { createMainWindowOptions } from './windowConfig.js'
 import { createPreloadPath } from './preloadPath.js'
 import { loadAndRevealMainWindow } from './windowStartup.js'
@@ -23,6 +23,8 @@ export class ElectronRendererAdapter {
   private readonly trust = new ElectronRendererTrustAdapter()
   private readonly subscriptions = new RendererEventSubscriptions()
   private readonly renderers = new Set<number>()
+  private readonly permissionRenderers = new Map<WebContents, ReadonlySet<string>>()
+  private readonly permissionSessions = new WeakSet<Session>()
   private mainWindow: BrowserWindow | null = null
   private readonly relay: FrontendHostRequestRelay
 
@@ -76,6 +78,7 @@ export class ElectronRendererAdapter {
     const unregisterBrowserWindow = this.browser.registerWindow(window)
     window.on('closed', () => {
       this.renderers.delete(rendererId)
+      this.permissionRenderers.delete(window.webContents)
       this.restart.forget(rendererId)
       unregisterRestartWindow?.()
       unregisterBrowserWindow()
@@ -96,13 +99,7 @@ export class ElectronRendererAdapter {
       this.subscriptions.clear(rendererId)
       void this.relay.rendererLost(rendererId)
     })
-    window.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
-      callback(this.trust.shouldGrantRendererPermission({
-        permission, isMainWindowWebContents: webContents.id === rendererId,
-        requestingUrl: details.requestingUrl, trustedOrigins,
-        mediaTypes: 'mediaTypes' in details ? details.mediaTypes : undefined,
-      }))
-    })
+    this.registerRendererPermissions(window.webContents, trustedOrigins)
 
     developerLogSink.info(`[electron] Loading renderer from ${rendererUrl ?? 'packaged dist/index.html'}`)
     await loadAndRevealMainWindow(window, rendererUrl
@@ -111,6 +108,24 @@ export class ElectronRendererAdapter {
       failureReporter: this.options.failureReporter,
     })
     return window
+  }
+
+  private registerRendererPermissions(renderer: WebContents, trustedOrigins: ReadonlySet<string>): void {
+    this.permissionRenderers.set(renderer, trustedOrigins)
+    const rendererSession = renderer.session
+    if (this.permissionSessions.has(rendererSession)) return
+    this.permissionSessions.add(rendererSession)
+
+    // A Session has one handler. Keep it host-owned and consult live membership for each request.
+    rendererSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+      const origins = this.permissionRenderers.get(webContents)
+      callback(!!origins && !webContents.isDestroyed() && webContents.session === rendererSession && details.isMainFrame
+        && this.trust.shouldGrantRendererPermission({
+          permission, isMainWindowWebContents: true,
+          requestingUrl: details.requestingUrl, trustedOrigins: origins,
+          mediaTypes: 'mediaTypes' in details ? details.mediaTypes : undefined,
+        }))
+    })
   }
 
   createEventStream(sidecarConfig: SidecarLaunchConfig): SidecarEventStreamAdapter {

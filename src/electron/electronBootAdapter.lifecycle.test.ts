@@ -150,6 +150,76 @@ async function liveHost(controlled = false) {
   }
 }
 describe('Electron BootLifecycleAdapter host policies', () => {
+  it.each(['file:///Applications/OpenForge/index.html', 'http://localhost:1420/tasks'])('keeps trusted permissions for both live workspace windows at %s', async requestingUrl => {
+    const host = createElectronBootAdapter({ currentDir: root, workspaceRoot: root, env: {
+      OPENFORGE_E2E: '1',
+      ...(requestingUrl.startsWith('http:') ? { ELECTRON_RENDERER_URL: 'http://localhost:1420' } : {}),
+    } })
+    const first = await host.createMainWindow() as HostWindow
+    const second = await host.createMainWindow() as HostWindow
+    expect(first.renderer.session).toBe(second.renderer.session)
+    const requestPermission = first.renderer.session.handlers.get('permission-request')![0]
+    for (const window of [first, second]) {
+      for (const permission of ['fullscreen', 'media']) {
+        const decision = vi.fn()
+        requestPermission(window.renderer, permission, decision, { requestingUrl, isMainFrame: true, mediaTypes: ['audio'] })
+        expect(decision).toHaveBeenCalledExactlyOnceWith(true)
+      }
+    }
+  })
+
+  it.each([0, 1])('removes closed renderer permissions without affecting window %s or new windows', async closedIndex => {
+    const host = adapter()
+    const pair = [await host.createMainWindow(), await host.createMainWindow()] as HostWindow[]
+    const rendererSession = pair[0].renderer.session
+    const requestPermission = rendererSession.handlers.get('permission-request')![0]
+    const closed = pair[closedIndex]
+    const remaining = pair[1 - closedIndex]
+    const grant = (window: HostWindow) => {
+      const decision = vi.fn()
+      requestPermission(window.renderer, 'fullscreen', decision, { requestingUrl: 'file:///Applications/OpenForge/index.html', isMainFrame: true })
+      return decision
+    }
+    closed.destroy()
+    expect(grant(closed)).toHaveBeenCalledExactlyOnceWith(false)
+    expect(grant(remaining)).toHaveBeenCalledExactlyOnceWith(true)
+    remaining.destroy()
+    expect(grant(remaining)).toHaveBeenCalledExactlyOnceWith(false)
+    const replacement = await host.createMainWindow() as HostWindow
+    expect(rendererSession.handlers.get('permission-request')![0]).toBe(requestPermission)
+    expect(grant(replacement)).toHaveBeenCalledExactlyOnceWith(true)
+    expect(grant(closed)).toHaveBeenCalledExactlyOnceWith(false)
+  })
+
+  it('denies foreign renderer identities, foreign frames and permissions outside the trusted allowlist', async () => {
+    const host = createElectronBootAdapter({ currentDir: root, workspaceRoot: root, env: {
+      OPENFORGE_E2E: '1', ELECTRON_RENDERER_URL: 'http://localhost:1420',
+    } })
+    const window = await host.createMainWindow() as HostWindow
+    const requestPermission = window.renderer.session.handlers.get('permission-request')![0]
+    const trusted = { requestingUrl: 'http://localhost:1420/tasks', isMainFrame: true }
+    const foreign = electronFakes.registerWindow(999).webContents
+    Object.assign(foreign, { id: window.renderer.id })
+    const cases = [
+      { contents: foreign, permission: 'fullscreen', details: trusted },
+      { contents: window.renderer, permission: 'fullscreen', details: { ...trusted, isMainFrame: false } },
+      ...['https://example.com', 'http://localhost:1421', 'http://127.0.0.1:1420', 'not-a-url', undefined].map(requestingUrl => ({
+        contents: window.renderer, permission: 'fullscreen', details: { ...trusted, requestingUrl },
+      })),
+      ...['notifications', 'geolocation', 'clipboard-read', 'display-capture'].map(permission => ({
+        contents: window.renderer, permission, details: trusted,
+      })),
+      ...[[], ['video'], ['audio', 'video'], ['unknown']].map(mediaTypes => ({
+        contents: window.renderer, permission: 'media', details: { ...trusted, mediaTypes },
+      })),
+    ]
+    for (const { contents, permission, details } of cases) {
+      const decision = vi.fn()
+      requestPermission(contents, permission, decision, details)
+      expect(decision).toHaveBeenCalledExactlyOnceWith(false)
+    }
+  })
+
   it('routes fenced terminal resize only from registered main frames and drops stale attachment work', async () => {
     const { host, commands } = await liveHost(true)
     const window = await host.createMainWindow() as HostWindow
@@ -214,6 +284,15 @@ describe('Electron BootLifecycleAdapter host policies', () => {
     await expect(invoke(first, 'task_browser_surface_capture_exists', { ...owner, artifactId: capture.value.artifactId })).resolves.toEqual({ ok: true, value: true })
     await expect(invoke(second, 'task_browser_surface_capture_visible_viewport', owner)).resolves.toMatchObject({ ok: false, error: { code: 'SURFACE_ACCESS_DENIED' } })
     const contents = electronFakes.views[0].webContents
+    expect(contents.session).not.toBe(first.renderer.session)
+    const trustedRendererPermission = first.renderer.session.handlers.get('permission-request')![0]
+    for (const permission of ['fullscreen', 'media']) {
+      const denied = vi.fn()
+      trustedRendererPermission(contents, permission, denied, {
+        requestingUrl: 'file:///Applications/OpenForge/index.html', isMainFrame: true, mediaTypes: ['audio'],
+      })
+      expect(denied).toHaveBeenCalledExactlyOnceWith(false)
+    }
     const requestPermission = contents.session.handlers.get('permission-request')![0]
     showMessageBox.mockResolvedValue({ response: 0, checkboxChecked: false })
     const decision = vi.fn()
