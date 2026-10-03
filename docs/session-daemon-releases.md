@@ -50,11 +50,15 @@ A replacement refusal records a failed stage such as `preflight` or `checkpoint`
 | Encoded replacement body | 64 MiB, independently bounded during serialization. |
 | Encoded header | 8 KiB, including descriptor inventory and notification checkpoint metadata. |
 | Inherited descriptors | At most 1,024 PTY masters plus four root/checkpoint descriptors; all must be unique and validated. |
-| Backend capture time | Four-second deadline checked between reader/model captures. Not the whole transaction. |
+| Complete pre-exec pause | One ten-second deadline from ingress admission closure through the final pre-exec check. |
 
 These are separate ceilings, not additive allocations or a promise that every maximally sized component fits simultaneously. Dense output, notification state, serialization overhead, or restore headroom can refuse a handoff even when the PTY count fits. Fixture-only byte/time overrides lower budgets to exercise refusal; they do not configure production capacity.
 
-The four-second backend budget is **not an end-to-end pause guarantee**. Ingress quiescence has a separate 32-second wait, and ledger serialization, image/state probes, and checkpoint file synchronization occur outside the backend timer. The 256-PTY test asserts an observed pause below ten seconds, not a production deadline. KVG-5326 tracks the missing complete-transaction deadline.
+Ingress and reader quiescence, model capture, credential-file verification, ledger serialization, combined encoding, both image/state probes, checkpoint file synchronization, and the commit reply share this deadline. The final check refuses before destructive exec if the budget has expired.
+
+Slow owned-snapshot work runs without the pause guards. Expiration drops those guards and resumes old I/O without waiting for encoding or filesystem work to finish. Further replacement preparation refuses while abandoned work is still alive. State-probe helpers use the remaining budget and are killed and reaped on refusal.
+
+This is a pre-exec deadline, subject to OS scheduling and syscall latency, not a post-exec restoration bound or permission to enable production updates.
 
 KVG-5263 reran the isolated fixture on native macOS arm64 against baseline `3a78e2309`:
 

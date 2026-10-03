@@ -95,10 +95,24 @@ impl HostState {
     /// # Errors
     /// Refuses oversized or unrepresentable state without changing the serving ledger.
     pub fn checkpoint(&self) -> Result<Vec<u8>, HostError> {
+        self.checkpoint_inner(None)
+    }
+
+    /// Captures the ledger within the owner's shared pre-exec deadline.
+    ///
+    /// # Errors
+    /// Returns checkpoint-time capacity when the deadline expires, without changing receipts.
+    pub fn checkpoint_before(&self, deadline: std::time::Instant) -> Result<Vec<u8>, HostError> {
+        self.checkpoint_inner(Some(deadline))
+    }
+
+    fn checkpoint_inner(&self, deadline: Option<std::time::Instant>) -> Result<Vec<u8>, HostError> {
+        check_deadline(deadline)?;
         let operations = self
             .operations
             .iter()
             .map(|(operation, recorded)| {
+                check_deadline(deadline)?;
                 let result = match &recorded.result {
                     Ok(receipt) => Ok(receipt.clone()),
                     Err(error) => Err(Failure::try_from(error)?),
@@ -127,8 +141,14 @@ impl HostState {
             operation_window: self.operation_window,
         };
         checkpoint.validate()?;
-        let mut output = BoundedBytes(Vec::new());
-        serde_json::to_writer(&mut output, &checkpoint).map_err(|_| HostError::Capacity)?;
+        check_deadline(deadline)?;
+        let mut output = BoundedBytes(Vec::new(), deadline);
+        serde_json::to_writer(&mut output, &checkpoint).map_err(|_| {
+            check_deadline(deadline)
+                .err()
+                .unwrap_or(HostError::Capacity)
+        })?;
+        check_deadline(deadline)?;
         Ok(output.0)
     }
 
@@ -177,9 +197,18 @@ impl HostState {
     }
 }
 
-struct BoundedBytes(Vec<u8>);
+fn check_deadline(deadline: Option<std::time::Instant>) -> Result<(), HostError> {
+    if deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline) {
+        Err(HostError::CapacityExceeded(CapacityKind::CheckpointTime))
+    } else {
+        Ok(())
+    }
+}
+
+struct BoundedBytes(Vec<u8>, Option<std::time::Instant>);
 impl Write for BoundedBytes {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        check_deadline(self.1).map_err(io::Error::other)?;
         if self.0.len().saturating_add(bytes.len()) > MAX_HOST_CHECKPOINT_BYTES {
             return Err(io::Error::other("host checkpoint capacity"));
         }

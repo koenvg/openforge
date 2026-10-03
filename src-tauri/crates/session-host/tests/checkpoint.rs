@@ -203,7 +203,18 @@ fn restored_ledger_preserves_receipts_input_order_and_lifetime_while_fencing_old
                 .await,
             Err(HostError::OutcomeUnknown)
         );
-        let bytes = ledger.lock().await.checkpoint().unwrap();
+        {
+            let state = ledger.lock().await;
+            assert_eq!(
+                state.checkpoint_before(std::time::Instant::now()),
+                Err(HostError::CapacityExceeded(CapacityKind::CheckpointTime)),
+            );
+        }
+        let bytes = ledger
+            .lock()
+            .await
+            .checkpoint_before(std::time::Instant::now() + std::time::Duration::from_secs(1))
+            .unwrap();
         let restored = HostState::restore_checkpoint(&bytes).unwrap();
         assert_eq!(restored.lifetime(), &pty.lifetime);
         let restored = Arc::new(tokio::sync::Mutex::new(restored));

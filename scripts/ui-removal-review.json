@@ -16,6 +16,20 @@
       "reason": "Browser scenario title describing icon animation, not a class passed to a styling sink."
     },
     {
+      "path": "scripts/experiments/terminal-restoration/arc-cdp.test.mjs",
+      "kind": "script-component-candidate",
+      "token": "tab",
+      "count": 2,
+      "reason": "Test titles describing Arc browser tab creation and cleanup, not classes passed to a styling sink."
+    },
+    {
+      "path": "scripts/experiments/terminal-restoration/arc-cdp.test.mjs",
+      "kind": "script-component-candidate",
+      "token": "tabs",
+      "count": 1,
+      "reason": "Test title describing user browser tabs, not a class passed to a styling sink."
+    },
+    {
       "path": "scripts/experiments/xterm-screen-first/adapter.ts",
       "kind": "script-component-candidate",
       "token": "tab",
@@ -250,7 +264,7 @@
       "path": "packages/plugin-sdk/src/ui/AnchoredMenu.browser.test.ts",
       "kind": "script-component-candidate",
       "token": "menu",
-      "count": 12,
+      "count": 14,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
     },
     {
@@ -308,6 +322,13 @@
       "token": "class={className}",
       "count": 1,
       "reason": "Supported SDK caller-owned class/attribute forwarding, or test-only data. SDK consumers remain covered by the full scan."
+    },
+    {
+      "path": "packages/plugin-sdk/src/ui/BitsMenuLifecycleBrowserFixture.svelte",
+      "kind": "unresolved",
+      "token": "{...props}",
+      "count": 1,
+      "reason": "Bits UI DropdownMenu.Content child-snippet props forwarded by a browser-only lifecycle fixture. No local class producer or legacy styling input."
     },
     {
       "path": "packages/plugin-sdk/src/ui/Button.svelte",
@@ -5257,6 +5278,13 @@
       "token": "alert",
       "count": 1,
       "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+    },
+    {
+      "path": "storybook/stories/components/sdk/check.mjs",
+      "kind": "script-component-candidate",
+      "token": "tooltip",
+      "count": 1,
+      "reason": "Playwright getByRole tooltip accessibility query, not a class passed to a styling sink."
     },
     {
       "path": "storybook/stories/components/sdk/Actions.stories.ts",

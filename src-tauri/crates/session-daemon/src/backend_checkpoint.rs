@@ -1,4 +1,5 @@
 use super::*;
+use crate::pause_deadline::PauseDeadline;
 use crate::{
     agent_config::{AgentCredential, AgentRuntime, CredentialCheckpoint},
     journal::Journal,
@@ -6,10 +7,7 @@ use crate::{
     quiescence::Paused,
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::BTreeSet,
-    time::{Duration, Instant},
-};
+use std::collections::BTreeSet;
 
 const MAX_RESOURCES: usize = openforge_session_host::MAX_SESSIONS;
 const MAX_RECORDS: usize = openforge_session_host::MAX_SESSIONS;
@@ -25,19 +23,6 @@ pub(super) fn retained_byte_limit() -> usize {
         return limit;
     }
     MAX_RETAINED_BYTES
-}
-
-fn checkpoint_time_budget() -> Duration {
-    const MAX_MS: u64 = 4_000;
-    #[cfg(feature = "replacement-fixtures")]
-    if let Some(milliseconds) = std::env::var("OPENFORGE_TEST_CHECKPOINT_DEADLINE_MS")
-        .ok()
-        .and_then(|value| value.parse::<u64>().ok())
-        .filter(|value| (1..MAX_MS).contains(value))
-    {
-        return Duration::from_millis(milliseconds);
-    }
-    Duration::from_millis(MAX_MS)
 }
 
 #[derive(Serialize, Deserialize)]
@@ -77,9 +62,24 @@ impl BackendCheckpoint {
             if let Some(process) = &record.process {
                 process.validate_for_image()?;
             }
+        }
+        self.verify_credentials(runtime, None)
+    }
+    pub fn verify_credentials(
+        &self,
+        runtime: &AgentRuntime,
+        deadline: Option<&PauseDeadline>,
+    ) -> Result<(), Error> {
+        for record in &self.records {
+            if let Some(deadline) = deadline {
+                deadline.check()?;
+            }
             if let Some(agent) = &record.agent {
                 agent.validate(runtime)?;
             }
+        }
+        if let Some(deadline) = deadline {
+            deadline.check()?;
         }
         Ok(())
     }
@@ -183,7 +183,10 @@ impl BackendCheckpoint {
     }
 }
 impl Backend {
-    pub fn checkpoint(&self) -> Result<(BackendCheckpoint, Vec<Paused>), Error> {
+    pub fn checkpoint(
+        &self,
+        deadline: &PauseDeadline,
+    ) -> Result<(BackendCheckpoint, Vec<Paused>), Error> {
         let table = self.table()?;
         if table.records.len() > MAX_RECORDS
             || table
@@ -195,22 +198,18 @@ impl Backend {
         {
             return Err(Error::Capacity);
         }
-        let deadline = Instant::now() + checkpoint_time_budget();
+        deadline.check()?;
         let mut pauses = Vec::new();
         for (instance, record) in &table.records {
-            if Instant::now() >= deadline {
-                return Err(Error::CapacityExceeded(CapacityKind::CheckpointTime));
-            }
+            deadline.check()?;
             if let Some(process) = &record.process {
-                pauses.push((*instance, process.pause()?));
+                pauses.push((*instance, process.pause(deadline.remaining()?)?));
             }
         }
         let mut records = Vec::new();
         let mut bytes = 0usize;
         for (instance, record) in &table.records {
-            if Instant::now() >= deadline {
-                return Err(Error::CapacityExceeded(CapacityKind::CheckpointTime));
-            }
+            deadline.check()?;
             let process = match &record.process {
                 Some(process) => {
                     let pause = &pauses
@@ -218,7 +217,7 @@ impl Backend {
                         .find(|(paused, _)| paused == instance)
                         .ok_or(Error::InvalidRequest)?
                         .1;
-                    let saved = process.checkpoint(pause)?;
+                    let saved = process.checkpoint(pause, deadline)?;
                     bytes = bytes
                         .checked_add(saved.retained_bytes())
                         .ok_or(Error::CapacityExceeded(CapacityKind::CheckpointBytes))?;
@@ -232,11 +231,7 @@ impl Backend {
             records.push(SavedRecord {
                 metadata: record.metadata.clone(),
                 process,
-                agent: record
-                    .agent
-                    .as_ref()
-                    .map(AgentCredential::checkpoint)
-                    .transpose()?,
+                agent: record.agent.as_ref().map(AgentCredential::checkpoint),
                 final_recovery: record.final_recovery.clone(),
             });
         }
@@ -249,6 +244,7 @@ impl Backend {
             color_profile: table.color_profile,
         };
         saved.validate(&table.installation, &table.lifetime)?;
+        deadline.check()?;
         Ok((saved, pauses.into_iter().map(|(_, pause)| pause).collect()))
     }
     pub fn restore(

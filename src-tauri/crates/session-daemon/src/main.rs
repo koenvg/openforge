@@ -12,6 +12,7 @@ mod notification_journal;
 mod notification_journal_tests;
 mod output;
 mod own_processes;
+mod pause_deadline;
 mod process;
 mod process_native;
 mod quiescence;

@@ -139,6 +139,22 @@ fn copy(
         sha256,
     })
 }
+pub(super) fn verify_paused(
+    image: &Image,
+    state: &[u8],
+    deadline: &crate::pause_deadline::PauseDeadline,
+    stage: &str,
+) -> Result<(), Error> {
+    deadline.check()?;
+    if digest(&image.path)? != image.sha256 {
+        return Err(Error::UnsupportedReplacement);
+    }
+    let contract = probe::run_paused(&image.path, state, deadline, stage)?;
+    if contract.image_version != image.version || contract.sha256 != image.sha256 {
+        return Err(Error::UnsupportedReplacement);
+    }
+    deadline.check()
+}
 pub(super) fn verify(image: &Image, state: Option<&[u8]>) -> Result<(), Error> {
     if digest(&image.path)? != image.sha256 {
         return Err(Error::UnsupportedReplacement);

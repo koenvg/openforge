@@ -98,12 +98,13 @@ impl AgentRuntime {
     }
 }
 impl AgentCredential {
-    pub fn checkpoint(&self) -> Result<CredentialCheckpoint, Error> {
-        verify_file(&self.path, &self.config)?;
-        Ok(CredentialCheckpoint {
+    // Capture owned metadata only. Filesystem verification belongs to the timed
+    // replacement worker, after the serving locks have been released.
+    pub fn checkpoint(&self) -> CredentialCheckpoint {
+        CredentialCheckpoint {
             config: self.config.clone(),
             path: self.path.clone(),
-        })
+        }
     }
     pub fn restore(saved: CredentialCheckpoint, runtime: &AgentRuntime) -> Result<Self, Error> {
         saved.validate(runtime)?;
@@ -120,6 +121,8 @@ impl AgentCredential {
 
 fn verify_file(path: &std::path::Path, expected: &AgentConfig) -> Result<(), Error> {
     use std::{io::Read, os::unix::fs::MetadataExt};
+    #[cfg(feature = "replacement-fixtures")]
+    std::thread::sleep(crate::pause_deadline::stage_delay("credential"));
     let file = OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)

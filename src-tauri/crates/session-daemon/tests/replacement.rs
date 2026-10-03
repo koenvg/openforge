@@ -37,6 +37,8 @@ mod pi;
 #[path = "replacement/preflight.rs"]
 mod preflight;
 
+#[path = "replacement/pause_deadline.rs"]
+mod pause_deadline;
 // Image probes and hundreds of PTYs compete for macOS process/descriptor headroom.
 static FIXTURE_SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -51,12 +53,13 @@ impl Fixture {
         Self::with_executable(Path::new(env!("CARGO_BIN_EXE_openforge-session-daemon")))
     }
     fn with_executable(executable: &Path) -> (Self, Client) {
-        Self::with_executable_and_limit(executable, None, None, None)
+        Self::with_executable_and_limit(executable, None, None, None, None)
     }
     fn with_fd_limit(limit: libc::rlim_t) -> (Self, Client) {
         Self::with_executable_and_limit(
             Path::new(env!("CARGO_BIN_EXE_openforge-session-daemon")),
             Some(limit),
+            None,
             None,
             None,
         )
@@ -67,6 +70,7 @@ impl Fixture {
             None,
             Some(limit),
             None,
+            None,
         )
     }
     fn with_checkpoint_deadline_ms(limit: u64) -> (Self, Client) {
@@ -75,6 +79,7 @@ impl Fixture {
             None,
             None,
             Some(limit),
+            None,
         )
     }
     fn with_executable_and_limit(
@@ -82,6 +87,7 @@ impl Fixture {
         fd_limit: Option<libc::rlim_t>,
         checkpoint_limit: Option<usize>,
         checkpoint_deadline_ms: Option<u64>,
+        slow_stages: Option<&str>,
     ) -> (Self, Client) {
         let serial = FIXTURE_SERIAL
             .lock()
@@ -102,6 +108,9 @@ impl Fixture {
         }
         if let Some(limit) = checkpoint_deadline_ms {
             command.env("OPENFORGE_TEST_CHECKPOINT_DEADLINE_MS", limit.to_string());
+        }
+        if let Some(stages) = slow_stages {
+            command.env("OPENFORGE_TEST_REPLACEMENT_SLOW_STAGES", stages);
         }
         // SAFETY: setsid is async-signal-safe; only the test-owned daemon's session changes.
         unsafe {

@@ -15,6 +15,7 @@ fn maintenance_capacity_preserves_original_failure_receipts_and_conflicts() {
         running_version: "current".into(),
         jobs: Vec::new(),
         pending: None,
+        pause_workers: Arc::new(AtomicUsize::new(0)),
         directory,
     };
     let request = root.path().join("missing-executable");
