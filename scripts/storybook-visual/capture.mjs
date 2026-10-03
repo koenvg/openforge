@@ -5,6 +5,7 @@ import { freezeSvgMasks } from './svg-motion.mjs'
 import { captureAppearance, identity } from './manifest.mjs'
 import { PNG } from 'pngjs'
 import { freezeMotionCss, freezeNativeMedia } from './native-media.mjs'
+import { finishStoryPlay } from './play-clock.mjs'
 
 export async function serve(root) {
   const base = resolve(root)
@@ -118,19 +119,23 @@ async function captureStory(browser, url, entry, { prepare, mutate, timeout = 30
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
     page.on('pageerror', error => errors.push(error.message))
     await page.clock.setFixedTime(new Date('2026-01-02T09:30:00.000Z'))
+    await page.clock.pauseAt(new Date('2026-01-02T09:30:00.000Z'))
+    // pauseAt's navigation replay sets system time; restore the fixed Date after it.
+    await page.clock.setFixedTime(new Date('2026-01-02T09:30:00.000Z'))
     if (prepare) await prepare(page)
     await page.goto(`${url}/${entry.catalog}/iframe.html?id=${entry.story}&viewMode=story&globals=openforgeTheme:${entry.theme};openforgeMotion:reduced`, { waitUntil: 'domcontentloaded', timeout })
     try {
-      await page.waitForFunction(() => ['finished', 'errored'].includes(window.__STORYBOOK_PREVIEW__?.currentRender?.phase))
+      await finishStoryPlay(page, timeout)
       if (await page.evaluate(() => window.__STORYBOOK_PREVIEW__.currentRender.phase === 'errored')) {
         throw new Error('story interaction failed')
       }
       await page.locator(entry.ready).first().waitFor({ state: 'visible' })
-      // Native buffering must settle while its runtime timers remain live.
-      await freezeNativeMedia(page, timeout)
-      // With fixed wall time this pauses immediately, without fast-forwarding.
-      // Keep timers live through play, then preserve transient results during capture.
-      await page.clock.pauseAt(new Date('2026-01-02T09:30:00.000Z'))
+      // Native buffering still needs live timers, but only media cases resume.
+      if (await page.locator('video[controls]').count() > 0) {
+        await page.clock.resume()
+        await freezeNativeMedia(page, timeout)
+        await page.clock.pauseAt(new Date('2026-01-02T09:30:00.000Z'))
+      }
       await page.evaluate(() => document.fonts.ready)
       // Stories can legitimately use only a non-default weight (buttons use
       // Inter 500), so accept any shipped Inter face without requesting a new

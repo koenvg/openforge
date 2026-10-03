@@ -10,9 +10,9 @@ it('reports the stalled terminal phase and preserves the readiness error while c
   }
   const page = {
     setDefaultTimeout: vi.fn(), on: vi.fn(),
-    clock: { setFixedTime: vi.fn() }, goto: vi.fn(), waitForFunction: vi.fn(),
+    clock: { setFixedTime: vi.fn(), pauseAt: vi.fn() }, goto: vi.fn(), waitForFunction: vi.fn().mockResolvedValue(undefined),
     locator: vi.fn(() => ({ first: () => ({ waitFor: vi.fn().mockRejectedValue(new Error('selector timed out')) }) })),
-    evaluate: vi.fn().mockResolvedValueOnce(false).mockResolvedValue(evidence),
+    evaluate: vi.fn().mockResolvedValueOnce('finished').mockResolvedValueOnce(false).mockResolvedValue(evidence),
   }
   const context = { route: vi.fn(), newPage: vi.fn().mockResolvedValue(page), close: vi.fn() }
   const browser = { newContext: vi.fn().mockResolvedValue(context) }
@@ -31,9 +31,9 @@ it.each(['available', 'closed', 'unresponsive'])('collects %s page evidence with
   Object.defineProperty(document, 'fonts', { configurable: true, value: { status: 'loaded' } })
   const page = {
     setDefaultTimeout: vi.fn(), on: vi.fn(),
-    clock: { setFixedTime: vi.fn() }, goto: vi.fn(), waitForFunction: vi.fn(),
+    clock: { setFixedTime: vi.fn(), pauseAt: vi.fn() }, goto: vi.fn(), waitForFunction: vi.fn().mockResolvedValue(undefined),
     locator: () => ({ first: () => ({ waitFor: () => Promise.reject(new Error('readiness deadline')) }) }),
-    evaluate: vi.fn(fn => mode === 'available' ? Promise.resolve(fn()) : mode === 'closed' ? Promise.reject(new Error('page closed')) : new Promise(() => {})).mockResolvedValueOnce(false),
+    evaluate: vi.fn(fn => mode === 'available' ? Promise.resolve(fn()) : mode === 'closed' ? Promise.reject(new Error('page closed')) : new Promise(() => {})).mockResolvedValueOnce('finished').mockResolvedValueOnce(false),
   }
   const context = { route: vi.fn(), newPage: async () => page, close: vi.fn() }
   const entry = { catalog: 'components', story: 'overflow', theme: 'openforge-light', viewport: { width: 640, height: 400 }, ready: '[data-terminal-ready=true]' }
@@ -58,7 +58,7 @@ it.each(['available', 'closed', 'unresponsive'])('collects %s page evidence with
 })
 
 it('prepares a page before navigation and closes its context if preparation fails', async () => {
-  const page = { setDefaultTimeout: vi.fn(), on: vi.fn(), clock: { setFixedTime: vi.fn() }, goto: vi.fn() }
+  const page = { setDefaultTimeout: vi.fn(), on: vi.fn(), clock: { setFixedTime: vi.fn(), pauseAt: vi.fn() }, goto: vi.fn() }
   const context = { route: vi.fn(), newPage: async () => page, close: vi.fn() }
   const prepare = vi.fn().mockRejectedValue(new Error('CPU probe setup failed'))
   const entry = { catalog: 'components', story: 'overflow', theme: 'openforge-light', viewport: { width: 640, height: 400 } }

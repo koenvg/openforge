@@ -83,9 +83,35 @@ export async function checkCaptureStability({ browser, url, entries, output, tim
 
   for (const feedback of entries.filter(item => item.story === 'pages-self-review--send-feedback')) {
     const first = await capture(browser, url, feedback)
-    const delayed = await capture(browser, url, feedback, { mutate: page => page.waitForTimeout(4000) })
-    verifyDiagnostics(first.diagnostics, feedback.expectedErrors)
-    verifyDiagnostics(delayed.diagnostics, feedback.expectedErrors)
-    assert.equal(compare(first.bytes, delayed.bytes).matches, true, 'feedback success must survive a slow screenshot capture')
+    for (const rate of [1, 4]) {
+      const delayed = await capture(browser, url, feedback, {
+        prepare: async page => {
+          const session = await page.context().newCDPSession(page)
+          await session.send('Emulation.setCPUThrottlingRate', { rate })
+          const wait = page.waitForFunction.bind(page)
+          let first = true
+          page.waitForFunction = async (...args) => {
+            const result = await wait(...args)
+            if (first) {
+              first = false
+              // Deliberately exceed the production confirmation's three-second
+              // lifetime at the host observation boundary, not as a readiness fix.
+              await new Promise(resolve => setTimeout(resolve, 3200))
+            }
+            return result
+          }
+        },
+        mutate: async page => {
+          assert.equal(await page.getByText('Feedback sent to agent!', { exact: true }).isVisible(), true)
+          assert.equal(await page.getByRole('button', { name: 'Send feedback (0)', exact: true }).isDisabled(), true)
+          assert.equal(await page.getByRole('dialog', { name: 'Review the prompt before sending to the agent' }).count(), 0)
+          await page.waitForTimeout(4000)
+          assert.equal(await page.getByText('Feedback sent to agent!', { exact: true }).isVisible(), true)
+        },
+      })
+      verifyDiagnostics(first.diagnostics, feedback.expectedErrors)
+      verifyDiagnostics(delayed.diagnostics, feedback.expectedErrors)
+      await verifyRepeatedCapture({ ...feedback, tolerance: undefined }, first.bytes, delayed.bytes, output)
+    }
   }
 }

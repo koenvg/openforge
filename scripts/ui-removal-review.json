@@ -265,7 +265,7 @@
       "kind": "script-component-candidate",
       "token": "menu",
       "count": 14,
-      "reason": "Native element or accessibility role, event, identifier, scenario, command payload, or domain loading state. Not a class passed to a styling sink."
+      "reason": "Seven accessibility-role lookups and seven menu words in scenario titles, including the reduced-motion title and role lookup. None are classes passed to a styling sink."
     },
     {
       "path": "packages/plugin-sdk/src/ui/AnchoredMenu.svelte",
