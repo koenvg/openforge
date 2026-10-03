@@ -32,8 +32,9 @@ pub(super) struct TerminalSessions {
     agent_spawn_generations: AgentSpawnGenerations,
     lifecycle_locks: LifecycleLockRegistry,
     pending_shell_spawns: std::sync::Arc<dashmap::DashMap<String, (String, u64)>>,
+    // Short synchronous access permits ownership restoration from cancellation Drop.
     managed_recoveries:
-        std::sync::Arc<tokio::sync::Mutex<std::collections::HashMap<String, Vec<ManagedRecovery>>>>,
+        std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, Vec<ManagedRecovery>>>>,
     cleaning_sessions: std::sync::Arc<
         tokio::sync::Mutex<std::collections::HashMap<(String, u64), CleaningSession>>,
     >,
@@ -147,7 +148,7 @@ impl TerminalSessions {
             )),
             lifecycle_locks: LifecycleLockRegistry::default(),
             pending_shell_spawns: std::sync::Arc::new(dashmap::DashMap::new()),
-            managed_recoveries: std::sync::Arc::new(tokio::sync::Mutex::new(
+            managed_recoveries: std::sync::Arc::new(std::sync::Mutex::new(
                 std::collections::HashMap::new(),
             )),
             cleaning_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
@@ -207,7 +208,7 @@ impl TerminalSessions {
         &self,
         session_key: &str,
     ) -> Result<(), PtyError> {
-        let recoveries = self.managed_recoveries.lock().await;
+        let recoveries = self.recovery_registry();
         if recoveries
             .get(session_key)
             .is_some_and(|entries| !entries.is_empty())
@@ -224,28 +225,37 @@ impl TerminalSessions {
         session_key: &str,
         recovery: ManagedRecovery,
     ) {
+        self.restore_managed_recovery(session_key, recovery);
+    }
+
+    pub(super) async fn take_managed_recoveries(
+        &self,
+        session_key: &str,
+    ) -> Vec<lifecycle::RetainedCleanup> {
+        // Wrap every entry before returning ownership to the cancellable caller.
+        let recoveries = self
+            .recovery_registry()
+            .remove(session_key)
+            .unwrap_or_default();
+        recoveries
+            .into_iter()
+            .map(|recovery| lifecycle::RetainedCleanup::new(self, session_key, recovery))
+            .collect()
+    }
+
+    fn recovery_registry(
+        &self,
+    ) -> std::sync::MutexGuard<'_, std::collections::HashMap<String, Vec<ManagedRecovery>>> {
         self.managed_recoveries
             .lock()
-            .await
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn restore_managed_recovery(&self, session_key: &str, recovery: ManagedRecovery) {
+        self.recovery_registry()
             .entry(session_key.to_string())
             .or_default()
             .push(recovery);
-    }
-
-    pub(super) async fn take_managed_recoveries(&self, session_key: &str) -> Vec<ManagedRecovery> {
-        self.managed_recoveries
-            .lock()
-            .await
-            .remove(session_key)
-            .unwrap_or_default()
-    }
-
-    pub(super) async fn restore_managed_recovery(
-        &self,
-        session_key: &str,
-        recovery: ManagedRecovery,
-    ) {
-        self.retain_managed_recovery(session_key, recovery).await;
     }
 
     pub(super) async fn begin_cleaning(
@@ -296,18 +306,11 @@ impl TerminalSessions {
     }
 
     pub(super) async fn managed_recovery_keys(&self) -> Vec<String> {
-        self.managed_recoveries
-            .lock()
-            .await
-            .keys()
-            .cloned()
-            .collect()
+        self.recovery_registry().keys().cloned().collect()
     }
 
     pub(super) async fn shell_recovery_keys_for_task(&self, task_id: &str) -> Vec<String> {
-        self.managed_recoveries
-            .lock()
-            .await
+        self.recovery_registry()
             .iter()
             .filter(|(_session_key, recoveries)| {
                 recoveries.iter().any(|recovery| {
@@ -329,7 +332,7 @@ impl TerminalSessions {
         session_key: &str,
         instance_id: u64,
     ) -> Option<lifecycle::PtySession> {
-        let mut recoveries = self.managed_recoveries.lock().await;
+        let mut recoveries = self.recovery_registry();
         let entries = recoveries.get_mut(session_key)?;
         let position = entries
             .iter()

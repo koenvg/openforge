@@ -121,14 +121,17 @@ impl HostBackend for ExistingBackend {
                 Some(_) => sessions.remove(key),
             }
         };
-        if let Some(mut session) = session {
-            if let Err(error) = manager
-                .terminate_current_session_process(key, &mut session, true)
+        if let Some(session) = session {
+            let mut cleanup = super::lifecycle::RetainedCleanup::current(
+                &manager.terminal_sessions,
+                key,
+                session,
+            );
+            manager
+                .terminate_current_session_process(key, cleanup.session_mut(), true)
                 .await
-            {
-                manager.retain_failed_current_cleanup(key, session).await;
-                return Err(backend_error(error));
-            }
+                .map_err(backend_error)?;
+            cleanup.complete();
             manager.clear_session_tracking(key, true).await;
         }
         Ok(())

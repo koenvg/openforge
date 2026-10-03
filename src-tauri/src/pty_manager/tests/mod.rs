@@ -82,3 +82,4 @@ mod manager;
 mod output_processing;
 mod pid_cleanup;
 mod resize;
+mod teardown_cancellation;

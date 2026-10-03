@@ -51,25 +51,26 @@ impl PtyManager {
                 })
                 .collect()
         };
-        let recoveries = self.terminal_sessions.managed_recoveries.lock().await;
-        for (base_key, entries) in recoveries.iter() {
-            diagnostics.extend(entries.iter().map(|recovery| {
-                PtyProcessDiagnosticSession {
-                    session_key: recovery.recovery_key.clone(),
-                    task_id: recovery
-                        .session
-                        .kind
-                        .task_id_for_session_key(base_key)
-                        .to_string(),
-                    session_kind: recovery.session.kind.diagnostic_kind().to_string(),
-                    lifecycle_state: TerminalSessionLifecycleState::ManagedRecovery,
-                    pid: recovery.session.child.process_id(),
-                    pty_instance_id: recovery.session.instance_id,
-                    pid_file_name: recovery.session.pid_file_name.clone(),
-                }
-            }));
+        {
+            let recoveries = self.terminal_sessions.recovery_registry();
+            for (base_key, entries) in recoveries.iter() {
+                diagnostics.extend(entries.iter().map(|recovery| {
+                    PtyProcessDiagnosticSession {
+                        session_key: recovery.recovery_key.clone(),
+                        task_id: recovery
+                            .session
+                            .kind
+                            .task_id_for_session_key(base_key)
+                            .to_string(),
+                        session_kind: recovery.session.kind.diagnostic_kind().to_string(),
+                        lifecycle_state: TerminalSessionLifecycleState::ManagedRecovery,
+                        pid: recovery.session.child.process_id(),
+                        pty_instance_id: recovery.session.instance_id,
+                        pid_file_name: recovery.session.pid_file_name.clone(),
+                    }
+                }));
+            }
         }
-        drop(recoveries);
         let cleaning_sessions = self.terminal_sessions.cleaning_sessions.lock().await;
         diagnostics.extend(cleaning_sessions.iter().map(
             |((session_key, _instance_id), cleaning)| PtyProcessDiagnosticSession {
