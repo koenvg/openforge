@@ -32,6 +32,10 @@ required-features = ["test-fixtures"]
 name = "install-transaction-fixture-v2"
 required-features = ["test-fixtures"]
 
+[[example]]
+name = "source-sidecar-fixture"
+required-features = ["test-fixtures"]
+
 [[bin]]
 name = "openforge-update-target-fixture"
 path = "tests/fixtures/target.rs"

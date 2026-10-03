@@ -40,6 +40,10 @@ pub fn run(mode: &str) -> Result<(), String> {
                 .spawn()
                 .map_err(|e| e.to_string())?,
         );
+        println!(
+            "owned-daemon:{}",
+            owned.0.as_ref().expect("daemon was just spawned").id()
+        );
     }
     let deadline = Instant::now() + Duration::from_secs(10);
     let client = loop {
