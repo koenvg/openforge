@@ -156,7 +156,7 @@ pub(crate) fn serve(
             );
         }
         if let Some(activation) = activation {
-            activation.execute(&mut manager);
+            manager.execute(activation);
         }
         if host.shutdown {
             return Ok(());

@@ -1,7 +1,7 @@
 use super::{
     descriptors::{self, Roots},
     images::Image,
-    Snapshot, STATE_FORMAT,
+    Job, MAX_JOBS, STATE_FORMAT,
 };
 use crate::{
     agent_config::AgentRuntime, host::HostCheckpoint,
@@ -9,10 +9,11 @@ use crate::{
 };
 use openforge_session_client::runtime::RuntimeDirectory;
 use openforge_session_host::CapacityKind;
-use openforge_session_protocol::{Credentials, Error, OperationId};
+use openforge_session_protocol::{Credentials, Error, OperationId, ReplacementState};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
+    collections::BTreeSet,
     fs::{File, OpenOptions},
     io::{Read, Write},
     os::{
@@ -25,6 +26,77 @@ use std::{
 const MAX_HEADER: usize = 8192;
 const MAX_BODY: usize = 64 * 1024 * 1024;
 pub(super) const MAX_FILE: usize = MAX_BODY + MAX_HEADER + 8;
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Snapshot {
+    pub current: Image,
+    pub jobs: Vec<Job>,
+}
+impl Snapshot {
+    pub fn target(&self, operation: &OperationId) -> Result<&Image, Error> {
+        self.jobs
+            .iter()
+            .find(|job| &job.operation == operation && job.state == ReplacementState::Executing)
+            .and_then(|job| job.target.as_ref())
+            .ok_or(Error::InvalidRequest)
+    }
+    pub fn validate(&self, operation: &OperationId, directory: &Path) -> Result<(), Error> {
+        if self.jobs.len() > MAX_JOBS {
+            return Err(Error::Capacity);
+        }
+        image_shape(&self.current, directory)?;
+        let mut ids = BTreeSet::new();
+        let mut active = 0;
+        for job in &self.jobs {
+            if !ids.insert(job.operation.as_str())
+                || !job.requested.is_absolute()
+                || job.requested.as_os_str().len() > 4096
+                || job.source_version.is_empty()
+                || job.source_version.len() > 256
+            {
+                return Err(Error::InvalidRequest);
+            }
+            if let Some(image) = &job.target {
+                image_shape(image, directory)?;
+            }
+            let actual = if job.state == ReplacementState::Activated {
+                &job.target.as_ref().ok_or(Error::InvalidRequest)?.version
+            } else {
+                &job.source_version
+            };
+            if &job.actual_version != actual {
+                return Err(Error::InvalidRequest);
+            }
+            match job.state {
+                ReplacementState::Preparing | ReplacementState::Prepared => {
+                    return Err(Error::InvalidRequest)
+                }
+                ReplacementState::Executing => {
+                    active += 1;
+                    if &job.operation != operation || job.target.is_none() {
+                        return Err(Error::InvalidRequest);
+                    }
+                }
+                _ => {}
+            }
+        }
+        if active != 1 {
+            return Err(Error::InvalidRequest);
+        }
+        Ok(())
+    }
+}
+fn image_shape(image: &Image, directory: &Path) -> Result<(), Error> {
+    if image.path.parent() != Some(directory)
+        || image.version.is_empty()
+        || image.version.len() > 256
+        || image.sha256.len() != 64
+        || !image.sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(Error::InvalidRequest);
+    }
+    Ok(())
+}
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Header {
