@@ -77,7 +77,13 @@ export function resolveRustSidecarLayout({
       return [kind, {
         root,
         manifestPath: join(root, 'Cargo.toml'),
-        ...(kind === 'daemon' ? { binaryPath: join(root, 'target', 'debug', platformBinaryName('openforge-session-daemon', platform)) } : {}),
+        ...(kind === 'daemon' ? {
+          binaryPath: ({
+            cargoTargetDir = join(root, 'target'),
+            cargoBuildTarget = '',
+            binaryName = 'openforge-session-daemon',
+          } = {}) => join(resolve(normalizedRepoRoot, cargoTargetDir), cargoBuildTarget, 'debug', platformBinaryName(binaryName, platform)),
+        } : {}),
       }]
     })),
     updateHelper: {
@@ -112,7 +118,15 @@ function printCliValue(field) {
     'session-client-manifest-path': layout.sessionCrates.client.manifestPath,
     'session-protocol-manifest-path': layout.sessionCrates.protocol.manifestPath,
     'session-host-manifest-path': layout.sessionCrates.host.manifestPath,
-    'session-daemon-binary-path': layout.sessionCrates.daemon.binaryPath,
+    'session-daemon-binary-path': layout.sessionCrates.daemon.binaryPath({
+      cargoTargetDir: process.env.CARGO_TARGET_DIR || undefined,
+      cargoBuildTarget: process.env.CARGO_BUILD_TARGET || '',
+    }),
+    'session-daemon-startup-binary-path': layout.sessionCrates.daemon.binaryPath({
+      cargoTargetDir: process.env.CARGO_TARGET_DIR || undefined,
+      cargoBuildTarget: process.env.CARGO_BUILD_TARGET || '',
+      binaryName: 'openforge-session-daemon-fixture-startup',
+    }),
     'icon-path': layout.iconPath,
     'electron-bundle-root': layout.electronBundleRootPath,
     'electron-app-path': layout.electronAppPath,

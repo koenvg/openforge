@@ -63,6 +63,17 @@ Run the combined protocol, authority, process, daemon, existing-IPC and real-Sid
 node scripts/session-daemon-contract.mjs
 ```
 
+The launcher selects daemon artifacts from `CARGO_TARGET_DIR` and `CARGO_BUILD_TARGET` when set, otherwise from the daemon crate's default target directory. Relative target paths are resolved from the repository root, where the launcher runs Cargo. `OPENFORGE_TEST_DAEMON` explicitly overrides the ordinary daemon selection; `OPENFORGE_TEST_STARTUP_DAEMON` overrides the gated startup fixture on macOS arm64. Missing requested artifacts fail before backend contracts run, without falling back to another build.
+
+For a direct Sidecar contract run, supply the daemon artifacts explicitly. For example, after building both daemons with the launcher into a private target:
+
+```sh
+export CARGO_TARGET_DIR=/tmp/openforge-private-target
+export OPENFORGE_TEST_DAEMON="$(node scripts/rust-sidecar-layout.mjs session-daemon-binary-path)"
+export OPENFORGE_TEST_STARTUP_DAEMON="$(node scripts/rust-sidecar-layout.mjs session-daemon-startup-binary-path)"
+cargo test --manifest-path src-tauri/Cargo.toml --test session_daemon_sidecar -- --ignored
+```
+
 The combined runner executes the shared behavioral contracts against the deterministic, existing and daemon adapters. Existing-IPC tests also consume forwarded model events across Sidecar-state replacement, exercise a real journal gap plus exit, reject output after exit, and recover final output from an exited shell without respawning.
 
 The event-gap IPC fixture uses a test-only Unix-socket relay inside its private runtime. It interrupts an authenticated push subscription after a confirmed delivered cursor, while ordinary commands and PTY output continue. After output and exit have overflowed the real journal, the relay resumes `Subscribe` from that cursor and forwards the daemon's reply. The test requires a genuine `gap` batch, a missing output-sequence prefix, reconciliation before the single exit, and final snapshot recovery. It does not stall request sockets or rely on a fast live subscriber overflowing. The interruption shares the existing 30-second deadline, and the suite retains default parallelism.

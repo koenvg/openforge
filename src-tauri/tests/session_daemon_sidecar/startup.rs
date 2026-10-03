@@ -8,12 +8,7 @@ use startup_gate::StartupGate;
 fn private_sidecar_is_ready_while_bootstrap_image_preflight_waits() {
     let mut fixture = Fixture::new();
     fixture.use_installation_daemon();
-    let daemon = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("crates/session-daemon/target/debug/openforge-session-daemon-fixture-startup");
-    assert!(
-        daemon.is_file(),
-        "build Session Daemon with replacement-fixtures first"
-    );
+    let daemon = required_daemon_artifact("OPENFORGE_TEST_STARTUP_DAEMON");
     fixture.provider_env.push((
         "OPENFORGE_SESSION_DAEMON_PATH".into(),
         daemon.to_string_lossy().into(),
