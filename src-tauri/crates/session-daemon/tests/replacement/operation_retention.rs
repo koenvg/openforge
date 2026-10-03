@@ -1,4 +1,11 @@
-use super::*;
+use super::support::{Fixture, FixtureOptions};
+use openforge_session_client::Client;
+use openforge_session_protocol::*;
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+    time::{Duration, Instant},
+};
 
 fn shell(root: &Path, index: u32) -> ShellCommand {
     ShellCommand {
@@ -41,9 +48,7 @@ fn current_daemon_attachment_needs_no_replacement_image() {
             .retained_request_bytes,
         0
     );
-    let session = attached
-        .spawn_ordered(&shell(fixture.root.path(), 0))
-        .unwrap();
+    let session = attached.spawn_ordered(&shell(fixture.root(), 0)).unwrap();
     attached.terminate_ordered(&session.pty).unwrap();
 }
 
@@ -51,12 +56,8 @@ fn current_daemon_attachment_needs_no_replacement_image() {
 fn replacement_preserves_retired_and_unacknowledged_operation_results() {
     let (mut fixture, client) = Fixture::new();
     client.enable_operation_retirement().unwrap();
-    let session = client
-        .spawn_ordered(&shell(fixture.root.path(), 0))
-        .unwrap();
-    fixture
-        .tracked
-        .push(managed_process::ManagedProcessIdentity::capture(session.pid).unwrap());
+    let session = client.spawn_ordered(&shell(fixture.root(), 0)).unwrap();
+    fixture.track_process(session.pid);
     client.flush_operation_receipts().unwrap();
     let stream = client
         .inventory()
@@ -84,7 +85,7 @@ fn replacement_preserves_retired_and_unacknowledged_operation_results() {
     fixture.status(maintenance.as_str(), "prepared");
     let _ = client.replacement_phase(maintenance.clone(), ReplacementPhase::Commit);
     fixture.status(maintenance.as_str(), "activated");
-    let next = Client::connect(fixture.root.path()).unwrap();
+    let next = Client::connect(fixture.root()).unwrap();
     let inventory = next.inventory().unwrap();
     assert_eq!(inventory.sessions[0].pty, session.pty);
     assert_eq!(
@@ -92,7 +93,7 @@ fn replacement_preserves_retired_and_unacknowledged_operation_results() {
         1
     );
     assert!(matches!(
-        next.spawn(retired.as_str(), &shell(fixture.root.path(), 0)),
+        next.spawn(retired.as_str(), &shell(fixture.root(), 0)),
         Err(Error::OperationExpired)
     ));
     next.write(pending.as_str(), &session.pty, 1, b"once\n")
@@ -131,13 +132,14 @@ fn exhausted_legacy_daemon_upgrades_on_attachment_without_restarting_ptys() {
     let legacy = PathBuf::from(
         std::env::var_os("OPENFORGE_LEGACY_DAEMON").expect("build the baseline daemon first"),
     );
-    let (mut fixture, client) = Fixture::with_executable(&legacy);
+    let (mut fixture, client) = Fixture::with_options(FixtureOptions {
+        executable: Some(&legacy),
+        ..Default::default()
+    });
     let session = client
-        .spawn("legacy-spawn", &shell(fixture.root.path(), 0))
+        .spawn("legacy-spawn", &shell(fixture.root(), 0))
         .unwrap();
-    fixture
-        .tracked
-        .push(managed_process::ManagedProcessIdentity::capture(session.pid).unwrap());
+    fixture.track_process(session.pid);
     for sequence in 1..=1023 {
         client
             .resize(
@@ -181,15 +183,11 @@ fn exhausted_legacy_daemon_upgrades_on_attachment_without_restarting_ptys() {
         std::thread::sleep(Duration::from_millis(10));
     }
     assert!(matches!(
-        attached.spawn("legacy-spawn", &shell(fixture.root.path(), 0)),
+        attached.spawn("legacy-spawn", &shell(fixture.root(), 0)),
         Err(Error::OperationExpired)
     ));
-    let next = attached
-        .spawn_ordered(&shell(fixture.root.path(), 1))
-        .unwrap();
-    fixture
-        .tracked
-        .push(managed_process::ManagedProcessIdentity::capture(next.pid).unwrap());
+    let next = attached.spawn_ordered(&shell(fixture.root(), 1)).unwrap();
+    fixture.track_process(next.pid);
     let rollback = OperationId::parse("refuse-legacy-rollback").unwrap();
     attached
         .replacement_phase(
@@ -216,13 +214,14 @@ fn incompatible_attachment_upgrade_keeps_legacy_sessions_running() {
     let legacy = PathBuf::from(
         std::env::var_os("OPENFORGE_LEGACY_DAEMON").expect("build the baseline daemon first"),
     );
-    let (mut fixture, client) = Fixture::with_executable(&legacy);
+    let (mut fixture, client) = Fixture::with_options(FixtureOptions {
+        executable: Some(&legacy),
+        ..Default::default()
+    });
     let session = client
-        .spawn("legacy-spawn", &shell(fixture.root.path(), 0))
+        .spawn("legacy-spawn", &shell(fixture.root(), 0))
         .unwrap();
-    fixture
-        .tracked
-        .push(managed_process::ManagedProcessIdentity::capture(session.pid).unwrap());
+    fixture.track_process(session.pid);
     let observer = client.clone();
     assert!(client
         .with_operation_retirement(Path::new("/bin/echo"))

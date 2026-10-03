@@ -1,9 +1,15 @@
-use super::*;
+use super::support::{wait_text, Fixture};
+use openforge_session_client::Client;
+use openforge_session_protocol::*;
+use std::{
+    collections::BTreeMap,
+    time::{Duration, Instant},
+};
 
 #[test]
 fn accepted_backpressured_input_keeps_exact_suffix_and_original_unknown_receipt() {
     let (mut fixture, client) = Fixture::new();
-    let root = fixture.root.path();
+    let root = fixture.root().to_path_buf();
     let ready = root.join("reader-ready");
     let release = root.join("reader-release");
     let received = root.join("received.bin");
@@ -26,7 +32,7 @@ fn accepted_backpressured_input_keeps_exact_suffix_and_original_unknown_receipt(
         command: PreparedCommand {
             program: "/bin/sh".into(),
             args: vec!["-c".into(), script],
-            cwd: root.into(),
+            cwd: root.clone(),
             env: BTreeMap::new(),
         },
         columns: 80,
@@ -34,9 +40,7 @@ fn accepted_backpressured_input_keeps_exact_suffix_and_original_unknown_receipt(
         image_protocol: None,
     };
     let session = client.spawn("reader", &command).unwrap();
-    fixture
-        .tracked
-        .push(managed_process::ManagedProcessIdentity::capture(session.pid).unwrap());
+    fixture.track_process(session.pid);
     let deadline = Instant::now() + Duration::from_secs(5);
     while !ready.is_file() {
         assert!(Instant::now() < deadline);
@@ -70,7 +74,7 @@ fn accepted_backpressured_input_keeps_exact_suffix_and_original_unknown_receipt(
             ReplacementPhase::Commit,
         ))
         .unwrap();
-    let fresh = Client::connect(root).unwrap();
+    let fresh = Client::connect(&root).unwrap();
     assert_eq!(fresh.spawn("reader", &command).unwrap().pid, session.pid);
     assert_eq!(
         fresh.write("accepted", &session.pty, 1, &input),

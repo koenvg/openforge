@@ -1,7 +1,14 @@
 //! Retained authenticated ingress, Sidecar registration and durable notification retries.
-use super::*;
+use super::support::Fixture;
+use openforge_session_client::runtime::RuntimeDirectory;
+use openforge_session_protocol::*;
+use serde_json::{json, Value};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::{
+    collections::BTreeMap,
+    time::{Duration, Instant},
+};
 
 #[test]
 fn notification_receipts_and_registered_sidecar_survive_real_exec() {
@@ -13,7 +20,7 @@ fn notification_receipts_and_registered_sidecar_survive_real_exec() {
         command: PreparedCommand {
             program: "/bin/sleep".into(),
             args: vec!["120".into()],
-            cwd: fixture.root.path().into(),
+            cwd: fixture.root().into(),
             env: BTreeMap::new(),
         },
         columns: 80,
@@ -21,10 +28,8 @@ fn notification_receipts_and_registered_sidecar_survive_real_exec() {
         image_protocol: None,
     };
     let session = client.spawn("agent", &request).unwrap();
-    fixture
-        .tracked
-        .push(managed_process::ManagedProcessIdentity::capture(session.pid).unwrap());
-    let runtime = RuntimeDirectory::open(fixture.root.path()).unwrap();
+    fixture.track_process(session.pid);
+    let runtime = RuntimeDirectory::open(fixture.root()).unwrap();
     let path = std::fs::read_dir(runtime.path())
         .unwrap()
         .map(Result::unwrap)

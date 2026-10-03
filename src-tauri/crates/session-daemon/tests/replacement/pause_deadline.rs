@@ -1,4 +1,10 @@
-use super::*;
+use super::support::{executable, wait_text, Fixture, FixtureOptions};
+use openforge_session_client::runtime::RuntimeDirectory;
+use openforge_session_protocol::*;
+use std::{
+    collections::BTreeMap,
+    time::{Duration, Instant},
+};
 
 #[test]
 fn slow_paused_stages_refuse_before_exec_and_resume_old_io_and_receipts() {
@@ -13,13 +19,11 @@ fn slow_paused_stages_refuse_before_exec_and_resume_old_io_and_receipts() {
         "pre-exec:1500",
         "encode:300,target-probe:300,recovery-probe:300,file:300",
     ] {
-        let (mut fixture, client) = Fixture::with_executable_and_limit(
-            Path::new(env!("CARGO_BIN_EXE_openforge-session-daemon")),
-            None,
-            None,
-            Some(1000),
-            Some(stages),
-        );
+        let (mut fixture, client) = Fixture::with_options(FixtureOptions {
+            checkpoint_deadline_ms: Some(1000),
+            slow_stages: Some(stages),
+            ..Default::default()
+        });
         let original = client.capabilities().unwrap();
         let command = ShellCommand {
             owner: TerminalOwner::Shell {
@@ -32,7 +36,7 @@ fn slow_paused_stages_refuse_before_exec_and_resume_old_io_and_receipts() {
                     "-c".into(),
                     "while IFS= read -r line; do printf 'ONCE:%s\\n' \"$line\"; done".into(),
                 ],
-                cwd: fixture.root.path().into(),
+                cwd: fixture.root().into(),
                 env: BTreeMap::new(),
             },
             columns: 80,
@@ -40,15 +44,13 @@ fn slow_paused_stages_refuse_before_exec_and_resume_old_io_and_receipts() {
             image_protocol: None,
         };
         let session = client.spawn("spawn", &command).unwrap();
-        fixture
-            .tracked
-            .push(managed_process::ManagedProcessIdentity::capture(session.pid).unwrap());
+        fixture.track_process(session.pid);
         client
             .write("before", &session.pty, 1, b"before\n")
             .unwrap();
         wait_text(&client, &session.pty, "ONCE:before");
         if stages == "invalid-credential" {
-            let runtime = RuntimeDirectory::open(fixture.root.path()).unwrap();
+            let runtime = RuntimeDirectory::open(fixture.root()).unwrap();
             let path = std::fs::read_dir(runtime.path())
                 .unwrap()
                 .map(|entry| entry.unwrap().path())
@@ -146,7 +148,7 @@ fn slow_paused_stages_refuse_before_exec_and_resume_old_io_and_receipts() {
         }
         std::thread::sleep(Duration::from_millis(800));
         assert!(
-            !std::fs::read_dir(fixture.root.path().join("session-v1"))
+            !std::fs::read_dir(fixture.root().join("session-v1"))
                 .unwrap()
                 .any(|entry| entry
                     .unwrap()
