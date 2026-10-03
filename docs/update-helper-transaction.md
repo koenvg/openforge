@@ -4,9 +4,9 @@ KVG-5206 is an implementation checkpoint, not an enabled session-preserving upda
 
 The intended first update path is explicit local approval between compatible, daemon-aware macOS arm64 installations. A source must report an armed parent-exit guard and supply its actual data roots and authenticated daemon controller. The guard capability is not proof of the original app or Sidecar's identity or exit. Other architectures and platforms are not update acceptance targets for this checkpoint.
 
-## KVG-5296 work in progress
+## Completed original-source attestation
 
-Original-source attestation is being added without enabling any update path. The minimum eligible source is a daemon-aware, integrity-sealed macOS arm64 build with the `original-source-v1` native startup service. An armed parent-exit guard or a reported capability alone is insufficient. KVG-5206 sources do not provide this service and are ineligible.
+KVG-5296 completed original app/Sidecar birth and exit attestation without enabling any update path. The minimum eligible source is a daemon-aware, integrity-sealed macOS arm64 build with the `original-source-v1` native startup service. An armed parent-exit guard or a reported capability alone is insufficient. KVG-5206 sources do not provide this service and are ineligible.
 
 The helper handshake is now version 3 and requires `relaunch`, `launch-gate`, `atomic-replace` and `original-source-v1`. There is no version-2 fallback. Signed grant and journal envelopes remain version 1. Source installation, legacy adoption, local initiation and publication remain disabled.
 
@@ -18,15 +18,17 @@ The native helper accepts neither caller-provided birth evidence nor a caller-pr
 
 Before runtime preparation, the helper seals the original-source evidence into the authenticated journal. Separate kernel watches observe the original app and exact original Sidecar. Arming requires a Sidecar exit event; publication additionally requires the app exit event. `NOTE_EXEC` invalidates a watched lifetime. EOF, restored bytes, a shutdown report and PID absence do not create exit evidence.
 
-Preparation-loss recovery can reauthenticate a still-running original source through its native service and matching startup nonce. Alternatively, both original exit observations must already be recorded. An older journal with no original-source evidence, an unavailable source service, a stale boot/lifetime, reused PID or incomplete exit observation remains unknown. Runtime cancellation borrows the recorded controller only after source verification; inspection does not acquire a controller or launch a daemon.
+The native helper's preparation-loss recovery can reauthenticate a still-running original source through its native service and matching startup nonce. Alternatively, both original exit observations must already be recorded. An older journal with no original-source evidence, an unavailable source service, a stale boot/lifetime, reused PID or incomplete exit observation remains unknown. Runtime cancellation borrows the recorded controller only after source verification; inspection does not acquire a controller or launch a daemon.
 
-### Evidence and remaining work
+### Native evidence and its limits
 
-Current native public-boundary tests cover eligible preparation/cancellation, pre-authority EOF, exact Sidecar exit before arming, helper loss, guard-only sources, caller-supplied proofs, wrong keys/processes, changed loaded images across `exec`, tampering and stale/replayed recovery evidence. They use owned native fixtures, private roots and cleared environments. They are not proof of a complete packaged Electron update with live agents and tools.
+Native public-boundary tests cover eligible preparation/cancellation, pre-authority EOF, exact Sidecar exit before arming, helper loss, guard-only sources, caller-supplied proofs, wrong keys/processes, changed loaded images across `exec`, tampering and stale/replayed recovery evidence. They use owned native fixtures, private roots and cleared environments. They are not proof of a complete packaged Electron update with live agents and tools.
 
-Helper default/all-feature suites, strict helper Clippy, the focused Electron driver/helper tests, TypeScript checks and the backend all-target/all-feature compile check pass. Logs are `/tmp/KVG-5296-helper-default.log`, `/tmp/KVG-5296-helper-all.log`, `/tmp/KVG-5296-helper-clippy.log`, `/tmp/KVG-5296-focused.log`, `/tmp/KVG-5296-types.log` and `/tmp/KVG-5296-backend-check.log`.
+KVG-5296 recorded passing helper default/all-feature suites, strict helper Clippy, focused Electron driver/helper tests, TypeScript checks and the backend all-target/all-feature compile check. Logs are `/tmp/KVG-5296-helper-default.log`, `/tmp/KVG-5296-helper-all.log`, `/tmp/KVG-5296-helper-clippy.log`, `/tmp/KVG-5296-focused.log`, `/tmp/KVG-5296-types.log` and `/tmp/KVG-5296-backend-check.log`.
 
-This is not a completed checkpoint. Electron preparation-recovery integration, migration of native Electron contracts to genuinely eligible original sources, live daemon-owned agent/tool/shell refusal coverage, full affected-system validation and the single completion review remain pending. Existing update activation and packaged acceptance gates remain in force.
+KVG-5359 completed the repair of native Electron contract fixtures to use eligible owned original sources without weakening attestation. Its local validation passed all 23 native cases, desktop tests, static and contract checks, and helper crate checks. These private fixture results do not establish packaged update acceptance.
+
+The native source service and helper preparation-loss verification are implemented. Electron recovery integration remains in KVG-5297. KVG-5298 retains crash and lost-acknowledgement coverage; KVG-4730 retains full packaged agent/tool/shell continuity and restoration acceptance. Updates remain disabled.
 
 ## Implemented boundaries
 
@@ -35,13 +37,13 @@ This is not a completed checkpoint. Electron preparation-recovery integration, m
 - Complete-app staging measures Electron, Sidecar, daemon, CLI, helper, resources, permissions and internal links. Electron uses `original-fs` so ASAR files are measured as raw bytes. Escaping links and incomplete bundles are refused.
 - Published artifacts require the installed publisher trust anchor. Local approval is separate, explicit and bound to immutable bytes, installation, destination and operation. Failed publisher verification never falls back to local approval. First-adoption interruption consent is another authority; its implemented grant format does not enable legacy installation.
 - Electron durably records the selected target, controller and roots before native preparation, backend preparation and workspace capture. Controller authority is copied before asynchronous work.
-- A privately copied, hash-checked helper uses inherited pipes, a fresh challenge and domain-separated HMACs. Handshake version 2 advertises `relaunch`, `launch-gate` and `atomic-replace`; authenticated request, grant and journal formats remain version 1.
+- A privately copied, hash-checked helper uses inherited pipes, a fresh challenge and domain-separated HMACs. Handshake version 3 requires `relaunch`, `launch-gate`, `atomic-replace` and `original-source-v1`, with no version-2 fallback. Authenticated request, grant and journal formats remain version 1.
 - Installation ownership is serialized by kernel locks and a permanent canonical destination/recovery-root binding. Replay tombstones, complete-byte remeasurement and private-directory checks survive process loss.
 - Preparation becomes uncertain before sending a request. Only a typed, provably unsent failure after owned-helper cleanup can clear that uncertainty. Lost prepare, cancel or arm acknowledgements are not successful cancellation.
 
 ### Replacement and runtime ownership
 
-- The coordinator requires authenticated detach and observed exit of its exact owned Sidecar. The helper independently observes its actual Electron parent through the kernel. A signal acknowledgement, `killed`, EOF or a shutdown report is not exit proof.
+- The coordinator requires authenticated detach and observed exit of its exact owned Sidecar. The helper independently authenticates the original app/Sidecar birth identities and watches both lifetimes through the kernel. Arming requires the exact original Sidecar's exit; publication also requires the original app's exit. A signal acknowledgement, `killed`, EOF or a shutdown report is not exit proof.
 - `MaintenanceClient` borrows the supplied controller without connecting a new controller or launching a daemon. Runtime preparation retains complete daemon/CLI assets with durable release references. Cold preparation reserves both launch and lifetime locks rather than inferring absence from missing discovery files.
 - macOS publication uses atomic directory exchange, not removal followed by rename. The journal records the exchange location before publication. Recovery validates canonical staging and exchange paths and the retained source bytes; a redirected staging symlink cannot supply rollback authority.
 - Before restoring the source or newly recording rollback for a live-runtime operation, recovery independently checks the original controller, daemon PID, source version and loaded code, plus a matching terminal abort/failure receipt. An activated or unknown runtime outcome cannot authorize rollback. An already-recorded rollback acknowledgement still rechecks restored source bytes.
@@ -62,7 +64,7 @@ This is not a completed checkpoint. Electron preparation-recovery integration, m
 - Failed admitted update children are retired through their captured child handle and observed exit, without falling back to ordinary SIGTERM/Quit cleanup. An unadmitted source Sidecar is observed, not signalled by update recovery.
 - Native relaunch uses fresh challenge/HMAC authority and waits for the actual requester to exit. Requester preparation does not grant target startup authority. Cancellation and pre-authority EOF cannot launch or commit.
 - Update recovery is separate from ordinary restart recovery and its CLI. The native dialog offers Retry, Close app and leave sessions running, and Keep waiting. Keep waiting is the default and Escape action. Failed verification is displayed without ordinary `app.relaunch()`, rollback or session termination fallback.
-- `LocalUpdateDriver.recover()` supports installed-target post-launch recovery. Original source birth/exit attestation, preparation-loss recovery and forward Installed/no-launch recovery are not complete. They remain required before activation.
+- `LocalUpdateDriver.recover()` supports installed-target post-launch recovery. KVG-5296 completed native original-source birth/exit attestation and helper preparation-loss verification. KVG-5297 must still integrate Electron source/preparation-loss recovery and authenticated forward recovery from Installed with no recorded app launch. Those recovery paths remain required before activation.
 
 Recovery, authorization and staging storage must be outside both replaceable bundles. Destination, staging and recovery must share the installation filesystem. A journal or retained image cannot recover live PTYs after fatal loss of their sole owning process.
 
@@ -72,7 +74,7 @@ Packaging verifies the three copied native entry points before creating the reta
 
 Runtime and plugin-host resources live under `Contents/Resources/session-runtime` and `Contents/Resources/plugin-host`; the CLI payload is under `Contents/Resources/openforge-cli`. Mach-O entry points remain under `Contents/MacOS`.
 
-The disabled checkpoint was rebuilt from current source on macOS arm64 using the packaging orchestration's layout injection and the private backend target. Output:
+The KVG-5206 disabled checkpoint was rebuilt from its source on macOS arm64 using the packaging orchestration's layout injection and the private backend target. Output:
 
 ```text
 src-tauri/target/backend-update-contract/release/bundle/checkpoint-8976dc86c/Open Forge.app
@@ -88,7 +90,7 @@ Evidence:
 
 These checks establish package integrity and ordinary startup. They do not establish a complete packaged app update with agents, tools and multi-window restoration. KVG-4730 retains that acceptance gate. The app was not installed over the developer's application.
 
-## Validation at the disabled checkpoint
+## Historical KVG-5206 checkpoint validation
 
 Review baseline: `8976dc86c`, the rebased equivalent of the earlier `e7e79196d` checkpoint. Commands use normal test parallelism and strip inherited `OPENFORGE_*` settings. Backend validation uses `src-tauri/target/backend-update-contract`, not another worktree's shared cache.
 
@@ -130,8 +132,8 @@ The single fresh-context read-only completion review approved the disabled check
 
 Before enabling the local macOS arm64 update path:
 
-1. Complete original source app/Sidecar birth and exit attestation, authenticated preparation-loss recovery, and Installed/no-launch forward recovery. Missing authority or runtime outcome must remain unknown.
-2. Finish required crash-boundary and lost-acknowledgement coverage, including packaged backend-commit reconciliation and explicit same-transport retry faults.
+1. Complete KVG-5297 Electron source/preparation-loss recovery and authenticated Installed/no-launch forward recovery using the implemented original-source attestation. Missing authority or runtime outcome must remain unknown.
+2. Complete KVG-5298 crash-boundary and lost-acknowledgement coverage, including packaged native/backend commit reconciliation and explicit same-transport retry faults. KVG-5359 fixture repairs do not complete this gate.
 3. Finish safe install/cancellation/recovery UX and representative visual checks.
 4. Obtain KVG-4730 packaged agent/tool/shell PID/PTY, per-window restoration-before-commit and failure/recovery acceptance. Reconcile that task's broader architecture wording with the approved macOS arm64 update scope.
 5. Validate and review the enabling change against its complete affected-system diff. Fixture success alone cannot enable updates.
