@@ -1,6 +1,8 @@
 //! Isolated real-process contract. Never launches or stops the installed desktop app.
 #[path = "session_daemon_sidecar/cleanup.rs"]
 mod cleanup;
+#[path = "session_daemon_sidecar/diagnostics.rs"]
+mod diagnostics;
 #[path = "session_daemon_sidecar/pi.rs"]
 mod pi;
 #[path = "session_daemon_sidecar/pi-live.rs"]
@@ -264,7 +266,7 @@ impl Drop for Fixture {
         if std::thread::panicking() || cleanup.is_err() {
             eprintln!(
                 "daemon log: {}",
-                fs::read_to_string(self.root.path().join("session-v1/daemon.log"))
+                fs::read_to_string(self.daemon_root().join("session-v1/daemon.log"))
                     .unwrap_or_default()
             );
             self.root.disable_cleanup(true);
