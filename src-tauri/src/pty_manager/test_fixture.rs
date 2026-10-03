@@ -1,12 +1,17 @@
 //! Failure-path ownership for native PTY tests. Never scans installation PID directories.
 
+use super::session::PtySession;
 use super::PtyManager;
 use futures::FutureExt;
+use unpublished::UnpublishedProcess;
+
+mod unpublished;
 use std::{collections::HashSet, panic::AssertUnwindSafe, path::PathBuf};
 
 pub(crate) struct NativePtyFixtureCleanup {
     manager: PtyManager,
     recovery_dir: Option<tempfile::TempDir>,
+    unpublished_processes: Vec<UnpublishedProcess>,
 }
 
 impl NativePtyFixtureCleanup {
@@ -19,6 +24,7 @@ impl NativePtyFixtureCleanup {
         Self {
             manager: manager.clone(),
             recovery_dir: Some(recovery_dir),
+            unpublished_processes: Vec::new(),
         }
     }
 
@@ -26,6 +32,20 @@ impl NativePtyFixtureCleanup {
         self.manager.get_pid_dir().expect("fixture PID directory")
     }
 
+    pub(super) fn retain_unpublished_session(
+        &mut self,
+        session: PtySession,
+    ) -> Result<PtySession, String> {
+        let path = self
+            .pid_dir()
+            .join(format!("unpublished-{}-pty.pid", session.instance_id));
+        let (session, process) = UnpublishedProcess::retain(session, path);
+        // Acquire ownership before publishing evidence can fail. Keep it through
+        // registration so cancellation of that future cannot orphan the child.
+        self.unpublished_processes.push(process);
+        self.unpublished_processes.last().unwrap().publish()?;
+        Ok(session)
+    }
     pub(crate) fn finish(&mut self) -> Result<(), String> {
         let Some(recovery_dir) = self.recovery_dir.take() else {
             return Ok(());
@@ -63,6 +83,12 @@ impl NativePtyFixtureCleanup {
     }
 
     async fn cleanup_owned_sessions(&self) -> Result<(), String> {
+        let mut failures = Vec::new();
+        for process in &self.unpublished_processes {
+            if let Err(error) = process.cleanup().await {
+                failures.push(error);
+            }
+        }
         let mut keys: HashSet<String> =
             self.manager.sessions.lock().await.keys().cloned().collect();
         keys.extend(self.manager.terminal_sessions.managed_recovery_keys().await);
@@ -90,7 +116,6 @@ impl NativePtyFixtureCleanup {
                 .iter()
                 .map(|entry| entry.key().clone()),
         );
-        let mut failures = Vec::new();
         for key in keys {
             // Canonical managed cleanup uses the in-memory identity, verifies
             // process start identity before signalling, and retains failures.
