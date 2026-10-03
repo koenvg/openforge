@@ -1,50 +1,29 @@
 // @vitest-environment node
 import { execFileSync } from 'node:child_process'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
-import { svelte } from '@sveltejs/vite-plugin-svelte'
-import { chromium, type Browser, type Locator, type Page } from 'playwright'
-import { createServer, type ViteDevServer } from 'vite'
+import type { Locator, Page } from 'playwright'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { createOpenForgePluginSdkSourceAliasRecord } from '../vite'
+import { createSdkBrowserFixture, type SdkBrowserFixture } from '../../test/browserFixture'
 
-let server: ViteDevServer
-let browser: Browser
+let browser: SdkBrowserFixture
 let origin: string
-let cacheRoot: string
 
 beforeAll(async () => {
-  // Parallel fixture servers must not invalidate each other's optimized dependencies.
-  cacheRoot = await mkdtemp(resolve(tmpdir(), 'openforge-action-controls-'))
   // Build the public-entrypoint fixture during setup, outside interaction deadlines.
   execFileSync('pnpm', ['run', 'build'], { cwd: resolve(import.meta.dirname, '../..'), stdio: 'pipe' })
-  server = await createServer({
-    configFile: false,
-    root: resolve(import.meta.dirname, '../../../..'),
-    cacheDir: resolve(cacheRoot, 'source'),
-    plugins: [svelte()],
-    optimizeDeps: { entries: ['packages/plugin-sdk/src/ui/browser/anchored-menu.html'] },
-    resolve: { alias: createOpenForgePluginSdkSourceAliasRecord(new URL('../../../../', import.meta.url)) },
-    logLevel: 'error',
-    server: { host: '127.0.0.1', port: 0 },
+  browser = await createSdkBrowserFixture({
+    entries: [
+      'packages/plugin-sdk/src/ui/browser/anchored-menu.html',
+      'packages/plugin-sdk/src/ui/browser/split-button.html',
+      'packages/plugin-sdk/src/ui/browser/bits-menu-opening.html',
+      'packages/plugin-sdk/src/ui/browser/bits-menu-lifecycle.html',
+    ],
+    sourceAliases: true,
   })
-  await server.listen()
-  origin = server.resolvedUrls!.local[0]
-  browser = await chromium.launch({ headless: true })
+  origin = browser.origin
 }, 60_000)
 
-afterAll(async () => {
-  try {
-    await browser?.close()
-  } finally {
-    try {
-      await server?.close()
-    } finally {
-      if (cacheRoot) await rm(cacheRoot, { recursive: true, force: true })
-    }
-  }
-})
+afterAll(async () => { await browser?.close() })
 
 async function clickOutsideOnMutation(page: Page, selector: string) {
   // Send the full mouse sequence at the public DOM boundary, before actionability waits.
@@ -438,25 +417,18 @@ it('settles the menu immediately when reduced motion is preferred', async () => 
 })
 
 it('renders the built public SplitButton export without source aliases or app imports', async () => {
-  const packageServer = await createServer({
-    configFile: false,
-    root: resolve(import.meta.dirname, '../../../..'),
-    cacheDir: resolve(cacheRoot, 'built'),
-    plugins: [svelte()],
-    logLevel: 'error',
-    server: { host: '127.0.0.1', port: 0 },
+  const packageFixture = await createSdkBrowserFixture({
+    entries: ['packages/plugin-sdk/src/ui/browser/split-button.html'],
   })
-  const page = await browser.newPage()
   try {
-    await packageServer.listen()
-    await page.goto(`${packageServer.resolvedUrls!.local[0]}packages/plugin-sdk/src/ui/browser/split-button.html`)
+    const page = await packageFixture.newPage()
+    await page.goto(`${packageFixture.origin}packages/plugin-sdk/src/ui/browser/split-button.html`)
     await page.getByRole('button', { name: 'Complete', exact: true }).click()
     expect(await page.getByRole('status', { name: 'Primary count' }).textContent()).toBe('1')
     await page.getByRole('button', { name: 'More actions', exact: true }).click()
     await page.getByRole('menuitem', { name: 'Set aside', exact: true }).click()
     expect(await page.getByRole('status', { name: 'Selected action' }).textContent()).toBe('aside')
   } finally {
-    await page.close()
-    await packageServer.close()
+    await packageFixture.close()
   }
 }, 30_000)

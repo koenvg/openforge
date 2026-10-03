@@ -1,46 +1,21 @@
 // @vitest-environment node
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { resolve } from 'node:path'
-import { svelte } from '@sveltejs/vite-plugin-svelte'
-import { chromium, type Browser, type Page } from 'playwright'
-import { createServer, type ViteDevServer } from 'vite'
+import type { Page } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createSdkBrowserFixture, type SdkBrowserFixture } from '../../test/browserFixture'
 import { THEME_TOKEN_CSS_PROPERTIES, validateThemeDefinition, type ThemeDefinition, type ThemeTokenName } from '../themes'
 import { BUILTIN_THEMES, DARK_THEME, LIGHT_THEME } from '../../../../src/lib/themeContract'
 
-let server: ViteDevServer
-let browser: Browser
+let browser: SdkBrowserFixture
 let origin: string
-let cacheDir: string | undefined
 
 beforeAll(async () => {
-  cacheDir = await mkdtemp(resolve(tmpdir(), 'openforge-status-badge-'))
-  server = await createServer({
-    configFile: false,
-    root: resolve(import.meta.dirname, '../../../..'),
-    plugins: [svelte()],
-    cacheDir,
-    optimizeDeps: { entries: ['packages/plugin-sdk/src/ui/browser/status-badge.html'] },
-    logLevel: 'error',
-    server: { host: '127.0.0.1', port: 0 },
+  browser = await createSdkBrowserFixture({
+    entries: ['packages/plugin-sdk/src/ui/browser/status-badge.html'],
   })
-  await server.listen()
-  origin = server.resolvedUrls!.local[0]
-  browser = await chromium.launch({ headless: true })
+  origin = browser.origin
 }, 60_000)
 
-afterAll(async () => {
-  try {
-    await browser?.close()
-  } finally {
-    try {
-      await server?.close()
-    } finally {
-      if (cacheDir) await rm(cacheDir, { recursive: true, force: true })
-    }
-  }
-})
+afterAll(async () => { await browser?.close() })
 
 // Each role has distinct edge, fill, and text colors, including warning vs waiting.
 const contributedLight: ThemeDefinition = {
