@@ -1,6 +1,8 @@
 mod buffer_snapshot;
 mod diagnostics;
 mod process_cleanup;
+mod retained_cleanup;
+pub(in super::super) use retained_cleanup::RetainedCleanup;
 
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
@@ -16,7 +18,7 @@ use super::super::managed_process::ManagedProcessIdentity;
 use super::super::ordered_writer::OrderedPtyWriter;
 use super::super::pids::terminate_and_remove_managed_process;
 use super::super::{PtyError, PtyManager};
-use super::{ManagedRecovery, SessionOperation, SessionTarget, TerminalSessions};
+use super::{SessionOperation, SessionTarget, TerminalSessions};
 
 pub(in super::super) type PtySessions = Arc<Mutex<HashMap<String, PtySession>>>;
 pub(in super::super) type PtyOutputBuffers = Arc<Mutex<HashMap<String, SharedRingBuffer>>>;
@@ -170,7 +172,7 @@ impl TerminalSessions {
                 .flatten()
         };
 
-        let Some(mut session) = removed_session else {
+        let Some(session) = removed_session else {
             return match self.finish_cleaning_exit(session_key, instance_id).await {
                 Some(true) => PassiveExitOutcome::Finalized {
                     process_succeeded: false,
@@ -178,22 +180,15 @@ impl TerminalSessions {
                 Some(false) | None => PassiveExitOutcome::IgnoredStale,
             };
         };
+        let mut cleanup = RetainedCleanup::current(self, session_key, session);
         if let Err(error) = terminate_and_remove_managed_process(
-            &session.managed_process,
+            &cleanup.session_mut().managed_process,
             pid_file,
             &format!("PTY EOF cleanup for {session_key}"),
         )
         .await
         {
             warn!("[PTY] Failed to finalize process tree for {session_key}: {error}");
-            self.retain_managed_recovery(
-                session_key,
-                ManagedRecovery {
-                    recovery_key: session_key.to_string(),
-                    session,
-                },
-            )
-            .await;
             if remove_output_buffer {
                 self.output_buffers.lock().await.remove(session_key);
             }
@@ -206,7 +201,8 @@ impl TerminalSessions {
             }
             return PassiveExitOutcome::CleanupFailed;
         }
-        let process_succeeded = session
+        let process_succeeded = cleanup
+            .session_mut()
             .child
             .try_wait()
             .ok()
@@ -224,6 +220,7 @@ impl TerminalSessions {
             attachment_hubs.remove(session_key);
         }
         drop(attachment_hubs);
+        cleanup.complete();
         PassiveExitOutcome::Finalized { process_succeeded }
     }
 }
