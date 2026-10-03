@@ -1,11 +1,12 @@
 //! Deterministic loopback provider drives Pi's actual tool-call path without external inference.
-use super::*;
+use serde_json::{json, Value};
 use std::io::Write;
 use std::net::TcpListener;
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc,
 };
+use std::time::{Duration, Instant};
 
 pub(super) struct Provider {
     pub port: u16,

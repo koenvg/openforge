@@ -1,5 +1,16 @@
 //! Optional real Pi tool call driven by a deterministic loopback model; no external inference.
-use super::*;
+use super::{
+    managed_process,
+    support::{executable, wait_text, Fixture},
+};
+use openforge_session_client::{runtime::RuntimeDirectory, Client};
+use openforge_session_protocol::*;
+use serde_json::json;
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+    time::{Duration, Instant},
+};
 
 #[test]
 #[ignore = "requires OPENFORGE_REPLACEMENT_NODE and OPENFORGE_REPLACEMENT_PI pointing to installed executables"]
@@ -14,7 +25,7 @@ fn real_pi_rpc_bash_and_tool_child_survive_replacement() {
     assert!(node.is_file() && pi.is_file());
     let (mut fixture, client) = Fixture::new();
     assert!(client.capabilities().unwrap().supports_replacement);
-    let root = fixture.root.path();
+    let root = fixture.root().to_path_buf();
     let config = root.join("pi-config");
     std::fs::create_dir(&config).unwrap();
     let script = root.join("pi-child.sh");
@@ -49,7 +60,7 @@ fn real_pi_rpc_bash_and_tool_child_survive_replacement() {
                 "--model".into(),
                 "fixture".into(),
             ],
-            cwd: root.into(),
+            cwd: root.clone(),
             env: BTreeMap::from([
                 ("HOME".into(), root.to_string_lossy().into_owned()),
                 (
@@ -70,9 +81,7 @@ fn real_pi_rpc_bash_and_tool_child_survive_replacement() {
         image_protocol: None,
     };
     let session = client.spawn("pi", &command).unwrap();
-    fixture
-        .tracked
-        .push(managed_process::ManagedProcessIdentity::capture(session.pid).unwrap());
+    fixture.track_process(session.pid);
     let input = format!(
         "{}\n",
         json!({"id":"live-tool","type":"prompt","message":"Run the fixture tool."})
@@ -83,16 +92,14 @@ fn real_pi_rpc_bash_and_tool_child_survive_replacement() {
     let bash = wait_pid(&bash_pid);
     let child = wait_pid(&child_pid);
     for pid in [bash, child] {
-        fixture
-            .tracked
-            .push(managed_process::ManagedProcessIdentity::capture(pid).unwrap());
+        fixture.track_process(pid);
     }
-    let identities = fixture.tracked.clone();
+    let identities = fixture.tracked_processes().to_vec();
     assert_eq!(
         std::fs::canonicalize(executable(session.pid)).unwrap(),
         std::fs::canonicalize(&node).unwrap()
     );
-    let runtime = RuntimeDirectory::open(root).unwrap();
+    let runtime = RuntimeDirectory::open(&root).unwrap();
     let credential = std::fs::read_dir(runtime.path())
         .unwrap()
         .map(Result::unwrap)
@@ -147,14 +154,14 @@ fn real_pi_rpc_bash_and_tool_child_survive_replacement() {
             std::fs::read(&credential).unwrap() == original_credential,
             "agent credential bytes changed"
         );
-        assert_eq!(current.capabilities().unwrap().pid, fixture.daemon.id());
+        assert_eq!(current.capabilities().unwrap().pid, fixture.daemon_pid());
         assert_eq!(
-            std::fs::read(executable(fixture.daemon.id())).unwrap(),
+            std::fs::read(executable(fixture.daemon_pid())).unwrap(),
             std::fs::read(image).unwrap()
         );
-        current = Client::connect(root).unwrap();
+        current = Client::connect(&root).unwrap();
     }
-    let fresh = Client::connect(root).unwrap();
+    let fresh = Client::connect(&root).unwrap();
     assert_eq!(fresh.spawn("pi", &command).unwrap().pid, session.pid);
     fresh
         .write(

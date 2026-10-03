@@ -1,11 +1,18 @@
-use super::*;
+use super::support::{wait_text, Fixture, FixtureOptions};
+use openforge_session_client::{runtime::RuntimeDirectory, Client};
+use openforge_session_protocol::*;
+use std::{
+    collections::BTreeMap,
+    path::Path,
+    time::{Duration, Instant},
+};
 
 #[test]
 fn updater_preflight_borrows_controller_without_fencing_the_live_sidecar() {
     let (fixture, sidecar) = Fixture::new();
     let original = sidecar.controller().clone();
     let maintenance =
-        openforge_session_client::MaintenanceClient::attach(fixture.root.path(), original.clone())
+        openforge_session_client::MaintenanceClient::attach(fixture.root(), original.clone())
             .unwrap();
     assert_eq!(maintenance.inventory().unwrap().controller, original);
     assert_eq!(sidecar.inventory().unwrap().controller, original);
@@ -17,18 +24,18 @@ fn updater_preflight_borrows_controller_without_fencing_the_live_sidecar() {
     let mut foreign = original.clone();
     foreign.installation = InstallationId::parse("foreign-installation").unwrap();
     assert!(matches!(
-        openforge_session_client::MaintenanceClient::attach(fixture.root.path(), foreign),
+        openforge_session_client::MaintenanceClient::attach(fixture.root(), foreign),
         Err(Error::ForeignInstallation)
     ));
     assert_eq!(sidecar.inventory().unwrap().controller, original);
 
-    let next = Client::connect(fixture.root.path()).unwrap();
+    let next = Client::connect(fixture.root()).unwrap();
     assert!(matches!(
         maintenance.inventory(),
         Err(Error::StaleController)
     ));
     assert!(matches!(
-        openforge_session_client::MaintenanceClient::attach(fixture.root.path(), original),
+        openforge_session_client::MaintenanceClient::attach(fixture.root(), original),
         Err(Error::StaleController)
     ));
     assert!(next.inventory().is_ok());
@@ -45,7 +52,7 @@ fn updater_maintenance_activates_a_distinct_image_without_replacing_the_pty_owne
         command: PreparedCommand {
             program: "/bin/cat".into(),
             args: vec![],
-            cwd: fixture.root.path().into(),
+            cwd: fixture.root().into(),
             env: BTreeMap::new(),
         },
         columns: 80,
@@ -53,11 +60,9 @@ fn updater_maintenance_activates_a_distinct_image_without_replacing_the_pty_owne
         image_protocol: None,
     };
     let session = sidecar.spawn("updater-shell", &command).unwrap();
-    fixture
-        .tracked
-        .push(managed_process::ManagedProcessIdentity::capture(session.pid).unwrap());
+    fixture.track_process(session.pid);
     let maintenance = openforge_session_client::MaintenanceClient::attach(
-        fixture.root.path(),
+        fixture.root(),
         sidecar.controller().clone(),
     )
     .unwrap();
@@ -81,9 +86,9 @@ fn updater_maintenance_activates_a_distinct_image_without_replacing_the_pty_owne
         Some(&activated.actual_version),
         prepared.target_version.as_ref()
     );
-    let next = Client::connect(fixture.root.path()).unwrap();
+    let next = Client::connect(fixture.root()).unwrap();
     let observation = openforge_session_client::MaintenanceClient::observe_replacement(
-        fixture.root.path(),
+        fixture.root(),
         &sidecar.controller().installation,
         &operation,
     )
@@ -96,7 +101,7 @@ fn updater_maintenance_activates_a_distinct_image_without_replacing_the_pty_owne
     assert!(matches!(sidecar.inventory(), Err(Error::StaleController)));
     assert!(matches!(
         openforge_session_client::MaintenanceClient::observe_replacement(
-            fixture.root.path(),
+            fixture.root(),
             &InstallationId::parse("foreign-installation").unwrap(),
             &operation,
         ),
@@ -134,7 +139,7 @@ fn maintenance_failed_activation_preserves_receipts_controller_rules_and_live_io
             command: PreparedCommand {
                 program: "/bin/cat".into(),
                 args: vec![],
-                cwd: fixture.root.path().into(),
+                cwd: fixture.root().into(),
                 env: BTreeMap::new(),
             },
             columns: 80,
@@ -142,11 +147,9 @@ fn maintenance_failed_activation_preserves_receipts_controller_rules_and_live_io
             image_protocol: None,
         };
         let session = client.spawn("maintenance-shell", &command).unwrap();
-        fixture
-            .tracked
-            .push(managed_process::ManagedProcessIdentity::capture(session.pid).unwrap());
+        fixture.track_process(session.pid);
         let maintenance =
-            MaintenanceClient::attach(fixture.root.path(), client.controller().clone()).unwrap();
+            MaintenanceClient::attach(fixture.root(), client.controller().clone()).unwrap();
         let operation = OperationId::parse("maintenance-rollback").unwrap();
         maintenance
             .prepare(operation.clone(), Path::new(image))
@@ -156,7 +159,7 @@ fn maintenance_failed_activation_preserves_receipts_controller_rules_and_live_io
         assert_eq!(receipt.state, ReplacementState::Failed { stage });
         assert_eq!(receipt.actual_version, before.image_version);
         let (capabilities, observed) = MaintenanceClient::observe_replacement(
-            fixture.root.path(),
+            fixture.root(),
             &client.controller().installation,
             &operation,
         )
@@ -178,9 +181,9 @@ fn maintenance_failed_activation_preserves_receipts_controller_rules_and_live_io
                 Err(Error::StaleController)
             ));
         }
-        let next = Client::connect(fixture.root.path()).unwrap();
+        let next = Client::connect(fixture.root()).unwrap();
         let next_maintenance =
-            MaintenanceClient::attach(fixture.root.path(), next.controller().clone()).unwrap();
+            MaintenanceClient::attach(fixture.root(), next.controller().clone()).unwrap();
         assert!(next_maintenance.activate(operation.clone()).is_err());
         assert_eq!(
             serde_json::to_value(next_maintenance.status(&operation).unwrap()).unwrap(),
@@ -216,7 +219,10 @@ fn supported_large_image_keeps_replacement_available() {
         .unwrap()
         .set_len(120 * 1024 * 1024)
         .unwrap();
-    let (_fixture, client) = Fixture::with_executable(&image);
+    let (_fixture, client) = Fixture::with_options(FixtureOptions {
+        executable: Some(&image),
+        ..Default::default()
+    });
     assert!(
         client.capabilities().unwrap().supports_replacement,
         "a supported image within the size limit must pass the bounded startup preflight"
@@ -226,7 +232,7 @@ fn supported_large_image_keeps_replacement_available() {
 #[test]
 fn markerless_compatible_image_reaches_prepared() {
     let (fixture, client) = Fixture::new();
-    let image = fixture.root.path().join("markerless-image");
+    let image = fixture.root().join("markerless-image");
     assert!(std::process::Command::new("cc")
         .args(["-arch", "arm64", "-Wall", "-Wextra", "-Werror"])
         .arg(format!("-DPROTOCOL_VERSION={VERSION}"))
@@ -257,7 +263,7 @@ fn incompatible_probe_lends_no_descriptors_or_environment_and_leaves_no_child() 
         command: PreparedCommand {
             program: "/bin/sleep".into(),
             args: vec!["120".into()],
-            cwd: fixture.root.path().into(),
+            cwd: fixture.root().into(),
             env: BTreeMap::new(),
         },
         columns: 80,
@@ -265,11 +271,9 @@ fn incompatible_probe_lends_no_descriptors_or_environment_and_leaves_no_child() 
         image_protocol: None,
     };
     let session = client.spawn("live-shell", &command).unwrap();
-    fixture
-        .tracked
-        .push(managed_process::ManagedProcessIdentity::capture(session.pid).unwrap());
-    let marker = fixture.root.path().join("probe-child");
-    let image = fixture.root.path().join("incompatible-image");
+    fixture.track_process(session.pid);
+    let marker = fixture.root().join("probe-child");
+    let image = fixture.root().join("incompatible-image");
     assert!(std::process::Command::new("cc")
         .args(["-arch", "arm64", "-Wall", "-Wextra", "-Werror"])
         .arg(format!("-DMARKER=\"{}\"", marker.display()))
@@ -297,9 +301,7 @@ fn incompatible_probe_lends_no_descriptors_or_environment_and_leaves_no_child() 
     // Track the deliberately leaked fixture child before any assertion can unwind.
     // SAFETY: signal zero observes this fixture-reported PID without signalling it.
     if unsafe { libc::kill(child, 0) } == 0 {
-        fixture
-            .tracked
-            .push(managed_process::ManagedProcessIdentity::capture(child as u32).unwrap());
+        fixture.track_process(child as u32);
     }
     assert_eq!(
         fields[1], 0,
@@ -321,7 +323,7 @@ fn incompatible_probe_lends_no_descriptors_or_environment_and_leaves_no_child() 
         "the rejected metadata image left a descendant"
     );
     assert_eq!(client.inventory().unwrap().sessions[0].pid, session.pid);
-    assert_eq!(client.capabilities().unwrap().pid, fixture.daemon.id());
+    assert_eq!(client.capabilities().unwrap().pid, fixture.daemon_pid());
 }
 
 #[test]
@@ -340,7 +342,7 @@ fn modified_target_or_recovery_cache_refuses_commit_and_keeps_serving() {
                     "-c".into(),
                     "while IFS= read -r line; do printf 'echo:%s\\n' \"$line\"; done".into(),
                 ],
-                cwd: fixture.root.path().into(),
+                cwd: fixture.root().into(),
                 env: BTreeMap::new(),
             },
             columns: 80,
@@ -348,9 +350,7 @@ fn modified_target_or_recovery_cache_refuses_commit_and_keeps_serving() {
             image_protocol: None,
         };
         let session = client.spawn("shell", &command).unwrap();
-        fixture
-            .tracked
-            .push(managed_process::ManagedProcessIdentity::capture(session.pid).unwrap());
+        fixture.track_process(session.pid);
         let executor = tokio::runtime::Builder::new_current_thread()
             .enable_time()
             .build()
@@ -368,7 +368,7 @@ fn modified_target_or_recovery_cache_refuses_commit_and_keeps_serving() {
             ))
             .unwrap();
         let expected = std::fs::read(target).unwrap();
-        let runtime = RuntimeDirectory::open(fixture.root.path()).unwrap();
+        let runtime = RuntimeDirectory::open(fixture.root()).unwrap();
         let path = std::fs::read_dir(runtime.path().join("images"))
             .unwrap()
             .map(Result::unwrap)
@@ -394,6 +394,6 @@ fn modified_target_or_recovery_cache_refuses_commit_and_keeps_serving() {
             .write("after-refusal", &session.pty, 1, b"still-serving\n")
             .unwrap();
         wait_text(&client, &session.pty, "echo:still-serving");
-        assert_eq!(client.capabilities().unwrap().pid, fixture.daemon.id());
+        assert_eq!(client.capabilities().unwrap().pid, fixture.daemon_pid());
     }
 }
