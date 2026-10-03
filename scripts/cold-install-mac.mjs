@@ -11,7 +11,7 @@ const execute = promisify(execFile)
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 export function coldInstallUsage() {
-  return 'Usage: pnpm electron:install --cold [--skip-build | --inspect | --recover]\nOptions: --app PATH --install-dir PATH --profile PATH --daemon-root PATH\nRequires explicit native local build approval and refuses running OpenForge processes.\nLive updates remain disabled. Cold installation does not preserve sessions.'
+  return 'Usage: pnpm electron:install [--skip-build | --inspect | --recover]\nOptions: --app PATH --install-dir PATH --profile PATH --daemon-root PATH\n--cold is accepted for compatibility; all source installations are cold.\nRequires explicit native local build approval and refuses running OpenForge processes.\nLive updates remain disabled. Cold installation does not preserve sessions.'
 }
 
 function parse(argv) {
