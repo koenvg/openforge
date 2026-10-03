@@ -3,7 +3,7 @@ use super::support::Fixture;
 use openforge_session_client::runtime::RuntimeDirectory;
 use openforge_session_protocol::*;
 use serde_json::{json, Value};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::net::{TcpListener, TcpStream};
 use std::{
     collections::BTreeMap,
@@ -153,37 +153,5 @@ fn submit(config: &AgentConfig, notification: &Value) -> NotificationReceipt {
     serde_json::from_slice(&body).unwrap()
 }
 fn http_message(stream: &mut TcpStream) -> Option<(String, Vec<u8>)> {
-    let mut bytes = Vec::new();
-    let (end, length) = loop {
-        let mut buffer = [0; 4096];
-        let count = stream.read(&mut buffer).ok()?;
-        if count == 0 {
-            return None;
-        }
-        bytes.extend_from_slice(&buffer[..count]);
-        assert!(bytes.len() <= 32 * 1024);
-        if let Some(end) = bytes.windows(4).position(|value| value == b"\r\n\r\n") {
-            let headers = String::from_utf8_lossy(&bytes[..end]).to_ascii_lowercase();
-            let length: usize = headers
-                .lines()
-                .find_map(|line| line.strip_prefix("content-length: "))
-                .unwrap()
-                .parse()
-                .unwrap();
-            assert!(length <= 16 * 1024);
-            break (end + 4, length);
-        }
-    };
-    while bytes.len() < end + length {
-        let mut buffer = [0; 4096];
-        let count = stream.read(&mut buffer).ok()?;
-        if count == 0 {
-            return None;
-        }
-        bytes.extend_from_slice(&buffer[..count]);
-    }
-    Some((
-        String::from_utf8(bytes[..end].to_vec()).unwrap(),
-        bytes[end..end + length].to_vec(),
-    ))
+    super::http::read(stream, 16 * 1024, 32 * 1024)
 }
