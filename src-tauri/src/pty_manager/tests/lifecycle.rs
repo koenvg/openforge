@@ -1,5 +1,7 @@
 use super::*;
 
+use crate::pty_manager::test_fixture::NativePtyFixtureCleanup;
+
 #[tokio::test]
 async fn test_get_pty_buffer_not_found() {
     let manager = PtyManager::new();
@@ -27,17 +29,20 @@ async fn test_kill_all_empty_sessions() {
 #[tokio::test]
 async fn test_kill_all_removes_indexed_shell_pid_files() {
     let mut manager = PtyManager::new();
-    let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(tmp_dir.path().to_path_buf());
+    let mut fixture = NativePtyFixtureCleanup::new(&mut manager);
+    let tmp_dir = fixture.pid_dir();
 
     let task_id = "task-1";
     let shell_key = shell_session_key(task_id, Some(2));
     {
         let mut sessions = manager.sessions.lock().await;
-        sessions.insert(shell_key.clone(), test_shell_pty_session(task_id, 2));
+        sessions.insert(
+            shell_key.clone(),
+            test_shell_pty_session(&mut fixture, task_id, 2),
+        );
     }
 
-    let shell_pid_file = tmp_dir.path().join(shell_pid_file_name(task_id, Some(2)));
+    let shell_pid_file = tmp_dir.join(shell_pid_file_name(task_id, Some(2)));
     write_test_session_metadata(&manager, &shell_key, &shell_pid_file).await;
 
     manager.kill_all().await;
@@ -48,22 +53,27 @@ async fn test_kill_all_removes_indexed_shell_pid_files() {
     );
     let sessions = manager.sessions.lock().await;
     assert!(!sessions.contains_key(&shell_key));
+    drop(sessions);
+    fixture.finish().expect("fixture cleanup");
 }
 
 #[tokio::test]
 async fn test_kill_all_keeps_agent_pid_derivation_for_task_id_with_shell_suffix() {
     let mut manager = PtyManager::new();
-    let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(tmp_dir.path().to_path_buf());
+    let mut fixture = NativePtyFixtureCleanup::new(&mut manager);
+    let tmp_dir = fixture.pid_dir();
 
     let task_id = "task-1-shell-2";
     {
         let mut sessions = manager.sessions.lock().await;
-        sessions.insert(task_id.to_string(), test_agent_pty_session(task_id));
+        sessions.insert(
+            task_id.to_string(),
+            test_agent_pty_session(&mut fixture, task_id),
+        );
     }
 
-    let agent_pid_file = tmp_dir.path().join(format!("{}-pty.pid", task_id));
-    let misleading_shell_pid_file = tmp_dir.path().join(format!("{}.pid", task_id));
+    let agent_pid_file = tmp_dir.join(format!("{}-pty.pid", task_id));
+    let misleading_shell_pid_file = tmp_dir.join(format!("{}.pid", task_id));
     write_test_session_metadata(&manager, task_id, &agent_pid_file).await;
     std::fs::write(&misleading_shell_pid_file, "5678")
         .expect("misleading shell pid file should write");
@@ -78,13 +88,16 @@ async fn test_kill_all_keeps_agent_pid_derivation_for_task_id_with_shell_suffix(
         misleading_shell_pid_file.exists(),
         "agent cleanup should not derive the misleading indexed shell PID path"
     );
+    // Remove only the deliberate decoy, after checking the cleanup evidence.
+    std::fs::remove_file(misleading_shell_pid_file).expect("remove decoy metadata");
+    fixture.finish().expect("fixture cleanup");
 }
 
 #[tokio::test]
 async fn test_kill_pty_removes_actual_provider_pid_file_name() {
     let mut manager = PtyManager::new();
-    let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(tmp_dir.path().to_path_buf());
+    let mut fixture = NativePtyFixtureCleanup::new(&mut manager);
+    let tmp_dir = fixture.pid_dir();
 
     let task_id = "task-claude";
     let pid_file_name = format!("{}-claude.pid", task_id);
@@ -92,11 +105,11 @@ async fn test_kill_pty_removes_actual_provider_pid_file_name() {
         let mut sessions = manager.sessions.lock().await;
         sessions.insert(
             task_id.to_string(),
-            test_pty_session(PtySessionKind::Agent, pid_file_name.clone()),
+            test_pty_session(&mut fixture, PtySessionKind::Agent, pid_file_name.clone()),
         );
     }
 
-    let pid_file = tmp_dir.path().join(pid_file_name);
+    let pid_file = tmp_dir.join(pid_file_name);
     write_test_session_metadata(&manager, task_id, &pid_file).await;
 
     manager
@@ -108,6 +121,7 @@ async fn test_kill_pty_removes_actual_provider_pid_file_name() {
         !pid_file.exists(),
         "kill_pty should remove the actual provider PID file tracked by the session"
     );
+    fixture.finish().expect("fixture cleanup");
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -133,9 +147,10 @@ async fn write_pty_keeps_session_lookup_available_during_io() {
         }
     }
 
-    let manager = PtyManager::new();
+    let mut manager = PtyManager::new();
+    let mut fixture = NativePtyFixtureCleanup::new(&mut manager);
     let task_id = "nonblocking-session-lookup";
-    let mut session = test_agent_pty_session(task_id);
+    let mut session = test_agent_pty_session(&mut fixture, task_id);
     let instance_id = session.instance_id;
     let (started_tx, started_rx) = std::sync::mpsc::sync_channel(1);
     let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
@@ -186,17 +201,18 @@ async fn write_pty_keeps_session_lookup_available_during_io() {
         "async work must progress before the stalled write is released"
     );
     assert_eq!(keys, vec![task_id.to_string()]);
+    fixture.finish().expect("fixture cleanup");
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn resize_pty_keeps_session_lookup_available_during_io() {
-    let manager = PtyManager::new();
+    let mut manager = PtyManager::new();
+    let mut fixture = NativePtyFixtureCleanup::new(&mut manager);
     let task_id = "nonblocking-resize-lookup";
-    manager
-        .sessions
-        .lock()
-        .await
-        .insert(task_id.to_string(), test_agent_pty_session(task_id));
+    manager.sessions.lock().await.insert(
+        task_id.to_string(),
+        test_agent_pty_session(&mut fixture, task_id),
+    );
 
     let (started_tx, started_rx) = std::sync::mpsc::channel();
     let (release_tx, release_rx) = std::sync::mpsc::channel();
@@ -237,6 +253,7 @@ async fn resize_pty_keeps_session_lookup_available_during_io() {
         "async work must progress before the stalled resize is released"
     );
     assert_eq!(keys, vec![task_id.to_string()]);
+    fixture.finish().expect("fixture cleanup");
 }
 
 #[tokio::test]
@@ -260,9 +277,7 @@ async fn test_get_pty_buffer_returns_snapshot() {
 #[tokio::test]
 async fn test_kill_pty_cleans_output_buffers() {
     let mut manager = PtyManager::new();
-    let tmp_dir = std::env::temp_dir().join("test_kill_pty_cleanup_buffers");
-    std::fs::create_dir_all(&tmp_dir).unwrap();
-    manager.set_pid_dir(tmp_dir.clone());
+    let mut fixture = NativePtyFixtureCleanup::new(&mut manager);
 
     let task_id = "cleanup-test-task";
 
@@ -294,7 +309,7 @@ async fn test_kill_pty_cleans_output_buffers() {
         );
     }
 
-    let _ = std::fs::remove_dir_all(&tmp_dir);
+    fixture.finish().expect("fixture cleanup");
 }
 
 #[tokio::test]
@@ -307,8 +322,8 @@ async fn test_get_session_keys_empty() {
 #[tokio::test]
 async fn test_kill_shells_for_task_removes_indexed_shell_pid_files() {
     let mut manager = PtyManager::new();
-    let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(tmp_dir.path().to_path_buf());
+    let mut fixture = NativePtyFixtureCleanup::new(&mut manager);
+    let tmp_dir = fixture.pid_dir();
 
     let task_id = "task-1";
     let shell0_key = shell_session_key(task_id, Some(0));
@@ -317,17 +332,26 @@ async fn test_kill_shells_for_task_removes_indexed_shell_pid_files() {
 
     {
         let mut sessions = manager.sessions.lock().await;
-        sessions.insert(shell0_key.clone(), test_shell_pty_session(task_id, 0));
-        sessions.insert(shell1_key.clone(), test_shell_pty_session(task_id, 1));
-        sessions.insert(unrelated_key.clone(), test_shell_pty_session("task-2", 0));
+        sessions.insert(
+            shell0_key.clone(),
+            test_shell_pty_session(&mut fixture, task_id, 0),
+        );
+        sessions.insert(
+            shell1_key.clone(),
+            test_shell_pty_session(&mut fixture, task_id, 1),
+        );
+        sessions.insert(
+            unrelated_key.clone(),
+            test_shell_pty_session(&mut fixture, "task-2", 0),
+        );
     }
 
-    let shell0_pid_file = tmp_dir.path().join(shell_pid_file_name(task_id, Some(0)));
-    let shell1_pid_file = tmp_dir.path().join(shell_pid_file_name(task_id, Some(1)));
-    let unrelated_pid_file = tmp_dir.path().join(shell_pid_file_name("task-2", Some(0)));
+    let shell0_pid_file = tmp_dir.join(shell_pid_file_name(task_id, Some(0)));
+    let shell1_pid_file = tmp_dir.join(shell_pid_file_name(task_id, Some(1)));
+    let unrelated_pid_file = tmp_dir.join(shell_pid_file_name("task-2", Some(0)));
     write_test_session_metadata(&manager, &shell0_key, &shell0_pid_file).await;
     write_test_session_metadata(&manager, &shell1_key, &shell1_pid_file).await;
-    std::fs::write(&unrelated_pid_file, "9012").expect("unrelated pid file should write");
+    write_test_session_metadata(&manager, &unrelated_key, &unrelated_pid_file).await;
 
     let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(128)));
     {
@@ -366,32 +390,34 @@ async fn test_kill_shells_for_task_removes_indexed_shell_pid_files() {
     assert!(!buffers.contains_key(&shell1_key));
     assert!(buffers.contains_key(&unrelated_key));
     drop(buffers);
+    fixture.finish().expect("fixture cleanup");
 }
 
 #[tokio::test]
 async fn test_kill_shells_for_task_does_not_kill_agent_with_shell_suffix_task_id() {
     let mut manager = PtyManager::new();
-    let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
-    manager.set_pid_dir(tmp_dir.path().to_path_buf());
+    let mut fixture = NativePtyFixtureCleanup::new(&mut manager);
+    let tmp_dir = fixture.pid_dir();
 
     let task_id = "task-1";
     let shell_key = shell_session_key(task_id, Some(0));
     let agent_like_shell_key = "task-1-shell-2";
     {
         let mut sessions = manager.sessions.lock().await;
-        sessions.insert(shell_key.clone(), test_shell_pty_session(task_id, 0));
+        sessions.insert(
+            shell_key.clone(),
+            test_shell_pty_session(&mut fixture, task_id, 0),
+        );
         sessions.insert(
             agent_like_shell_key.to_string(),
-            test_agent_pty_session(agent_like_shell_key),
+            test_agent_pty_session(&mut fixture, agent_like_shell_key),
         );
     }
 
-    let shell_pid_file = tmp_dir.path().join(shell_pid_file_name(task_id, Some(0)));
-    let agent_pid_file = tmp_dir
-        .path()
-        .join(format!("{}-pty.pid", agent_like_shell_key));
+    let shell_pid_file = tmp_dir.join(shell_pid_file_name(task_id, Some(0)));
+    let agent_pid_file = tmp_dir.join(format!("{}-pty.pid", agent_like_shell_key));
     write_test_session_metadata(&manager, &shell_key, &shell_pid_file).await;
-    std::fs::write(&agent_pid_file, "5678").expect("agent pid file should write");
+    write_test_session_metadata(&manager, agent_like_shell_key, &agent_pid_file).await;
 
     manager
         .kill_shells_for_task(task_id)
@@ -409,6 +435,8 @@ async fn test_kill_shells_for_task_does_not_kill_agent_with_shell_suffix_task_id
     let sessions = manager.sessions.lock().await;
     assert!(!sessions.contains_key(&shell_key));
     assert!(sessions.contains_key(agent_like_shell_key));
+    drop(sessions);
+    fixture.finish().expect("fixture cleanup");
 }
 
 #[test]
