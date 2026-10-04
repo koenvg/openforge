@@ -1,0 +1,3 @@
+    Finished `release` profile [optimized] target(s) in 0.12s
+     Running `scripts/experiments/terminal-restoration/native/target/release/hosted_snapshot /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/backend-snapshot.bin`
+exported 439271 bytes at 80x20 to /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/backend-snapshot.bin

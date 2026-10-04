@@ -1,3 +1,4 @@
+export { createXtermTerminalView } from './xtermTerminalView'
 export { decodeTerminalBase64, decodeTerminalReplay } from './terminalWire'
 export {
   createIndexedShellSessionKey,

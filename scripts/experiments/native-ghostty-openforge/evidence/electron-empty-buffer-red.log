@@ -1,0 +1,3 @@
+Error: Cannot create native surface
+    at create (/Users/koen/.openforge/worktrees/openforge/KVG-5198/scripts/experiments/native-ghostty-openforge/electron-probe.cjs:18:64)
+    at main (/Users/koen/.openforge/worktrees/openforge/KVG-5198/scripts/experiments/native-ghostty-openforge/electron-probe.cjs:19:16)

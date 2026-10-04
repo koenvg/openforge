@@ -14,6 +14,10 @@ function restartWorkspace(command: string, payload: unknown, deps: ElectronInvok
 }
 
 const electronShellCommandHandlers = {
+  experimental_native_terminal: (payload, deps) => {
+    if (!deps.nativeTerminal) throw new Error('Experimental native terminal is unavailable')
+    return deps.nativeTerminal(payload)
+  },
   get_restart_workspace: (payload, deps) => deps.restartWorkspace?.('get_restart_workspace', payload) ?? null,
   capture_restart_workspace: (payload, deps) => restartWorkspace('capture_restart_workspace', payload, deps),
   complete_restart_workspace: (payload, deps) => restartWorkspace('complete_restart_workspace', payload, deps),

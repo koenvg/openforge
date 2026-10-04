@@ -100,6 +100,8 @@ export interface TerminalViewDisposable {
 export interface TerminalViewRendererFailure {
   renderer: string
   reason: 'unavailable' | 'context-lost'
+  /** The view lost parsed state; recover it from the existing backend authority. */
+  requiresRecovery?: boolean
   error?: unknown
 }
 
@@ -113,6 +115,8 @@ export interface TerminalView {
   readonly imageProtocol: TerminalImageProtocol | null
   readonly resizeTarget: Element
 
+  /** Complete asynchronous native setup/resize before measuring the PTY grid. */
+  prepare?(): Promise<void>
   mount(container: HTMLElement): void
   setVisible(visible: boolean): void
   unmount(): void
@@ -133,7 +137,7 @@ export interface TerminalView {
   reset(): void
   refresh(): void
   fit(): TerminalViewGeometry | null
-  onUserInput(listener: (data: string) => void): TerminalViewDisposable
+  onUserInput(listener: (data: string | Uint8Array) => void): TerminalViewDisposable
   setKeyEventHandler(handler: (event: KeyboardEvent) => boolean): void
   getSelectionText(): string
   setTheme(theme: TerminalViewTheme): void

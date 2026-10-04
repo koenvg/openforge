@@ -1,0 +1,12 @@
+fixture: PASS (561 ms)
+rust-format: PASS (60 ms)
+rust-clippy: PASS (886 ms)
+format: PASS (31 ms)
+hosted-tests: PASS (6054 ms)
+native-build: PASS (1259 ms)
+authority-build: PASS (332 ms)
+authority: PASS (2537 ms)
+addon-build: PASS (894 ms)
+electron: PASS (1141 ms)
+full-tests: PASS (319668 ms)
+Evidence: /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/report.json

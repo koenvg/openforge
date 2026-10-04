@@ -174,6 +174,7 @@ export const desktopCommandContracts = [
   {"functionName":"inspectExistingBranch","moduleName":"tasks","ipcCommand":"inspect_existing_branch","payloadKeys":["repoPath","branch"],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"getTaskWorkspace","moduleName":"tasks","ipcCommand":"get_task_workspace","payloadKeys":["taskId"],"owner":"rust-sidecar","domain":"tasks-projects"},
   {"functionName":"getTaskDetail","moduleName":"tasks","ipcCommand":"get_task_detail","payloadKeys":["taskId"],"owner":"rust-sidecar","domain":"tasks-projects"},
+  {"functionName":"nativeTerminalCommand","moduleName":"terminal","ipcCommand":"experimental_native_terminal","payloadKeys":["request"],"owner":"electron-main","domain":"agent-session-pty"},
   {"functionName":"getRestartTerminalInventory","moduleName":"terminal","ipcCommand":"get_restart_terminal_inventory","payloadKeys":[],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"setTerminalColorProfile","moduleName":"terminal","ipcCommand":"set_terminal_color_profile","payloadKeys":["profile"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"spawnShellPty","moduleName":"terminal","ipcCommand":"pty_spawn_shell","payloadKeys":["taskId","cwd","cols","rows","terminalIndex","terminalImageProtocol"],"owner":"rust-sidecar","domain":"agent-session-pty"},

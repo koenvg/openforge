@@ -1,0 +1,251 @@
+test
++- run test ghostty-test 76 pass, 1 fail (77 total)
+error: 'termio.hosted_tests.test.hosted: accepts the production-pinned OpenForge codec' failed:
+       /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/upstream/src/terminal/snapshot/record.zig:335:17: 0x1019c7ecb in finish (ghostty-test)
+                       return error.PayloadNotExhausted;
+                       ^
+       /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/upstream/src/terminal/snapshot/checkpoint.zig:56:5: 0x1019cb4ef in decode (ghostty-test)
+           try record_reader.finish();
+           ^
+       /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/upstream/src/terminal/snapshot/snapshot.zig:366:9: 0x1019f3797 in ready (ghostty-test)
+               try checkpoint.decode(.ready, self.source);
+               ^
+       /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/upstream/src/termio/HostedRestore.zig:25:20: 0x10215d1fb in create (ghostty-test)
+           self.decoded = try self.decoder.ready(alloc, global.io(), .{ .max_continuation_bytes = continuation_limit });
+                          ^
+       /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/upstream/src/termio/Termio.zig:243:53: 0x102169043 in init (ghostty-test)
+           const restore = if (opts.host_snapshot) |bytes| try Restore.create(alloc, bytes) else null;
+                                                           ^
+       /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/upstream/src/termio/hosted_tests.zig:47:9: 0x10216a9a7 in create (ghostty-test)
+               try self.io.init(alloc, .{
+               ^
+       /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/upstream/src/termio/hosted_tests.zig:295:15: 0x10216b8d3 in test.hosted: accepts the production-pinned OpenForge codec (ghostty-test)
+           const f = try Fixture.create(snapshot);
+                     ^
+failed command: ./.zig-cache/o/5634108988ff94b0edb61f1f71c2b930/ghostty-test --cache-dir=./.zig-cache --seed=0x8d8af37e --listen=-
+
+Build Summary: 100/102 steps succeeded (1 failed); 76/77 tests passed (1 failed)
+test transitive failure
++- run test ghostty-test 76 pass, 1 fail (77 total)
+   +- compile test ghostty-test Debug aarch64-macos.13.0 success 38s MaxRSS:1G
+      +- WriteFile libc.txt success
+      +- WriteFile helpgen.zig success
+      |  +- run exe helpgen success 408ms
+      |     +- compile exe helpgen Debug native success 15s MaxRSS:328M
+      |        +- options success
+      +- WriteFile props.zig success
+      |  +- run exe props-unigen success 1s
+      |  |  +- compile exe props-unigen Debug native success 3s MaxRSS:267M
+      |  |     +- run exe uucode_generate (tables.zig) success 6s
+      |  |        +- compile exe uucode_generate Debug native success 14s MaxRSS:267M
+      |  +- run exe symbols-unigen success 822ms
+      |     +- compile exe symbols-unigen Debug native success 3s MaxRSS:289M
+      |        +- run exe uucode_generate (tables.zig) (+1 more reused dependencies)
+      +- WriteFile props.zig (+2 more reused dependencies)
+      +- WriteFile framedata.compressed success
+      |  +- run exe framegen (framedata.compressed) success 485ms
+      |     +- compile exe framegen Debug native success 271ms MaxRSS:59M
+      |        +- WriteFile  cached
+      |        +- compile lib z ReleaseFast native success 3s MaxRSS:80M
+      |        |  +- WriteFile libc.txt (reused)
+      |        +- compile lib z ReleaseFast native (+1 more reused dependencies)
+      +- WriteFile freetype-zig.h success
+      +- compile lib freetype Debug aarch64-macos.13.0 success 3s MaxRSS:83M
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile  success
+      |  +- compile lib z Debug aarch64-macos.13.0 success 2s MaxRSS:83M
+      |  |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile pnglibconf.h success
+      |  +- compile lib png Debug aarch64-macos.13.0 success 4s MaxRSS:94M
+      |  |  +- WriteFile libc.txt (reused)
+      |  |  +- WriteFile  (reused)
+      |  |  +- compile lib z Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      |  |  +- compile lib z Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      |  +- compile lib z Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      |  +- compile lib png Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- WriteFile pnglibconf.h (reused)
+      +- compile lib png Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- WriteFile  (reused)
+      +- compile lib z Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- WriteFile  success
+      +- compile lib oniguruma Debug aarch64-macos.13.0 success 3s MaxRSS:124M
+      |  +- WriteFile libc.txt (reused)
+      |  +- configure cmake header dependency to config.h success
+      +- WriteFile  success
+      +- compile lib glslang Debug aarch64-macos.13.0 success 30s MaxRSS:352M
+      |  +- WriteFile libc.txt (reused)
+      +- WriteFile  success
+      +- compile lib spirv_cross Debug aarch64-macos.13.0 success 23s MaxRSS:460M
+      |  +- WriteFile libc.txt (reused)
+      +- WriteFile  success
+      +- compile lib sentry Debug aarch64-macos.13.0 success 3s MaxRSS:130M
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile  success
+      |  +- compile lib breakpad Debug aarch64-macos.13.0 success 9s MaxRSS:153M
+      |  |  +- WriteFile libc.txt (reused)
+      |  +- compile lib breakpad Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- WriteFile  success
+      +- compile lib simdutf Debug aarch64-macos.13.0 success 6s MaxRSS:126M
+      |  +- WriteFile libc.txt (reused)
+      +- WriteFile hwy success
+      +- compile lib highway Debug aarch64-macos.13.0 success 12s MaxRSS:201M
+      |  +- WriteFile libc.txt (reused)
+      +- WriteFile success
+      +- compile lib macos Debug aarch64-macos.13.0 success 453ms MaxRSS:74M
+      |  +- WriteFile libc.txt (reused)
+      +- WriteFile libintl.h success
+      +- compile lib intl Debug aarch64-macos.13.0 success 1s MaxRSS:70M
+      |  +- WriteFile libc.txt (reused)
+      +- WriteFile  success
+      +- compile lib dcimgui Debug aarch64-macos.13.0 success 11s MaxRSS:257M
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile freetype-zig.h (reused)
+      |  +- compile lib freetype Debug aarch64-macos.13.0 (+7 more reused dependencies)
+      |  +- compile lib freetype Debug aarch64-macos.13.0 (+7 more reused dependencies)
+      +- compile lib freetype Debug aarch64-macos.13.0 (+7 more reused dependencies)
+      +- compile lib png Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- compile lib z Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib oniguruma Debug aarch64-macos.13.0 (+2 more reused dependencies)
+      +- compile lib glslang Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib spirv_cross Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib sentry Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- compile lib simdutf Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib highway Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib macos Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib intl Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib dcimgui Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- options success
+      +- options success
+      +- translate-c locale.c success 50ms
+      |  +- compile exe translate-c Debug native success 17s MaxRSS:900M
+      |  |  +- options success
+      |  |  +- options success
+      |  |  +- options success
+      |  |  +- run exe generate-def (aarch64.zig) success 42ms
+      |  |  |  +- compile exe generate-def Debug native success 10s MaxRSS:237M
+      |  |  +- run exe generate-def (amdgcn.zig) success 538ms
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (arm.zig) success 43ms
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (bpf.zig) success 10ms
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (common.zig) success 241ms
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (hexagon.zig) success 726ms
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (loongarch.zig) success 318ms
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (mips.zig) success 127ms
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (neon.zig) success 564ms
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (nvptx.zig) success 144ms
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (powerpc.zig) success 106ms
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (riscv.zig) success 12ms
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (s390x.zig) success 32ms
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (ve.zig) success 217ms
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (wasm.zig) success 343ms
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (x86_64.zig) success 40ms
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (x86.zig) success 987ms
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (xcore.zig) success 318ms
+      |  |     +- compile exe generate-def Debug native (reused)
+      |  +- WriteFile libc.txt (reused)
+      +- translate-c pty.c success 241ms
+      |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+      |  +- WriteFile libc.txt (reused)
+      +- translate-c posix_c.h success 588ms
+      |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile posix_c.h success
+      +- translate-c stb_c.h success 604ms
+      |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile stb_c.h success
+      +- WriteFile  (reused)
+      +- compile lib dcimgui Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- compile lib dcimgui Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- WriteFile helpgen.zig (+1 more reused dependencies)
+      +- WriteFile props.zig (+2 more reused dependencies)
+      +- WriteFile props.zig (+2 more reused dependencies)
+      +- WriteFile framedata.compressed (+1 more reused dependencies)
+      +- translate-c ghostty.h.h success 209ms
+      |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile ghostty.h.h success
+      +- run exe uucode_generate (tables.zig) (+1 more reused dependencies)
+      +- translate-c freetype_c.h success 707ms
+      |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile freetype_c.h success
+      |  +- WriteFile freetype-zig.h (reused)
+      +- WriteFile freetype-zig.h (reused)
+      +- compile lib freetype Debug aarch64-macos.13.0 (+7 more reused dependencies)
+      +- compile lib freetype Debug aarch64-macos.13.0 (+7 more reused dependencies)
+      +- translate-c oniguruma_c.h success 426ms
+      |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile oniguruma_c.h success
+      |  +- WriteFile  (reused)
+      +- WriteFile  (reused)
+      +- compile lib oniguruma Debug aarch64-macos.13.0 (+2 more reused dependencies)
+      +- compile lib oniguruma Debug aarch64-macos.13.0 (+2 more reused dependencies)
+      +- translate-c glslang_c.h success 205ms
+      |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile glslang_c.h success
+      |  +- WriteFile  (reused)
+      +- WriteFile  (reused)
+      +- compile lib glslang Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib glslang Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- translate-c spirv_cross_c.h success 511ms
+      |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile spirv_cross_c.h success
+      |  +- WriteFile  (reused)
+      +- WriteFile  (reused)
+      +- compile lib spirv_cross Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib spirv_cross Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- translate-c sentry_c.h success 194ms
+      |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile sentry_c.h success
+      |  +- WriteFile  (reused)
+      +- WriteFile  (reused)
+      +- compile lib sentry Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- compile lib sentry Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- translate-c opengl_c.h success 554ms
+      |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile opengl_c.h success
+      +- translate-c wuffs_c.h success 1s
+      |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile wuffs_c.h success
+      +- options success
+      +- translate-c success 350ms MaxRSS:32M
+      |  +- WriteFile objc/runtime.h success
+      |  +- WriteFile objc/runtime.h (reused)
+      +- translate-c macos_c.h success 4s
+      |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile macos_c.h success
+      +- options success
+      +- translate-c dcimgui_c.h success 545ms
+      |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile dcimgui_c.h success
+      |  +- WriteFile  (reused)
+      +- WriteFile  (reused)
+      +- compile lib dcimgui Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- compile lib dcimgui Debug aarch64-macos.13.0 (+4 more reused dependencies)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/54d83db15dd780f5dc6d1dd1de8a6d8d/build /Users/koen/.local/share/zig/zig-aarch64-macos-0.16.0/zig /Users/koen/.local/share/zig/zig-aarch64-macos-0.16.0/lib /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/upstream .zig-cache /Users/koen/.cache/zig --seed 0x8d8af37e -Z1442a022c3f28413 test -Dtest-filter=hosted: accepts the production -Drenderer=opengl -Demit-macos-app=false -Demit-xcframework=false --system --summary all

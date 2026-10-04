@@ -1,0 +1,84 @@
+{
+  "scope": "Development checkpoints and manual-tool observations, separate from the final passing report",
+  "checkpoints": [
+    {
+      "name": "host-api-red",
+      "exitCode": 1,
+      "log": "host-api-red.log",
+      "sha256": "5314c162a07ec6bfde285a2d371bfa87606b3e502e541ddb5c72b65c89556d5a",
+      "meaning": "The C constructor probe failed to link before hosted Surface exports existed; undefined _ghostty_surface_new_hosted."
+    },
+    {
+      "name": "symlink-package-path",
+      "exitCode": 1,
+      "log": "native-build-baseline.log",
+      "sha256": "b959a1b625372d0474b7d3fd292a2c82f525b09edb725144fa1ab6019b221143",
+      "meaning": "uucode_generate FileNotFound; 104/116 build steps succeeded. An absolute local Zig cache did not fix the symlinked package path. The runner now passes realpath(packages).",
+      "resolvedBy": "Final native-build.log: 116/116 steps succeeded"
+    },
+    {
+      "name": "metal-cli-unavailable",
+      "command": [
+        "xcrun",
+        "--find",
+        "metal"
+      ],
+      "exitCode": 72,
+      "log": "metal-tool.log",
+      "sha256": "572c1cca65a25a3855dff4e21e7acdb5779374334322757e18491b3ae8ff6506",
+      "resolvedForExperimentBy": "Default-off runtime Metal compilation; metal-preflight.log and native-build.log pass. No developer tools were installed."
+    }
+  ],
+  "preview": {
+    "log": "preview.log",
+    "sha256": "ed8b37524a9849ee60564a4339c32564f5047bff4c181485be8fba7c512deede",
+    "mode": "synthetic fixture",
+    "windowNumber": 42442,
+    "windowObservedOnscreen": true,
+    "screenshot": {
+      "command": [
+        "/usr/sbin/screencapture",
+        "-x",
+        "-o",
+        "-l",
+        "42442",
+        "artifacts/terminal-presentation/native-ghostty-window/preview.png"
+      ],
+      "exitCode": 1,
+      "stderr": "could not create image from window",
+      "artifactProduced": false
+    },
+    "permission": {
+      "command": [
+        "swift",
+        "-e",
+        "import CoreGraphics; print(CGPreflightScreenCaptureAccess())"
+      ],
+      "exitCode": 0,
+      "value": false,
+      "log": "screen-permission.log",
+      "sha256": "2ed27c1421e6928dbe13dbfdb5c59e1045b30341fe7ebe05700006bc5ac572c0"
+    },
+    "termination": "Owned preview process received SIGTERM after inspection; native destruction is tested separately by the self-test",
+    "pixelVerification": "blocked; no screenshot or correct-frame timing claimed"
+  },
+  "reproduction": {
+    "revision": "4ae9f1a2de5484de3d6a13fe03676b8853b9c41c",
+    "root": "artifacts/terminal-presentation/native-ghostty-window-reproduction",
+    "method": "Clean checkout using shared local Git objects, followed by prepare.mjs applying both retained patches; cached packages reused",
+    "prepareRuns": 2,
+    "bothPassed": true,
+    "resultingFilesMatched": 16,
+    "packageCount": 39,
+    "networkBootstrapRetested": false,
+    "setupCorrection": "clone --no-checkout already created the native-window branch; checkout -b first failed, then checking out that existing branch populated the clean tree"
+  },
+  "housekeepingCorrection": {
+    "result": "sandbox call timed out after 30000 ms",
+    "cause": "The sandbox process.execPath was Bun; --check executed JavaScript files, including the launcher, instead of performing a Node syntax-only check.",
+    "countedAsPassing": false,
+    "recovery": "Explicit node --check passed for all three scripts. The complete runner was then rerun with explicit node, including the GUI integration test and full native suite; all checks passed.",
+    "finalRunnerLog": "runner-full-node.log",
+    "initialFullNativeEvidence": "initial-full.json"
+  }
+}

@@ -1,0 +1,19 @@
+Downloading Electron binary...
+Error: Cannot find module '/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/openforge-ghostty.node'
+Require stack:
+- /Users/koen/.openforge/worktrees/openforge/KVG-5198/scripts/experiments/native-ghostty-openforge/electron-probe.cjs
+    at node:internal/modules/cjs/loader:1571:15
+    at Module._resolveFilename (node:electron/js2c/browser_init:2:146127)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1125:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1149:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1176:12)
+    at node:internal/modules/cjs/loader:1348:5
+    at Module._load (node:electron/js2c/node_init:2:18263)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:268:19)
+    at Module.require (node:internal/modules/cjs/loader:1681:12)
+    at require (node:internal/modules/helpers:157:16) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    '/Users/koen/.openforge/worktrees/openforge/KVG-5198/scripts/experiments/native-ghostty-openforge/electron-probe.cjs'
+  ]
+}

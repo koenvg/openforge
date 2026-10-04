@@ -118,18 +118,19 @@ export function createTerminalViewAttachmentCoordinator({
     requestedAttachmentGeneration: number,
     signal?: AbortSignal,
   ): Promise<TerminalGeometry | null> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       let frameId: number | null = null
       let frameCount = 0
       let settled = false
 
-      const finish = (dimensions: TerminalGeometry | null = null) => {
+      const finish = (dimensions: TerminalGeometry | null = null, error?: unknown) => {
         if (settled) return
         settled = true
         if (frameId !== null) cancelAnimationFrame(frameId)
         signal?.removeEventListener('abort', cancel)
         pendingInitialFits.delete(cancel)
-        resolve(dimensions)
+        if (error !== undefined) reject(error)
+        else resolve(dimensions)
       }
       const cancel = () => finish()
       const scheduleNextFit = () => {
@@ -153,15 +154,20 @@ export function createTerminalViewAttachmentCoordinator({
             return
           }
           frameCount += 1
-          const dimensions = view.fit()
-          if (isValidTerminalDimensions(dimensions)) {
-            view.refresh()
-            if (!isModalOpen()) view.focus()
-            getLifecycle().syncPtySize(dimensions)
-            finish(dimensions)
-            return
+          const fit = () => {
+            if (settled || shouldStopInitialFit(requestedAttachmentGeneration, signal)) { finish(); return }
+            const dimensions = view.fit()
+            if (isValidTerminalDimensions(dimensions)) {
+              view.refresh()
+              if (!isModalOpen()) view.focus()
+              getLifecycle().syncPtySize(dimensions)
+              finish(dimensions)
+              return
+            }
+            scheduleNextFit()
           }
-          scheduleNextFit()
+          if (view.prepare) void view.prepare().then(fit, error => finish(null, error))
+          else fit()
         })
       }
 
@@ -279,7 +285,15 @@ export function createTerminalViewAttachmentCoordinator({
       resizeTimeout = setTimeout(() => {
         resizeTimeout = null
         if (!attached || !viewVisible || attachmentGeneration !== generation) return
-        getLifecycle().syncPtySize(view.fit())
+        const visibility = viewVisibilityGeneration
+        const fit = () => {
+          if (!isCurrentVisibleAttachment(generation, visibility)) return
+          getLifecycle().syncPtySize(view.fit())
+        }
+        if (view.prepare) void view.prepare().then(fit).catch(error => {
+          console.warn(terminalLogMessage(environment.loggerName, 'Terminal resize preparation failed:'), error)
+        })
+        else fit()
       }, 100)
     })
     resizeObserver.observe(view.resizeTarget)

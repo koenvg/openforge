@@ -1,0 +1,24 @@
+{
+  "terminalKey": "NHT-1-shell-0",
+  "runRoot": "/var/folders/5f/jlmxmscj0gnb0h9z6j5by_rr0000gn/T/.ctx-mode-Hsi3rd/openforge-native-session-NTCGiQ",
+  "assertions": [
+    "Reattached native Ghostty to the same existing PTY and restored its marker",
+    "Native view hides behind another pane and reappears without replacing the PTY",
+    "Observed one backend DSR reply and exact native UTF-8 input at the PTY",
+    "Live output and the same PTY survived resize",
+    "A lost native attachment recovered into xterm from the same PTY authority"
+  ],
+  "scope": "Actual OpenForge, Terminal Runtime, Rust backend and an existing PTY; native state/input, not pixel evidence",
+  "final": {
+    "instance": 1,
+    "columns": 91,
+    "rows": 37
+  },
+  "pixelEvidence": false,
+  "passed": true,
+  "fixtureProcessIds": [
+    51872,
+    55747,
+    55756
+  ]
+}

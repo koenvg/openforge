@@ -36,7 +36,7 @@ export interface DesktopTerminalTransportPort {
     handler: (event: DesktopTerminalEvent<unknown>) => void,
   ): Promise<() => void>
   getPtyBuffer(shellSessionKey: string): Promise<DesktopPtyBufferState>
-  writePty(shellSessionKey: string, data: string): Promise<void>
+  writePty(shellSessionKey: string, data: string | Uint8Array): Promise<void>
   resizePty(shellSessionKey: string, cols: number, rows: number, attachment?: Parameters<TerminalTransport['resize']>[2]): Promise<void>
 }
 

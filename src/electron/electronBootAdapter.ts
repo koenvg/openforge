@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module'
+import { ExperimentalNativeTerminalHost, type NativeTerminalAddon, type NativeTerminalWindow } from './experimentalNativeTerminalHost.js'
 import { spawn } from 'node:child_process'
 import { NativeRestartRecovery } from './nativeRestartRecovery.js'
 import { RestartOperation } from './restartOperation.js'
@@ -11,7 +13,7 @@ import { RestartGeometryLeases } from './restartGeometryLeases.js'
 import type { RestartAttachmentIdentity } from './restartGeometryLeases.js'
 import type { RestartTerminalFence, RestartTerminalInventory } from './restartWorkspace.js'
 import { join } from 'node:path'
-import { BrowserWindow, app, clipboard, dialog, ipcMain, protocol, session, shell } from 'electron'
+import { BrowserWindow, app, clipboard, dialog, ipcMain, protocol, screen, session, shell } from 'electron'
 import { FRONTEND_HOST_REQUEST_ACKNOWLEDGE_COMMAND } from './frontendHostRequestProtocol.js'
 import {
   ACKNOWLEDGE_BROWSER_SESSION_PURGE_INTENT_COMMAND,
@@ -117,6 +119,25 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
   let mainRendererWindow: BrowserWindow | null = null
   const appRenderers = new Set<number>()
   const restartGeometryLeases = new RestartGeometryLeases()
+  const nativeKey = !app.isPackaged && process.platform === 'darwin' && process.arch === 'arm64'
+    && /-shell-\d+$/.test(options.env.VITE_OPENFORGE_EXPERIMENTAL_GHOSTTY_SESSION ?? '')
+    ? options.env.VITE_OPENFORGE_EXPERIMENTAL_GHOSTTY_SESSION! : null
+  const nativeTerminals = new ExperimentalNativeTerminalHost(nativeKey, () => {
+    return createRequire(import.meta.url)(join(options.workspaceRoot, 'artifacts/terminal-presentation/native-ghostty-openforge/openforge-ghostty.node')) as NativeTerminalAddon
+  })
+  function nativeWindow(window: BrowserWindow): NativeTerminalWindow {
+    return {
+      id: window.id,
+      nativeHandle: () => window.getNativeWindowHandle(),
+      scale: () => screen.getDisplayMatching(window.getBounds()).scaleFactor,
+      zoom: () => window.webContents.getZoomFactor(),
+      size: () => window.getContentBounds(),
+      sendInput: payload => {
+        if (!window.isDestroyed()) window.webContents.send('openforge:event', { eventName: 'experimental-native-terminal-input', payload })
+      },
+      focusWeb: () => { if (!window.isDestroyed()) window.webContents.focus() },
+    }
+  }
   let restartWorkspace: Promise<RestartWorkspaceIpc> | null = null
   const operationPrefix = '--openforge-restart-operation='
   let launchOperation = process.argv.find(arg => arg.startsWith(operationPrefix))?.slice(operationPrefix.length) ?? null
@@ -320,7 +341,10 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     const { width, height } = window.getContentBounds()
     taskBrowserSurfaceManager.registerWindow(window.id, { x: 0, y: 0, width, height })
     window.on('resize', updateTaskBrowserWindowBounds)
+    window.on('close', () => nativeTerminals.closeWindow(window.id))
+    window.webContents.on('will-navigate', () => nativeTerminals.closeWindow(window.id))
     window.on('closed', () => {
+      nativeTerminals.closeWindow(window.id)
       appRenderers.delete(mainWebContentsId)
       restartGeometryLeases.forget(mainWebContentsId)
       unregisterRestartWindow?.()
@@ -340,6 +364,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
       if (window.isFocused()) restartGeometryLeases.focus(mainWebContentsId)
     })
     window.webContents.on('render-process-gone', () => {
+      nativeTerminals.closeWindow(window.id)
       rendererEventSubscriptions.clear(mainWebContentsId)
       void frontendHostRequestRelay.rendererLost(mainWebContentsId)
     })
@@ -404,6 +429,12 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
           typedRequest,
           () => handleElectronInvoke(typedRequest, {
             ...createInvokeDeps(context),
+            nativeTerminal: async payload => {
+              if (!appRenderers.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame) throw new Error('Untrusted native terminal renderer')
+              const window = BrowserWindow.fromWebContents(event.sender)
+              if (!window || window.webContents !== event.sender) throw new Error('Native terminal window unavailable')
+              return nativeTerminals.handle(nativeWindow(window), payload)
+            },
             restartWorkspace: async (command, payload) => {
               if (!appRenderers.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame) throw new Error('Untrusted restart workspace renderer')
               const host = await controlledWorkspace()
@@ -440,6 +471,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
         }
         void frontendHostRequestRelay.shutdown()
         taskBrowserSurfaceManager.destroyAll()
+        nativeTerminals.dispose()
         handler(event)
       })
     },

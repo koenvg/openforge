@@ -66,7 +66,7 @@ export interface TerminalTransport {
     handler: () => void,
   ): Promise<TerminalTransportDisposable>
   readReplay(shellSessionKey: string): Promise<TerminalReplay>
-  writeUserInput(shellSessionKey: string, data: string): Promise<void>
+  writeUserInput(shellSessionKey: string, data: string | Uint8Array): Promise<void>
   resize(shellSessionKey: string, geometry: TerminalGeometry, attachment?: TerminalResizeAttachment): Promise<void>
   dispose(): void
 }

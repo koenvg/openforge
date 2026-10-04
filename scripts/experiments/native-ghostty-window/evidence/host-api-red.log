@@ -1,0 +1,5 @@
+Undefined symbols for architecture arm64:
+  "_ghostty_surface_new_hosted", referenced from:
+      _main in host-contract-probe-3b7803.o
+ld: symbol(s) not found for architecture arm64
+clang: error: linker command failed with exit code 1 (use -v to see invocation)

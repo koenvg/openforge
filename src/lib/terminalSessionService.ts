@@ -1,3 +1,4 @@
+import { createDesktopTerminalView, usesExperimentalNativeTerminal } from './desktopNativeTerminalView'
 import {
   createTerminalRuntime,
   createTerminalSessionService,
@@ -34,7 +35,7 @@ const transport = createDesktopTerminalTransport({
 })
 
 const terminalRuntimeEnvironment: TerminalRuntimeEnvironment = {
-  sampleSessionConfiguration: () => ({ renderer: 'xterm' }),
+  sampleSessionConfiguration: terminalKey => ({ renderer: usesExperimentalNativeTerminal(terminalKey) ? 'ghostty-native' : 'xterm' }),
   openLink: url => openUrl(url),
   themePresentation: terminalThemePresentation,
   fontFamily: terminalFontFamily,
@@ -44,6 +45,7 @@ const terminalRuntimeEnvironment: TerminalRuntimeEnvironment = {
 }
 
 const terminalRuntime = createTerminalRuntime({
+  createTerminalView: createDesktopTerminalView,
   transport,
   environment: terminalRuntimeEnvironment,
   beforeSessionStart: checkpointTerminalAcquisition,

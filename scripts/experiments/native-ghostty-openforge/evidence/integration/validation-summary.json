@@ -1,0 +1,82 @@
+[
+  {
+    "log": "app-tests-integration.log",
+    "sha256": "d7daa04d3ba06b3e05aefcafcd3277a5941831f9f78336edfd8957382050dc6f",
+    "summary": [
+      " FAIL  |terminal-session-service| src/lib/terminalSessionService.attachment.test.ts [ src/lib/terminalSessionService.attachment.test.ts ]",
+      " FAIL  |terminal-session-service| src/lib/terminalSessionService.input.test.ts [ src/lib/terminalSessionService.input.test.ts ]",
+      " FAIL  |terminal-session-service| src/lib/terminalSessionService.lifecycle.test.ts [ src/lib/terminalSessionService.lifecycle.test.ts ]",
+      " FAIL  |terminal-session-service| src/lib/terminalSessionService.reconnect.test.ts [ src/lib/terminalSessionService.reconnect.test.ts ]",
+      " FAIL  |renderer| src/components/task-detail/AgentStatusPill.test.ts [ src/components/task-detail/AgentStatusPill.test.ts ]",
+      "⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯",
+      " FAIL  |plugin-sdk| packages/plugin-sdk/src/ui/CoreControls.browser.test.ts > core control browser styles in dark theme > removes control and decorative transitions when reduced motion is requested",
+      " FAIL  |renderer| src/lib/ipc.moduleBoundaries.test.ts > IPC module boundaries > assigns every typed wrapper to exactly one domain module",
+      " Test Files  7 failed | 827 passed | 3 skipped (837)",
+      "      Tests  2 failed | 7326 passed | 3 expected fail | 16 skipped (7347)"
+    ]
+  },
+  {
+    "log": "app-tests-integration-retry.log",
+    "sha256": "6695e2db876526ee96a12231d03825931bba2e2a11eb4f09cd1834ecac2d86bf",
+    "summary": []
+  },
+  {
+    "log": "focused-default.log",
+    "sha256": "9fb8bcfe5cab897780bb4920edcd6fa62c75f76280d9d66287d968c1917076be",
+    "summary": [
+      " Test Files  7 passed (7)",
+      "      Tests  26 passed (26)"
+    ]
+  },
+  {
+    "log": "controls-retry.log",
+    "sha256": "6de3b57e95095b8a738c9cf6f803a5578ac11886459110c6880a05ef65191488",
+    "summary": [
+      " Test Files  1 passed (1)",
+      "      Tests  24 passed (24)"
+    ]
+  },
+  {
+    "log": "runtime-tests.log",
+    "sha256": "f05cdd0ee0d5b3c51eadcb9a021fbef80e8467d309f404151461d3fcf7a22388",
+    "summary": [
+      " Test Files  59 passed (59)",
+      "      Tests  302 passed | 1 skipped (303)"
+    ]
+  },
+  {
+    "log": "static-final.log",
+    "sha256": "e2eeab1c5d7d561da83aeb4d88542b6a0750a399f8cdfabde73ec462ac53e2e3",
+    "summary": []
+  },
+  {
+    "log": "backend-test.log",
+    "sha256": "d0e4491670afb427496d51050f2815296281fe76b7464e34ff973d5081e2970f",
+    "summary": [
+      "test document_preview::tests::document_size_and_format_policy_never_returns_unavailable_bytes ... FAILED",
+      "test result: FAILED. 2365 passed; 1 failed; 22 ignored; 0 measured; 0 filtered out; finished in 114.25s",
+      "error: test failed, to rerun pass `--bin openforge`"
+    ]
+  },
+  {
+    "log": "backend-test-retry.log",
+    "sha256": "5b0d648ef1043d4bb1aa3fe3d623159a5bb570eaf6a4a6d58af042f60a7ffbea",
+    "summary": [
+      "test result: ok. 2366 passed; 0 failed; 22 ignored; 0 measured; 0 filtered out; finished in 126.40s",
+      "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.68s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 25 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
+  },
+  {
+    "log": "backend-check.log",
+    "sha256": "0282cdc57580431a567bcfd29599b927b2e86fa5e0114028981c934dcbc6a2d2",
+    "summary": []
+  },
+  {
+    "log": "backend-clippy.log",
+    "sha256": "e322404cd59deeeac628230801230603858b1633125ff75157ac96167cd288a5",
+    "summary": []
+  }
+]

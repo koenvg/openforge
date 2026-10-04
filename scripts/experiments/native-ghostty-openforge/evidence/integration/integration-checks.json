@@ -1,0 +1,38 @@
+[
+  {
+    "name": "app-tests",
+    "command": "pnpm exec vitest run src scripts packages/terminal-runtime",
+    "status": 1,
+    "elapsedMs": 430070
+  },
+  {
+    "name": "runtime-types",
+    "command": "pnpm --filter @openforge-app/terminal-runtime build",
+    "status": 0,
+    "elapsedMs": 752
+  },
+  {
+    "name": "app-types",
+    "command": "pnpm exec tsc --noEmit",
+    "status": 0,
+    "elapsedMs": 3941
+  },
+  {
+    "name": "electron-types",
+    "command": "pnpm exec tsc -p tsconfig.electron.json --noEmit",
+    "status": 0,
+    "elapsedMs": 1823
+  },
+  {
+    "name": "app-lint",
+    "command": "pnpm lint",
+    "status": 0,
+    "elapsedMs": 11792
+  },
+  {
+    "name": "ipc-contract",
+    "command": "node scripts/generate-desktop-ipc-registry.mjs --check",
+    "status": 0,
+    "elapsedMs": 397
+  }
+]

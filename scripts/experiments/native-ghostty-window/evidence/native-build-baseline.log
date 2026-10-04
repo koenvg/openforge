@@ -1,0 +1,263 @@
+experimental-native-lib
++- install generated to libghostty-hosted.a
+   +- libsystem override
+      +- libtool ghostty-internal (libghostty-internal-fat.a)
+         +- compile lib ghostty ReleaseFast aarch64-macos.13.0
+            +- WriteFile props.zig
+               +- run exe props-unigen
+                  +- compile exe props-unigen Debug native
+                     +- run exe uucode_generate (tables.zig) failure
+error: failed to spawn and capture stdio from ./../../upstream/.zig-cache/o/e625f420d1dbb6e8c0fa4e6b4d2f701f/uucode_generate: FileNotFound
+failed command: cd /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-window/packages/uucode-0.2.0-ZZjBPuuFVgC8YZ8eld4fOKsZANLIhTFMzULQxhkLi1C7 && ./../../upstream/.zig-cache/o/e625f420d1dbb6e8c0fa4e6b4d2f701f/uucode_generate /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-window/upstream/.zig-cache/o/b33a2cbd8fc3efe157e812f2a8b6f449/tables.zig
+
+Build Summary: 104/116 steps succeeded (1 failed)
+experimental-native-lib transitive failure
++- install generated to libghostty-hosted.a transitive failure
+   +- libsystem override transitive failure
+      +- libtool ghostty-internal (libghostty-internal-fat.a) transitive failure
+         +- ranlib ghostty-internal #0 (0-libghostty-internal-fat.a) success 89ms
+         |  +- compile lib freetype ReleaseFast aarch64-macos.13.0 success 14s MaxRSS:122M
+         |     +- WriteFile libc.txt success
+         |     +- WriteFile  success
+         |     +- compile lib z ReleaseFast aarch64-macos.13.0 success 3s MaxRSS:80M
+         |     |  +- WriteFile libc.txt (reused)
+         |     +- WriteFile pnglibconf.h success
+         |     +- compile lib png ReleaseFast aarch64-macos.13.0 success 7s MaxRSS:92M
+         |     |  +- WriteFile libc.txt (reused)
+         |     |  +- WriteFile  (reused)
+         |     |  +- compile lib z ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     |  +- compile lib z ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- compile lib z ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- compile lib png ReleaseFast aarch64-macos.13.0 (+4 more reused dependencies)
+         +- ranlib ghostty-internal #1 (1-libghostty-internal-fat.a) success 43ms
+         |  +- compile lib png ReleaseFast aarch64-macos.13.0 (+4 more reused dependencies)
+         +- ranlib ghostty-internal #2 (2-libghostty-internal-fat.a) success 83ms
+         |  +- compile lib z ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         +- ranlib ghostty-internal #3 (3-libghostty-internal-fat.a) success 47ms
+         |  +- compile lib oniguruma ReleaseFast aarch64-macos.13.0 success 7s MaxRSS:100M
+         |     +- WriteFile libc.txt (reused)
+         |     +- configure cmake header dependency to config.h success
+         +- ranlib ghostty-internal #4 (4-libghostty-internal-fat.a) success 232ms
+         |  +- compile lib glslang ReleaseFast aarch64-macos.13.0 success 1m MaxRSS:401M
+         |     +- WriteFile libc.txt (reused)
+         +- ranlib ghostty-internal #5 (5-libghostty-internal-fat.a) success 154ms
+         |  +- compile lib spirv_cross ReleaseFast aarch64-macos.13.0 success 1m MaxRSS:695M
+         |     +- WriteFile libc.txt (reused)
+         +- ranlib ghostty-internal #6 (6-libghostty-internal-fat.a) success 106ms
+         |  +- compile lib sentry ReleaseFast aarch64-macos.13.0 success 8s MaxRSS:140M
+         |     +- WriteFile libc.txt (reused)
+         |     +- WriteFile  success
+         |     +- compile lib breakpad ReleaseFast aarch64-macos.13.0 success 9s MaxRSS:164M
+         |     |  +- WriteFile libc.txt (reused)
+         |     +- compile lib breakpad ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         +- ranlib ghostty-internal #7 (7-libghostty-internal-fat.a) success 40ms
+         |  +- compile lib breakpad ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         +- ranlib ghostty-internal #8 (8-libghostty-internal-fat.a) success 39ms
+         |  +- compile lib simdutf ReleaseFast aarch64-macos.13.0 success 16s MaxRSS:166M
+         |     +- WriteFile libc.txt (reused)
+         +- ranlib ghostty-internal #9 (9-libghostty-internal-fat.a) success 38ms
+         |  +- compile lib highway ReleaseFast aarch64-macos.13.0 success 13s MaxRSS:209M
+         |     +- WriteFile libc.txt (reused)
+         +- ranlib ghostty-internal #10 (10-libghostty-internal-fat.a) success 34ms
+         |  +- compile lib macos ReleaseFast aarch64-macos.13.0 success 628ms MaxRSS:79M
+         |     +- WriteFile libc.txt (reused)
+         +- ranlib ghostty-internal #11 (11-libghostty-internal-fat.a) success 42ms
+         |  +- compile lib intl ReleaseFast aarch64-macos.13.0 success 1s MaxRSS:74M
+         |     +- WriteFile libc.txt (reused)
+         +- ranlib ghostty-internal #12 (12-libghostty-internal-fat.a) success 69ms
+         |  +- compile lib dcimgui ReleaseFast aarch64-macos.13.0 success 25s MaxRSS:264M
+         |     +- WriteFile libc.txt (reused)
+         |     +- WriteFile freetype-zig.h success
+         |     +- compile lib freetype ReleaseFast aarch64-macos.13.0 (+7 more reused dependencies)
+         |     +- compile lib freetype ReleaseFast aarch64-macos.13.0 (+7 more reused dependencies)
+         +- ranlib ghostty-internal #13 (13-libghostty-internal-fat.a) transitive failure
+         |  +- compile lib ghostty ReleaseFast aarch64-macos.13.0 transitive failure
+         |     +- WriteFile libc.txt (reused)
+         |     +- WriteFile helpgen.zig success
+         |     |  +- run exe helpgen success 421ms
+         |     |     +- compile exe helpgen Debug native success 16s MaxRSS:390M
+         |     |        +- options success
+         |     +- WriteFile props.zig transitive failure
+         |     |  +- run exe props-unigen transitive failure
+         |     |  |  +- compile exe props-unigen Debug native transitive failure
+         |     |  |     +- run exe uucode_generate (tables.zig) failure
+         |     |  |        +- compile exe uucode_generate Debug native success 16s MaxRSS:259M
+         |     |  +- run exe symbols-unigen transitive failure
+         |     |     +- compile exe symbols-unigen Debug native transitive failure
+         |     |        +- run exe uucode_generate (tables.zig) (+1 more reused dependencies)
+         |     +- WriteFile props.zig (+2 more reused dependencies)
+         |     +- WriteFile framedata.compressed success
+         |     |  +- run exe framegen (framedata.compressed) success 379ms
+         |     |     +- compile exe framegen Debug native success 525ms MaxRSS:58M
+         |     |        +- WriteFile  cached
+         |     |        +- compile lib z ReleaseFast native success 3s MaxRSS:80M
+         |     |        |  +- WriteFile libc.txt (reused)
+         |     |        +- compile lib z ReleaseFast native (+1 more reused dependencies)
+         |     +- WriteFile freetype-zig.h (reused)
+         |     +- compile lib freetype ReleaseFast aarch64-macos.13.0 (+7 more reused dependencies)
+         |     +- WriteFile pnglibconf.h (reused)
+         |     +- compile lib png ReleaseFast aarch64-macos.13.0 (+4 more reused dependencies)
+         |     +- WriteFile  (reused)
+         |     +- compile lib z ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- WriteFile  success
+         |     +- compile lib oniguruma ReleaseFast aarch64-macos.13.0 (+2 more reused dependencies)
+         |     +- WriteFile  success
+         |     +- compile lib glslang ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- WriteFile  success
+         |     +- compile lib spirv_cross ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- WriteFile  success
+         |     +- compile lib sentry ReleaseFast aarch64-macos.13.0 (+4 more reused dependencies)
+         |     +- WriteFile  success
+         |     +- compile lib simdutf ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- WriteFile hwy success
+         |     +- compile lib highway ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- WriteFile success
+         |     +- compile lib macos ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- WriteFile libintl.h success
+         |     +- compile lib intl ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- WriteFile  success
+         |     +- compile lib dcimgui ReleaseFast aarch64-macos.13.0 (+4 more reused dependencies)
+         |     +- compile lib freetype ReleaseFast aarch64-macos.13.0 (+7 more reused dependencies)
+         |     +- compile lib png ReleaseFast aarch64-macos.13.0 (+4 more reused dependencies)
+         |     +- compile lib z ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- compile lib oniguruma ReleaseFast aarch64-macos.13.0 (+2 more reused dependencies)
+         |     +- compile lib glslang ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- compile lib spirv_cross ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- compile lib sentry ReleaseFast aarch64-macos.13.0 (+4 more reused dependencies)
+         |     +- compile lib simdutf ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- compile lib highway ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- compile lib macos ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- compile lib intl ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- compile lib dcimgui ReleaseFast aarch64-macos.13.0 (+4 more reused dependencies)
+         |     +- options success
+         |     +- options success
+         |     +- translate-c locale.c success 49ms
+         |     |  +- compile exe translate-c Debug native success 38s MaxRSS:871M
+         |     |  |  +- options success
+         |     |  |  +- options success
+         |     |  |  +- options success
+         |     |  |  +- run exe generate-def (aarch64.zig) success 87ms
+         |     |  |  |  +- compile exe generate-def Debug native success 12s MaxRSS:221M
+         |     |  |  +- run exe generate-def (amdgcn.zig) success 505ms
+         |     |  |  |  +- compile exe generate-def Debug native (reused)
+         |     |  |  +- run exe generate-def (arm.zig) success 32ms
+         |     |  |  |  +- compile exe generate-def Debug native (reused)
+         |     |  |  +- run exe generate-def (bpf.zig) success 11ms
+         |     |  |  |  +- compile exe generate-def Debug native (reused)
+         |     |  |  +- run exe generate-def (common.zig) success 391ms
+         |     |  |  |  +- compile exe generate-def Debug native (reused)
+         |     |  |  +- run exe generate-def (hexagon.zig) success 963ms
+         |     |  |  |  +- compile exe generate-def Debug native (reused)
+         |     |  |  +- run exe generate-def (loongarch.zig) success 313ms
+         |     |  |  |  +- compile exe generate-def Debug native (reused)
+         |     |  |  +- run exe generate-def (mips.zig) success 66ms
+         |     |  |  |  +- compile exe generate-def Debug native (reused)
+         |     |  |  +- run exe generate-def (neon.zig) success 543ms
+         |     |  |  |  +- compile exe generate-def Debug native (reused)
+         |     |  |  +- run exe generate-def (nvptx.zig) success 412ms
+         |     |  |  |  +- compile exe generate-def Debug native (reused)
+         |     |  |  +- run exe generate-def (powerpc.zig) success 72ms
+         |     |  |  |  +- compile exe generate-def Debug native (reused)
+         |     |  |  +- run exe generate-def (riscv.zig) success 328ms
+         |     |  |  |  +- compile exe generate-def Debug native (reused)
+         |     |  |  +- run exe generate-def (s390x.zig) success 49ms
+         |     |  |  |  +- compile exe generate-def Debug native (reused)
+         |     |  |  +- run exe generate-def (ve.zig) success 343ms
+         |     |  |  |  +- compile exe generate-def Debug native (reused)
+         |     |  |  +- run exe generate-def (wasm.zig) success 364ms
+         |     |  |  |  +- compile exe generate-def Debug native (reused)
+         |     |  |  +- run exe generate-def (x86_64.zig) success 37ms
+         |     |  |  |  +- compile exe generate-def Debug native (reused)
+         |     |  |  +- run exe generate-def (x86.zig) success 1s
+         |     |  |  |  +- compile exe generate-def Debug native (reused)
+         |     |  |  +- run exe generate-def (xcore.zig) success 7ms
+         |     |  |     +- compile exe generate-def Debug native (reused)
+         |     |  +- WriteFile libc.txt (reused)
+         |     +- translate-c pty.c success 1s
+         |     |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+         |     |  +- WriteFile libc.txt (reused)
+         |     +- translate-c posix_c.h success 776ms
+         |     |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+         |     |  +- WriteFile libc.txt (reused)
+         |     |  +- WriteFile posix_c.h success
+         |     +- translate-c stb_c.h success 997ms
+         |     |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+         |     |  +- WriteFile libc.txt (reused)
+         |     |  +- WriteFile stb_c.h success
+         |     +- WriteFile  (reused)
+         |     +- compile lib dcimgui ReleaseFast aarch64-macos.13.0 (+4 more reused dependencies)
+         |     +- compile lib dcimgui ReleaseFast aarch64-macos.13.0 (+4 more reused dependencies)
+         |     +- WriteFile helpgen.zig (+1 more reused dependencies)
+         |     +- WriteFile props.zig (+2 more reused dependencies)
+         |     +- WriteFile props.zig (+2 more reused dependencies)
+         |     +- WriteFile framedata.compressed (+1 more reused dependencies)
+         |     +- run exe uucode_generate (tables.zig) (+1 more reused dependencies)
+         |     +- translate-c freetype_c.h success 1s
+         |     |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+         |     |  +- WriteFile libc.txt (reused)
+         |     |  +- WriteFile freetype_c.h success
+         |     |  +- WriteFile freetype-zig.h (reused)
+         |     +- WriteFile freetype-zig.h (reused)
+         |     +- compile lib freetype ReleaseFast aarch64-macos.13.0 (+7 more reused dependencies)
+         |     +- compile lib freetype ReleaseFast aarch64-macos.13.0 (+7 more reused dependencies)
+         |     +- translate-c oniguruma_c.h success 84ms
+         |     |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+         |     |  +- WriteFile libc.txt (reused)
+         |     |  +- WriteFile oniguruma_c.h success
+         |     |  +- WriteFile  (reused)
+         |     +- WriteFile  (reused)
+         |     +- compile lib oniguruma ReleaseFast aarch64-macos.13.0 (+2 more reused dependencies)
+         |     +- compile lib oniguruma ReleaseFast aarch64-macos.13.0 (+2 more reused dependencies)
+         |     +- translate-c glslang_c.h success 1s
+         |     |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+         |     |  +- WriteFile libc.txt (reused)
+         |     |  +- WriteFile glslang_c.h success
+         |     |  +- WriteFile  (reused)
+         |     +- WriteFile  (reused)
+         |     +- compile lib glslang ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- compile lib glslang ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- translate-c spirv_cross_c.h success 928ms
+         |     |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+         |     |  +- WriteFile libc.txt (reused)
+         |     |  +- WriteFile spirv_cross_c.h success
+         |     |  +- WriteFile  (reused)
+         |     +- WriteFile  (reused)
+         |     +- compile lib spirv_cross ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- compile lib spirv_cross ReleaseFast aarch64-macos.13.0 (+1 more reused dependencies)
+         |     +- translate-c sentry_c.h success 761ms
+         |     |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+         |     |  +- WriteFile libc.txt (reused)
+         |     |  +- WriteFile sentry_c.h success
+         |     |  +- WriteFile  (reused)
+         |     +- WriteFile  (reused)
+         |     +- compile lib sentry ReleaseFast aarch64-macos.13.0 (+4 more reused dependencies)
+         |     +- compile lib sentry ReleaseFast aarch64-macos.13.0 (+4 more reused dependencies)
+         |     +- translate-c opengl_c.h success 1s
+         |     |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+         |     |  +- WriteFile libc.txt (reused)
+         |     |  +- WriteFile opengl_c.h success
+         |     +- translate-c wuffs_c.h success 7s
+         |     |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+         |     |  +- WriteFile libc.txt (reused)
+         |     |  +- WriteFile wuffs_c.h success
+         |     +- options success
+         |     +- translate-c success 311ms MaxRSS:32M
+         |     |  +- WriteFile objc/runtime.h success
+         |     |  +- WriteFile objc/runtime.h (reused)
+         |     +- translate-c macos_c.h success 23s
+         |     |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+         |     |  +- WriteFile libc.txt (reused)
+         |     |  +- WriteFile macos_c.h success
+         |     +- options success
+         |     +- translate-c dcimgui_c.h success 1s
+         |     |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+         |     |  +- WriteFile libc.txt (reused)
+         |     |  +- WriteFile dcimgui_c.h success
+         |     |  +- WriteFile  (reused)
+         |     +- WriteFile  (reused)
+         |     +- compile lib dcimgui ReleaseFast aarch64-macos.13.0 (+4 more reused dependencies)
+         |     +- compile lib dcimgui ReleaseFast aarch64-macos.13.0 (+4 more reused dependencies)
+         +- compile lib ghostty ReleaseFast aarch64-macos.13.0 (+85 more reused dependencies)
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/3c11b1b6ac60dc0893799f834b7dc461/build /Users/koen/.local/share/zig/zig-aarch64-macos-0.16.0/zig /Users/koen/.local/share/zig/zig-aarch64-macos-0.16.0/lib /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-window/upstream .zig-cache /Users/koen/.cache/zig --seed 0x9f57c5f9 -Zc8ac8732598d1287 experimental-native-lib -Dexperimental-runtime-metal=true -Demit-macos-app=false -Demit-xcframework=false -Drenderer=metal -Doptimize=ReleaseFast --system --summary all

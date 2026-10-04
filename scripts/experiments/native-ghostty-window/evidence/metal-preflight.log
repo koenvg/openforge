@@ -1,0 +1,17 @@
+{
+  "functions" : [
+    "image_fragment",
+    "cell_text_fragment",
+    "bg_color_fragment",
+    "cell_bg_fragment",
+    "bg_image_fragment",
+    "image_vertex",
+    "cell_text_vertex",
+    "bg_image_vertex",
+    "full_screen_vertex"
+  ],
+  "device" : "Apple M5",
+  "scope" : "Runtime shader compilation only; no terminal or frame",
+  "compiled" : 1,
+  "error" : ""
+}

@@ -1,0 +1,29 @@
+[
+  {
+    "args": [
+      "test",
+      "--locked",
+      "--offline"
+    ],
+    "status": 101,
+    "elapsedMs": 302098
+  },
+  {
+    "args": [
+      "check",
+      "--locked",
+      "--offline"
+    ],
+    "status": 0,
+    "elapsedMs": 132226
+  },
+  {
+    "args": [
+      "clippy",
+      "--locked",
+      "--offline"
+    ],
+    "status": 0,
+    "elapsedMs": 49728
+  }
+]

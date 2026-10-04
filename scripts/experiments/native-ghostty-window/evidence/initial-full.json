@@ -1,0 +1,44 @@
+{
+  "revision": "4ae9f1a2de5484de3d6a13fe03676b8853b9c41c",
+  "sourceHashes": {
+    "build.zig": "9741027222fe5ce79cf6005c8ad8602543dc208cb21a1f4fa5b9c9474a17489e",
+    "include/ghostty-hosted.h": "626879090caa7c8f208b62f8854787c6900dd979dd56e940dceb5f0ae71e4179",
+    "src/Surface.zig": "e9be4f5eb671cacbb8aa80210018294baef0097c4dbcf34646815bf2c54b3753",
+    "src/apprt/embedded.zig": "467a2bbc2b9dd00f0ebe24639dfc42f1f04f48e591cf9f3b90c197c44cac021c",
+    "src/apprt/hosted.zig": "ab3a72321ae9b5504fd8a95197e3e62c638a40b584aeb652dedcdad96f1cc4e2",
+    "src/apprt/none.zig": "383c473466e94a4cd350824eb3b5c4472fe29a327a4101f7167daf15277d8d24",
+    "src/build/Config.zig": "1969360882a93c73ad3fc9baa17c261da947be4694bec1caa1807b2d055599f9",
+    "src/build/SharedDeps.zig": "73f0bf85890221dabec2c519223a0faddbed70efc88c306b3ea8304cee6f22b5",
+    "src/renderer/metal/shaders.zig": "ebf19cf2cb936628aa162e00f61a9bf282ffcc58d39b050a492ad8234cdfd321",
+    "src/termio.zig": "48bca226f618b1540cdb9b69c79723a26fda2eb0e7131edd5e6cce4489eb2506",
+    "src/termio/Host.zig": "f9e3b85ea39c991e827151f2f92ac5c3a73ec0de52356e3c88266bdbe59d7931",
+    "src/termio/HostedRestore.zig": "f23b65d35b8ee66cc1506d8e7650801e525b36602134d911243cb0c3c9b8f44d",
+    "src/termio/Options.zig": "2fd0e92daccc2db35e7f56237e0ee7ad9df9fc5083667de5192afcf41e2ccc40",
+    "src/termio/Termio.zig": "a6c7acb295584ff94a7132866bdffcd9c3196257e58eb71433f7d1819fa2fc42",
+    "src/termio/backend.zig": "1b5f34cf9fa5cabd2a6354ee9f61cbe3ee58c2145831274f2c4943c08f53eed6",
+    "src/termio/hosted_tests.zig": "152b04414273b3ffd5b622f62c046fbe69e2aa594d05929210080d57c6ffc922"
+  },
+  "check": {
+    "name": "full-tests",
+    "command": [
+      "zig",
+      "build",
+      "test",
+      "-Drenderer=opengl",
+      "-Demit-macos-app=false",
+      "-Demit-xcframework=false",
+      "--system",
+      "/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-fork/packages",
+      "--summary",
+      "all"
+    ],
+    "exitCode": 0,
+    "signal": null,
+    "error": null,
+    "wallMs": 517786,
+    "summary": "Build Summary: 102/102 steps succeeded; 3817/3842 tests passed (25 skipped)",
+    "log": "initial-full-tests.log",
+    "logSha256": "667dc149f29676c841164e40ab1afcb235337a3f1aafe0ed422d20aeafaa3907"
+  },
+  "scope": "Initial full native suite before final explicit-Node harness confirmation"
+}

@@ -104,4 +104,25 @@ describe('terminal input ordering', () => {
     await writePty('T-1-shell-0', 'c', fence)
     expect(received).toBe('ac')
   })
+
+  it('preserves native input bytes and their enqueue-time contents behind a delayed write', async () => {
+    const first = deferred()
+    const received: Array<string | number[]> = []
+    window.openforge = {
+      version: 1,
+      onEvent: () => () => {},
+      async invoke(_command, payload) {
+        const { data } = payload as { data: string | number[] }
+        if (data === 'first') await first.promise
+        received.push(data)
+      },
+    }
+    const leading = writePty('T-1-shell-0', 'first')
+    const bytes = new Uint8Array([0, 128, 255, 13])
+    const native = writePty('T-1-shell-0', bytes)
+    bytes.fill(42)
+    first.resolve()
+    await Promise.all([leading, native])
+    expect(received).toEqual(['first', [0, 128, 255, 13]])
+  })
 })

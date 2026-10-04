@@ -1,0 +1,93 @@
+{
+  "task": "KVG-5198",
+  "scope": "Initial documentation/evidence reconciliation, reusing completed KVG-5199. Later isolated full-native source/compile experiment is recorded separately; no production source, dependency or lockfile changes.",
+  "followOnExperiment": "docs/experiments/native-ghostty-screen-first-contract.md",
+  "followOnForkExperiment": "docs/experiments/native-ghostty-host-snapshot-fork.md",
+  "validatedHead": "855d845547eaeb8e7625599b15d1a308883ba70a",
+  "priorExperimentLastCommit": "df6cd3be6dca6e53e533c12b66083e16ea7d3768",
+  "priorEvidenceLastCommit": "96deb9c1815170bb727cca2da499e00d413cf294",
+  "toolchain": {
+    "node": "24.14.0",
+    "pnpm": "10.34.3",
+    "rustc": "1.98.0 (88d9e12ae 2026-08-18)",
+    "zig": "0.16.0"
+  },
+  "pins": {
+    "libghosttyRs": "de9fd9b0fa4ab53faebd3d489f4c74fe0ec832ec",
+    "libghosttyVtVersion": "0.2.1",
+    "ghostty": "22d13172cde98a0a4dda05d3d6a3fcb0dd8ed018",
+    "cachedGhosttySourceClean": true,
+    "nativeSnapshotHeaderSha256": "062c062311011ed03504d5fb78c904f6145845bda4eccd91edd571d01d134c03",
+    "linkedSymbols": [
+      "ghostty_snapshot_decoder_ready",
+      "ghostty_snapshot_decoder_next"
+    ],
+    "xterm": "6.0.0"
+  },
+  "checks": [
+    {
+      "command": "pnpm i",
+      "exit": 0,
+      "lockfileChanged": false,
+      "warning": "Build scripts ignored for @vgpu/adapter-node, esbuild and webgpu. No dependency upgrade performed."
+    },
+    {
+      "command": "cargo test --release --locked --offline --manifest-path scripts/experiments/terminal-restoration/native/Cargo.toml -- --nocapture",
+      "environment": {
+        "GHOSTTY_SOURCE_DIR": "$HOME/.cache/openforge/ghostty/22d13172cde98a0a4dda05d3d6a3fcb0dd8ed018",
+        "GHOSTTY_ZIG_SYSTEM_DIR": "$HOME/.cache/openforge/ghostty/zig-system-22d13172cde98a0a4dda05d3d6a3fcb0dd8ed018"
+      },
+      "exit": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "output": [
+        "test probes::cancelling_after_ready_keeps_the_terminal_usable ... ok",
+        "test probes::scrolling_during_history_loading_stays_detached_from_the_live_viewport ... ok",
+        "test probes::truncated_finish_is_not_a_completed_snapshot ... ok",
+        "resize history pages=18, skipped pages=18",
+        "test probes::resize_and_live_output_between_history_pages_preserve_the_current_screen ... ok",
+        "test probes::ready_restores_parser_continuation_and_alternate_screen_before_history ... ok"
+      ]
+    },
+    {
+      "command": "pnpm --filter @openforge-app/terminal-runtime test",
+      "exit": 0,
+      "filesPassed": 58,
+      "passed": 300,
+      "skipped": 1,
+      "failed": 0,
+      "durationSeconds": 23.05,
+      "skipReason": "Opt-in profiler benchmark not enabled in this run."
+    },
+    {
+      "command": "pnpm --filter @openforge-app/terminal-runtime build",
+      "exit": 0,
+      "check": "tsc --noEmit"
+    }
+  ],
+  "priorEvidence": {
+    "root": "scripts/experiments/terminal-restoration/evidence",
+    "sha256": {
+      "measurements.json": "15ff3e87dc489d8e0d0e4ac29ca87506105cd4f3485104f2da841f9826316aa4",
+      "native-report.json": "93afaa6b22ae28c7ee604fa9479fb4ec178ca828c8270e15b0e33c91702e4734",
+      "verification-webgl.json": "b59fbb355a97a0b9e35b24d2ca5844c0a58bd63ea9f7e41a96e5d7c70cd3595a",
+      "verification-fallback.json": "fc7f0e36d869778ed064ef64e8e5fb15344ba6908aa542c4eae71452a4acf457",
+      "validation.json": "8e50a5d254e645f7705e46253623416c1bbdb91c4d6720dd501ab71af528deba"
+    },
+    "fixtureSha256": "fb86424b2d0f69145af29606307336e582776d45085ea7b4c48d48001ef12c53",
+    "arcChecksPerRenderer": 31,
+    "measurementsRerun": false
+  },
+  "gaps": [
+    "No correct frontend incremental-history implementation exists with the pinned public xterm API; its usable-screen and completion timings are unavailable.",
+    "Prior browser timings use synthetic local HTTP JSON and ptyInstanceId null, not production live-snapshot IPC or a real PTY.",
+    "Native benchmark uses a complete in-memory snapshot and a different retained-history cap than xterm.",
+    "Exact native scroll-anchor content, full historical-image retention, reader starvation and exhaustive continuation boundaries are not established.",
+    "Browser matrix, golden images, IME, full Electron/real-PTY performance, repository-wide/backend suites and native static checks were not rerun for this documentation-only task.",
+    "Current runtime run skips the opt-in profiler benchmark; earlier separate passing results remain historical evidence only.",
+    "No fresh benchmark, p95 estimate, isolated per-phase RSS or GPU memory measurement was made."
+  ],
+  "followUpCreated": "KVG-5214",
+  "existingFollowUpNotDuplicated": "KVG-5201"
+}

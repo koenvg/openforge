@@ -1,0 +1,35 @@
+[electron-dev] libghostty-vt wrapper revision: de9fd9b0fa4ab53faebd3d489f4c74fe0ec832ec
+[electron-dev] Ghostty source revision: 22d13172cde98a0a4dda05d3d6a3fcb0dd8ed018
+[electron-dev] Prepared Zig packages: 38
+[electron-dev] GHOSTTY_SOURCE_DIR=/Users/koen/.cache/openforge/ghostty/22d13172cde98a0a4dda05d3d6a3fcb0dd8ed018
+[electron-dev] GHOSTTY_ZIG_SYSTEM_DIR=/Users/koen/.cache/openforge/ghostty/zig-system-22d13172cde98a0a4dda05d3d6a3fcb0dd8ed018
+Building the backend for the isolated live-session probe
+[electron-dev] Preparing plugin backend artifacts for Electron dev ...
+[dev-plugin-artifacts] plugin SDK runtime is current
+[dev-plugin-artifacts] bundled plugin builds are current
+[electron-dev] Starting Vite dev server on http://127.0.0.1:52470/?openforge-e2e-token=[redacted]&openforge-desktop-test=1 ...
+[electron-dev] Preparing pinned Ghostty dependencies for the Rust sidecar ...
+[electron-dev] libghostty-vt wrapper revision: de9fd9b0fa4ab53faebd3d489f4c74fe0ec832ec
+[electron-dev] Ghostty source revision: 22d13172cde98a0a4dda05d3d6a3fcb0dd8ed018
+[electron-dev] Prepared Zig packages: 38
+[electron-dev] GHOSTTY_SOURCE_DIR=/Users/koen/.cache/openforge/ghostty/22d13172cde98a0a4dda05d3d6a3fcb0dd8ed018
+[electron-dev] GHOSTTY_ZIG_SYSTEM_DIR=/Users/koen/.cache/openforge/ghostty/zig-system-22d13172cde98a0a4dda05d3d6a3fcb0dd8ed018
+[electron-dev] Waiting for Vite readiness ...
+[electron-dev] Vite is ready; building Rust sidecar (git-common-dir target dir: /Users/koen/workspace/openforge/.cargo-target) ...
+[electron-dev] Building the installation Session Daemon beside the Rust sidecar ...
+[electron-dev] Building Electron main process ...
+[electron-dev] Launching Electron with Rust sidecar. Close the Electron window to stop this command.
+Fixture UI is ready
+renderer-console: Experimental native terminal fell back to xterm Error: Error invoking remote method 'openforge:invoke': Error: Unknown native attachment
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+page.evaluate: Error: Terminal marker "FALLBACK-RECOVERED" was not presented
+    at Object.drain (http://127.0.0.1:52470/src/lib/terminalTestProbe.ts:107:11)
+    at async <anonymous>:337:30
+    at /Users/koen/.openforge/worktrees/openforge/KVG-5198/scripts/experiments/native-ghostty-openforge/live-session-probe.mjs:161:40 {
+  log: []
+}
+
+Node.js v24.14.0

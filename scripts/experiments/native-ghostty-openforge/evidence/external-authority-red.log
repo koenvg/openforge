@@ -1,0 +1,176 @@
+test
++- run test ghostty-test
+   +- compile test ghostty-test Debug aarch64-macos.13.0 1 errors
+src/termio/hosted_tests.zig:309:23: error: no field named 'protocol_replies' in struct 'termio.Host'
+    f.io.backend.host.protocol_replies = false;
+                      ^~~~~~~~~~~~~~~~
+src/termio/Host.zig:1:1: note: struct declared here
+//! Experimental host-owned transport. Owns no PTY or child process.
+^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+referenced by:
+    test_0: src/termio.zig:39:17
+    test_0: src/main_ghostty.zig:208:17
+    2 reference(s) hidden; use '-freference-trace=4' to see all references
+error: 1 compilation errors
+failed command: /Users/koen/.local/share/zig/zig-aarch64-macos-0.16.0/zig test -fllvm .zig-cache/o/db90094d44148e8349dd21a4112048b2/libfreetype.a .zig-cache/o/d83b5b990b3527ece074c9cdf84dbde4/libpng.a .zig-cache/o/d104837824ba5146da3b15b79f9ffab3/libz.a .zig-cache/o/b44b75c74d5f518f0b94c1d468aaf801/liboniguruma.a .zig-cache/o/842beadeaed783f820eb4dcacfea7960/libglslang.a .zig-cache/o/8120570177640b9d615bd51722f2fbd2/libspirv_cross.a .zig-cache/o/23b807b5092d9bf37dd5d48ed7a4e1da/libsentry.a .zig-cache/o/8a100d60f674bdceac37b6f90ff012af/libsimdutf.a .zig-cache/o/0e60dcc413b2f2bb3a13bfd294844f07/libhighway.a -cflags -std=c++17 -DHWY_NO_LIBCXX -DSIMDUTF_NO_LIBCXX -- /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/src/simd/base64.cpp /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/src/simd/codepoint_width.cpp /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/src/simd/index_of.cpp /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/src/simd/vt.cpp -cflags -- /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/src/stb/stb.c .zig-cache/o/7ffcc055b9f1d173f8aac1ad637b46ff/libmacos.a .zig-cache/o/40c9b7fc25de3a06841a413b6fa2fa7f/libintl.a .zig-cache/o/4e9efc6ae81ed0995d42c4db2c65f039/libdcimgui.a /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/vendor/glad/src/gl.c -fno-strip -fno-omit-frame-pointer -funwind-tables -ODebug -target aarch64-macos.13.0 -mcpu baseline -I .zig-cache/o/dd9f3966bf25de7efd2e8a913ad47f21 -I .zig-cache/o/e0befa29e8e5c30b38daa658c21cd9a0 -I .zig-cache/o/3ee61931bf0b7f5f351a5a84dc9b6ee7 -I .zig-cache/o/2124a2300b52ff930cb8a7afaf38ea2e -I .zig-cache/o/30a487531faeb5361ce995bb32cf0bc3 -I .zig-cache/o/c9f36031595be8615a8e41074bff816c -I .zig-cache/o/d60051aa56a42daef65a43cdda323347 -I .zig-cache/o/6a496db783039837f837a2e34ed47c18 -I .zig-cache/o/24f79362e4aee3f46fe83863953609fa -I /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/src -I /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/src/stb -iframework /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks -isystem /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include -I .zig-cache/o/2fb5824d4233e9fe32370ab196a5b16d -I .zig-cache/o/53e46b40f204faeaa0f9c794ff32a2ce -I .zig-cache/o/9981028f5eeec06ba65e8dc0b271351d -I /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/vendor/glad/include/ -D_LIBCPP_HAS_VENDOR_AVAILABILITY_ANNOTATIONS=1 -L /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib --dep build_options --dep terminal_options --dep uucode --dep locale-c --dep pty-c --dep freetype --dep oniguruma --dep glslang --dep spirv_cross --dep sentry --dep opengl --dep vaxis --dep wuffs --dep xev --dep z2d --dep zf --dep objc --dep macos --dep dcimgui --dep jetbrains_mono_regular --dep jetbrains_mono_bold --dep jetbrains_mono_italic --dep jetbrains_mono_bold_italic --dep jetbrains_mono_variable --dep jetbrains_mono_variable_italic --dep nerd_fonts_symbols_only --dep help_strings --dep unicode_tables --dep symbols_tables --dep framedata --dep ghostty.h -Mroot=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/src/main.zig -Mbuild_options=.zig-cache/c/c380ad55c3c6b8bc9b8b6a7f3cab37ac/options.zig -Mterminal_options=.zig-cache/c/1264b151e92f66866ad2875f8a7801f3/options.zig -ODebug --dep types.zig --dep config.zig --dep tables -Muucode=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/uucode-0.2.0-ZZjBPlK5VADj7fdoq7G8LIHzD5o6FSkcBXXrRWr4jnrA/src/root.zig -ODebug -target aarch64-macos.13.0 -mcpu baseline -Mlocale-c=.zig-cache/o/f541474bb6e955387516881e45747d7e/locale.zig -ODebug -target aarch64-macos.13.0 -mcpu baseline -Mpty-c=.zig-cache/o/4c70d161d0162db870b129576910e28c/pty.zig -ODebug -target aarch64-macos.13.0 -mcpu baseline -I /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/pkg/freetype -I /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AAKLKpwC4H27Ps_0iL3bPkQb-z6ZVSrB-x_3EEkub/include -Mfreetype=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/pkg/freetype/main.zig -ODebug -target aarch64-macos.13.0 -mcpu baseline -I /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AAHjwMQDBXnLq3Q2QhaivE0kE2aD138vtX2Bq1g7c/src -Moniguruma=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/pkg/oniguruma/main.zig -ODebug -target aarch64-macos.13.0 -mcpu baseline -I /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AABzkUgISeKGgXAzgtutgJsZc0-kkeqBBscJgMkvy -I /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/pkg/glslang/override -Mglslang=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/pkg/glslang/main.zig -ODebug -target aarch64-macos.13.0 -mcpu baseline -I /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AANb6pwD7O1WG6L5nvD_rNMvnSc9Cpg1ijSlTYywv -Mspirv_cross=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/pkg/spirv-cross/main.zig -ODebug -target aarch64-macos.13.0 -mcpu baseline -I /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AAPlZGwBEa-gxrcypGBZ2R8Bse4JYSfo_ul8i2jlG/include -Msentry=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/pkg/sentry/main.zig -I /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/pkg/opengl/../../vendor/glad/include -Mopengl=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/pkg/opengl/main.zig -ODebug -target aarch64-macos.13.0 -mcpu baseline --dep zigimg --dep uucode -Mvaxis=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/vaxis-0.6.0-BWNV_CrbCQCscGpzsAlR402rYQ_tV3aAl081c2iRRkka/src/main.zig -ODebug -target aarch64-macos.13.0 -mcpu baseline --dep wuffs_c --dep "1x1#000000.gif" --dep "1x1#000000.jpg" --dep "1x1#000000.png" --dep "1x1#000000.ppm" --dep "1x1#FFFFFF.gif" --dep "1x1#FFFFFF.jpg" --dep "1x1#FFFFFF.png" --dep "1x1#FFFFFF.ppm" -Mwuffs=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/pkg/wuffs/src/main.zig -Mxev=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/libxev-0.0.0-86vtcwIRFADbH4hk-EjROXxlrKIRPQdA41XiTSytYO-F/src/main.zig -ODebug -target aarch64-macos.13.0 -mcpu baseline --dep z2d_options -Mz2d=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/z2d-0.12.1-j5P_Hsw8EQAKyZTQICCQnAH2xYkLDW8k9uefbsYdfPZ-/src/z2d.zig -ODebug -target aarch64-macos.13.0 -mcpu baseline -Mzf=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/zf-0.11.0-OIRy8X-RAAAwaRXHMYpj2uvBnuGTZWEE_3V7acqHQNtW/src/zf/zf.zig -lobjc -ODebug -target aarch64-macos.13.0 -mcpu baseline -iframework /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks -isystem /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include -L /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib --dep objc-c -Mobjc=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/zig_objc-0.0.0-Ir_Sp9gsAQCPAJc0oF5xoWePHWP6Y6tCphDeyNUThJoi/src/main.zig -ODebug -target aarch64-macos.13.0 -mcpu baseline --dep macos_c -Mmacos=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/pkg/macos/main.zig .zig-cache/o/4e9efc6ae81ed0995d42c4db2c65f039/libdcimgui.a -ODebug -target aarch64-macos.13.0 -mcpu baseline -I .zig-cache/o/9981028f5eeec06ba65e8dc0b271351d -I /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AAKLKpwC4H27Ps_0iL3bPkQb-z6ZVSrB-x_3EEkub/include --dep build_options=build_options0 -Mdcimgui=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/pkg/dcimgui/main.zig -Mjetbrains_mono_regular=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AAIC5lwAVPJJzxnCAahSvZTIlG-HhtOvnM1uh-66x/fonts/ttf/JetBrainsMono-Regular.ttf -Mjetbrains_mono_bold=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AAIC5lwAVPJJzxnCAahSvZTIlG-HhtOvnM1uh-66x/fonts/ttf/JetBrainsMono-Bold.ttf -Mjetbrains_mono_italic=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AAIC5lwAVPJJzxnCAahSvZTIlG-HhtOvnM1uh-66x/fonts/ttf/JetBrainsMono-Italic.ttf -Mjetbrains_mono_bold_italic=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AAIC5lwAVPJJzxnCAahSvZTIlG-HhtOvnM1uh-66x/fonts/ttf/JetBrainsMono-BoldItalic.ttf "-Mjetbrains_mono_variable=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AAIC5lwAVPJJzxnCAahSvZTIlG-HhtOvnM1uh-66x/fonts/variable/JetBrainsMono[wght].ttf" "-Mjetbrains_mono_variable_italic=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AAIC5lwAVPJJzxnCAahSvZTIlG-HhtOvnM1uh-66x/fonts/variable/JetBrainsMono-Italic[wght].ttf" -Mnerd_fonts_symbols_only=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AAMVLTABmYkLqhZPLXnMl-KyN38R8UVYqGrxqO26s/SymbolsNerdFont-Regular.ttf -Mhelp_strings=.zig-cache/o/544d1bd75fdf94792809533fd3ef5d39/helpgen.zig -Municode_tables=.zig-cache/o/9a3502464f245c830b74fc0f045004d8/props.zig -Msymbols_tables=.zig-cache/o/9a3502464f245c830b74fc0f045004d8/symbols.zig -Mframedata=.zig-cache/o/1993fc9d3024be58c7a7a13bf29f4d47/framedata.zig -ODebug -target aarch64-macos.13.0 -mcpu baseline -isystem /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/include --dep c_builtins --dep helpers -Mghostty.h=.zig-cache/o/58d11907325df4ddd453dd9b8ce316ec/hb_c.h.zig -ODebug -Mtypes.zig=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/uucode-0.2.0-ZZjBPlK5VADj7fdoq7G8LIHzD5o6FSkcBXXrRWr4jnrA/src/types.zig -ODebug --dep types.zig --dep storage.zig -Mconfig.zig=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/uucode-0.2.0-ZZjBPlK5VADj7fdoq7G8LIHzD5o6FSkcBXXrRWr4jnrA/src/config.zig -ODebug --dep config.zig --dep storage.zig --dep build_config -Mtables=.zig-cache/o/bb31773725d84b021bd46019d2967c9c/tables.zig -ODebug -target aarch64-macos.13.0 -mcpu baseline --dep zigimg -Mzigimg=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/zigimg-0.1.0-8_eo2oyaFwBZwJpmqPkCfVXWBrHcqbYwmrp1I6bTD3lI/zigimg.zig -cflags -DWUFFS_IMPLEMENTATION -DWUFFS_CONFIG__MODULES -DWUFFS_CONFIG__MODULE__AUX__BASE -DWUFFS_CONFIG__MODULE__AUX__IMAGE -DWUFFS_CONFIG__MODULE__BASE -DWUFFS_CONFIG__MODULE__ADLER32 -DWUFFS_CONFIG__MODULE__CRC32 -DWUFFS_CONFIG__MODULE__DEFLATE -DWUFFS_CONFIG__MODULE__JPEG -DWUFFS_CONFIG__MODULE__PNG -DWUFFS_CONFIG__MODULE__ZLIB -- /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AAAzZywE3s51XfsLbP9eyEw57ae9swYB9aGB6fCMs/release/c/wuffs-v0.4.c -ODebug -target aarch64-macos.13.0 -mcpu baseline -I /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AAAzZywE3s51XfsLbP9eyEw57ae9swYB9aGB6fCMs/release/c --dep c_builtins --dep helpers -Mwuffs_c=.zig-cache/o/cd00a16f6d76cdbc142bc89377812417/wuffs_c.h.zig "-M1x1#000000.gif=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AADYiAAB_80AWnH1AxXC0tql9thT-R-DYO1gBqTLc/1x1#000000.gif" "-M1x1#000000.jpg=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AADYiAAB_80AWnH1AxXC0tql9thT-R-DYO1gBqTLc/1x1#000000.jpg" "-M1x1#000000.png=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AADYiAAB_80AWnH1AxXC0tql9thT-R-DYO1gBqTLc/1x1#000000.png" "-M1x1#000000.ppm=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AADYiAAB_80AWnH1AxXC0tql9thT-R-DYO1gBqTLc/1x1#000000.ppm" "-M1x1#FFFFFF.gif=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AADYiAAB_80AWnH1AxXC0tql9thT-R-DYO1gBqTLc/1x1#FFFFFF.gif" "-M1x1#FFFFFF.jpg=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AADYiAAB_80AWnH1AxXC0tql9thT-R-DYO1gBqTLc/1x1#FFFFFF.jpg" "-M1x1#FFFFFF.png=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AADYiAAB_80AWnH1AxXC0tql9thT-R-DYO1gBqTLc/1x1#FFFFFF.png" "-M1x1#FFFFFF.ppm=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/N-V-__8AADYiAAB_80AWnH1AxXC0tql9thT-R-DYO1gBqTLc/1x1#FFFFFF.ppm" -Mz2d_options=.zig-cache/c/7538c3c259a39615b6540d97d5b3073c/options.zig -ODebug -target aarch64-macos.13.0 -mcpu baseline -Mobjc-c=.zig-cache/o/6b7585a177e5aac278cfe2034f379440/objc-import.zig -ODebug -target aarch64-macos.13.0 -mcpu baseline --dep c_builtins --dep helpers -Mmacos_c=.zig-cache/o/e4f535eb30ce96e9c68dc258d0f315fc/macos_c.h.zig -Mbuild_options0=.zig-cache/c/9cc266b26daa49550fef28fed2b984e4/options.zig -Mc_builtins=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/translate_c-0.0.0-Q_BUWmU6BwB_9JKG2l2W7i_mhmYWeRseTGBEHi_YlV5f/lib/c_builtins.zig -Mhelpers=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/translate_c-0.0.0-Q_BUWmU6BwB_9JKG2l2W7i_mhmYWeRseTGBEHi_YlV5f/lib/helpers.zig -ODebug --dep config.zig -Mstorage.zig=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/packages-pinned/uucode-0.2.0-ZZjBPlK5VADj7fdoq7G8LIHzD5o6FSkcBXXrRWr4jnrA/src/storage.zig --dep config.zig --dep storage.zig -Mbuild_config=/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream/src/build/uucode_config.zig .zig-cache/o/d104837824ba5146da3b15b79f9ffab3/libz.a .zig-cache/o/d83b5b990b3527ece074c9cdf84dbde4/libpng.a .zig-cache/o/d104837824ba5146da3b15b79f9ffab3/libz.a .zig-cache/o/69d15d39d4767095843228582ee629fa/libbreakpad.a .zig-cache/o/db90094d44148e8349dd21a4112048b2/libfreetype.a -framework OpenGL -framework Foundation -framework CoreFoundation -framework CoreGraphics -framework CoreText -framework CoreVideo -framework QuartzCore -framework IOSurface -framework Carbon -lc++ -lc --test-filter "hosted: an external authority" --libc .zig-cache/o/0bfed71023966a579bee9929d1287d7f/libc.txt --cache-dir .zig-cache --global-cache-dir /Users/koen/.cache/zig --name ghostty-test --zig-lib-dir /Users/koen/.local/share/zig/zig-aarch64-macos-0.16.0/lib/ --listen=-
+
+Build Summary: 81/84 steps succeeded (1 failed)
+test transitive failure
++- run test ghostty-test transitive failure
+   +- compile test ghostty-test Debug aarch64-macos.13.0 1 errors
+      +- WriteFile libc.txt cached
+      +- WriteFile helpgen.zig success
+      |  +- run exe helpgen success 818ms
+      |     +- compile exe helpgen Debug native success 1s MaxRSS:363M
+      |        +- options cached
+      +- WriteFile props.zig cached
+      |  +- run exe props-unigen cached
+      |  |  +- compile exe props-unigen Debug native cached 38ms MaxRSS:31M
+      |  |     +- run exe uucode_generate (tables.zig) cached
+      |  |        +- compile exe uucode_generate Debug native cached 56ms MaxRSS:31M
+      |  +- run exe symbols-unigen cached
+      |     +- compile exe symbols-unigen Debug native cached 58ms MaxRSS:31M
+      |        +- run exe uucode_generate (tables.zig) (+1 more reused dependencies)
+      +- WriteFile props.zig (+2 more reused dependencies)
+      +- WriteFile framedata.compressed cached
+      |  +- run exe framegen (framedata.compressed) cached
+      |     +- compile exe framegen Debug native cached 54ms MaxRSS:31M
+      |        +- WriteFile  cached
+      |        +- compile lib z ReleaseFast native cached 54ms MaxRSS:30M
+      |        |  +- WriteFile libc.txt (reused)
+      |        +- compile lib z ReleaseFast native (+1 more reused dependencies)
+      +- WriteFile freetype-zig.h cached
+      +- compile lib freetype Debug aarch64-macos.13.0 cached 39ms MaxRSS:31M
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile  cached
+      |  +- compile lib z Debug aarch64-macos.13.0 cached 35ms MaxRSS:30M
+      |  |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile pnglibconf.h cached
+      |  +- compile lib png Debug aarch64-macos.13.0 cached 29ms MaxRSS:30M
+      |  |  +- WriteFile libc.txt (reused)
+      |  |  +- WriteFile  (reused)
+      |  |  +- compile lib z Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      |  |  +- compile lib z Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      |  +- compile lib z Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      |  +- compile lib png Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- WriteFile pnglibconf.h (reused)
+      +- compile lib png Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- WriteFile  (reused)
+      +- compile lib z Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- WriteFile  cached
+      +- compile lib oniguruma Debug aarch64-macos.13.0 cached 44ms MaxRSS:30M
+      |  +- WriteFile libc.txt (reused)
+      |  +- configure cmake header dependency to config.h cached
+      +- WriteFile  cached
+      +- compile lib glslang Debug aarch64-macos.13.0 cached 53ms MaxRSS:31M
+      |  +- WriteFile libc.txt (reused)
+      +- WriteFile  cached
+      +- compile lib spirv_cross Debug aarch64-macos.13.0 cached 61ms MaxRSS:30M
+      |  +- WriteFile libc.txt (reused)
+      +- WriteFile  cached
+      +- compile lib sentry Debug aarch64-macos.13.0 cached 52ms MaxRSS:31M
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile  cached
+      |  +- compile lib breakpad Debug aarch64-macos.13.0 cached 55ms MaxRSS:31M
+      |  |  +- WriteFile libc.txt (reused)
+      |  +- compile lib breakpad Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- WriteFile  cached
+      +- compile lib simdutf Debug aarch64-macos.13.0 cached 36ms MaxRSS:30M
+      |  +- WriteFile libc.txt (reused)
+      +- WriteFile hwy cached
+      +- compile lib highway Debug aarch64-macos.13.0 cached 42ms MaxRSS:31M
+      |  +- WriteFile libc.txt (reused)
+      +- WriteFile cached
+      +- compile lib macos Debug aarch64-macos.13.0 cached 40ms MaxRSS:30M
+      |  +- WriteFile libc.txt (reused)
+      +- WriteFile libintl.h cached
+      +- compile lib intl Debug aarch64-macos.13.0 cached 40ms MaxRSS:30M
+      |  +- WriteFile libc.txt (reused)
+      +- WriteFile  cached
+      +- compile lib dcimgui Debug aarch64-macos.13.0 cached 89ms MaxRSS:31M
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile freetype-zig.h (reused)
+      |  +- compile lib freetype Debug aarch64-macos.13.0 (+7 more reused dependencies)
+      |  +- compile lib freetype Debug aarch64-macos.13.0 (+7 more reused dependencies)
+      +- compile lib freetype Debug aarch64-macos.13.0 (+7 more reused dependencies)
+      +- compile lib png Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- compile lib z Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib oniguruma Debug aarch64-macos.13.0 (+2 more reused dependencies)
+      +- compile lib glslang Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib spirv_cross Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib sentry Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- compile lib simdutf Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib highway Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib macos Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib intl Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib dcimgui Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- options cached
+      +- options cached
+      +- translate-c cached 32ms MaxRSS:30M
+      +- translate-c cached 20ms MaxRSS:30M
+      +- WriteFile  (reused)
+      +- compile lib dcimgui Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- compile lib dcimgui Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- WriteFile helpgen.zig (+1 more reused dependencies)
+      +- WriteFile props.zig (+2 more reused dependencies)
+      +- WriteFile props.zig (+2 more reused dependencies)
+      +- WriteFile framedata.compressed (+1 more reused dependencies)
+      +- translate-c hb_c.h cached
+      |  +- compile exe translate-c Debug native cached 51ms MaxRSS:31M
+      |  |  +- options cached
+      |  |  +- options cached
+      |  |  +- options cached
+      |  |  +- run exe generate-def (aarch64.zig) cached
+      |  |  |  +- compile exe generate-def Debug native cached 50ms MaxRSS:31M
+      |  |  +- run exe generate-def (amdgcn.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (arm.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (bpf.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (common.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (hexagon.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (loongarch.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (mips.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (neon.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (nvptx.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (powerpc.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (riscv.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (s390x.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (ve.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (wasm.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (x86_64.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (x86.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (xcore.zig) cached
+      |  |     +- compile exe generate-def Debug native (reused)
+      |  +- WriteFile hb_c.h cached
+      +- run exe uucode_generate (tables.zig) (+1 more reused dependencies)
+      +- translate-c wuffs_c.h cached
+      |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile wuffs_c.h cached
+      +- options cached
+      +- translate-c cached 34ms MaxRSS:30M
+      |  +- WriteFile objc/runtime.h cached
+      |  +- WriteFile objc/runtime.h (reused)
+      +- translate-c macos_c.h cached
+      |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile macos_c.h cached
+      +- options cached
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/403a94162aebd8107783e7dcebeab31a/build /Users/koen/.local/share/zig/zig-aarch64-macos-0.16.0/zig /Users/koen/.local/share/zig/zig-aarch64-macos-0.16.0/lib /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-openforge/pinned-upstream .zig-cache /Users/koen/.cache/zig --seed 0x82cc63d0 -Z36ff879f08d8d5bd test -Dtest-filter=hosted: an external authority -Drenderer=opengl -Demit-macos-app=false -Demit-xcframework=false --system --summary all

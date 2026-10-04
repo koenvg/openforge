@@ -1,0 +1,11 @@
+    Checking bitflags v2.13.1
+    Checking itoa v1.0.18
+    Checking memchr v2.8.3
+    Checking zmij v1.0.23
+    Checking libghostty-vt-sys v0.2.1 (https://github.com/Uzaaft/libghostty-rs.git?rev=de9fd9b0fa4ab53faebd3d489f4c74fe0ec832ec#de9fd9b0)
+    Checking serde_core v1.0.229
+    Checking base64 v0.22.1
+    Checking libghostty-vt v0.2.1 (https://github.com/Uzaaft/libghostty-rs.git?rev=de9fd9b0fa4ab53faebd3d489f4c74fe0ec832ec#de9fd9b0)
+    Checking serde_json v1.0.151
+    Checking terminal-restoration-probe v0.1.0 (/Users/koen/.openforge/worktrees/openforge/KVG-5198/scripts/experiments/terminal-restoration/native)
+    Finished `release` profile [optimized] target(s) in 0.84s

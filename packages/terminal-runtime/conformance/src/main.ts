@@ -171,7 +171,11 @@ async function reset(options: ResetOptions): Promise<TerminalViewPresentationEvi
     fontReadiness,
   })
   nextView.onRendererFailure(recordRendererFailure(terminalKey))
-  inputRecorder.subscribe(listener => nextView.onUserInput(listener), data => {
+  inputRecorder.subscribe(listener => nextView.onUserInput(data => {
+    // This conformance harness exercises xterm's string-input contract only.
+    if (typeof data !== 'string') throw new Error('Binary input requires a byte-aware conformance recorder')
+    listener(data)
+  }), data => {
     if (!echoInput) return
     outputSequence += 1
     nextView.writeLive({ data, ptyInstanceId, sequence: outputSequence })

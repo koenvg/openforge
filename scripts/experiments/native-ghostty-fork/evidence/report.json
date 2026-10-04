@@ -1,0 +1,109 @@
+{
+  "revision": "4ae9f1a2de5484de3d6a13fe03676b8853b9c41c",
+  "zigVersion": "0.16.0",
+  "platform": "darwin",
+  "arch": "arm64",
+  "patchSha256": "29e580aa2c18aea70e8fd8f66f79d6965154b1d73caf3c1cb84002b3de0b3afe",
+  "sourceHashes": {
+    "src/apprt/none.zig": "383c473466e94a4cd350824eb3b5c4472fe29a327a4101f7167daf15277d8d24",
+    "src/build/SharedDeps.zig": "d0853382d58fb24b4a14f76fdd2694ecbf1177d5feb5400f0cc11860fdce0775",
+    "src/termio.zig": "48bca226f618b1540cdb9b69c79723a26fda2eb0e7131edd5e6cce4489eb2506",
+    "src/termio/Host.zig": "f9e3b85ea39c991e827151f2f92ac5c3a73ec0de52356e3c88266bdbe59d7931",
+    "src/termio/HostedRestore.zig": "f23b65d35b8ee66cc1506d8e7650801e525b36602134d911243cb0c3c9b8f44d",
+    "src/termio/Options.zig": "2fd0e92daccc2db35e7f56237e0ee7ad9df9fc5083667de5192afcf41e2ccc40",
+    "src/termio/Termio.zig": "a6c7acb295584ff94a7132866bdffcd9c3196257e58eb71433f7d1819fa2fc42",
+    "src/termio/backend.zig": "1b5f34cf9fa5cabd2a6354ee9f61cbe3ee58c2145831274f2c4943c08f53eed6",
+    "src/termio/hosted_tests.zig": "152b04414273b3ffd5b622f62c046fbe69e2aa594d05929210080d57c6ffc922"
+  },
+  "experimentTests": [
+    "hosted: native Termio accepts host-owned input without a child",
+    "hosted: READY adopts native state and history preserves live cursor",
+    "hosted: rejects stale, duplicate and gapped output before parsing",
+    "hosted: parser continuation survives two snapshot adoptions",
+    "hosted: image state is live but unsupported checkpoint export fails closed",
+    "hosted: resize consumes incompatible history without claiming recovery",
+    "hosted: cancelled or truncated history leaves live state usable",
+    "hosted: alternate screen remains active while primary history arrives",
+    "hosted: a protocol query yields one native-owned reply",
+    "hosted: native parser and incremental history share a locked owner"
+  ],
+  "checks": [
+    {
+      "name": "format",
+      "command": [
+        "zig",
+        "fmt",
+        "--check",
+        "src/apprt/none.zig",
+        "src/build/SharedDeps.zig",
+        "src/termio.zig",
+        "src/termio/Host.zig",
+        "src/termio/HostedRestore.zig",
+        "src/termio/Options.zig",
+        "src/termio/Termio.zig",
+        "src/termio/backend.zig",
+        "src/termio/hosted_tests.zig"
+      ],
+      "exitCode": 0,
+      "error": null,
+      "wallMs": 37,
+      "summary": null,
+      "log": "format.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "hosted-tests",
+      "command": [
+        "zig",
+        "build",
+        "test",
+        "-Dtest-filter=hosted:",
+        "-Demit-macos-app=false",
+        "-Demit-xcframework=false",
+        "-Drenderer=opengl",
+        "--system",
+        "/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-fork/packages",
+        "--summary",
+        "all"
+      ],
+      "exitCode": 0,
+      "error": null,
+      "wallMs": 39392,
+      "summary": "Build Summary: 102/102 steps succeeded; 86/86 tests passed",
+      "log": "hosted-tests.log",
+      "logSha256": "bcb1f3e2149aa29c07bf11e7ea79e8c11dd13b27c0b8574b95d88b51397349b6"
+    },
+    {
+      "name": "full-tests",
+      "command": [
+        "zig",
+        "build",
+        "test",
+        "-Demit-macos-app=false",
+        "-Demit-xcframework=false",
+        "-Drenderer=opengl",
+        "--system",
+        "/Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-fork/packages",
+        "--summary",
+        "all"
+      ],
+      "exitCode": 0,
+      "error": null,
+      "wallMs": 675693,
+      "summary": "Build Summary: 102/102 steps succeeded; 3817/3842 tests passed (25 skipped)",
+      "log": "full-tests.log",
+      "logSha256": "f277886b832acd6e386f1552a875299473409a6ae3a24bd79f26ab55bf86a8f0"
+    }
+  ],
+  "scope": "Native Termio owner and parser, headless app wakeup, no Surface or renderer instance",
+  "notTested": [
+    "C ABI attachment",
+    "Electron integration",
+    "Metal or OpenGL frames",
+    "presented-output watermark",
+    "inline-image checkpoint restoration",
+    "GUI detach/reattach",
+    "PTY or IPC latency"
+  ],
+  "fullSuiteRequested": true
+}

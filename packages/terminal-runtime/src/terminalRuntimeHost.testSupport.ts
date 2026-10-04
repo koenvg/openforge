@@ -75,7 +75,7 @@ export interface TestHost extends TerminalRuntimeOptions {
   transport: TestTransport
   environment: TerminalRuntimeEnvironment & { openLink: ReturnType<typeof vi.fn> }
   getPtyBuffer(taskId: string): Promise<TestReplayState>
-  writePty(taskId: string, data: string): Promise<void>
+  writePty(taskId: string, data: string | Uint8Array): Promise<void>
   resizePty(taskId: string, cols: number, rows: number): Promise<void>
   openLink: ReturnType<typeof vi.fn>
   themeMode: TerminalRuntimeEnvironment['themeMode']
@@ -213,7 +213,7 @@ export function createHost({ listenerRegistrationFailures }: CreateHostOptions =
           : undefined,
       }
     }),
-    writeUserInput: vi.fn((shellSessionKey: string, data: string) => host.writePty(shellSessionKey, data)),
+    writeUserInput: vi.fn((shellSessionKey: string, data: string | Uint8Array) => host.writePty(shellSessionKey, data)),
     resize: vi.fn((shellSessionKey: string, geometry: { cols: number; rows: number }) => (
       host.resizePty(shellSessionKey, geometry.cols, geometry.rows)
     )),

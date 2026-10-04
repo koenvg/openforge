@@ -194,6 +194,7 @@ export interface WhisperDownloadProgressPayload {
 }
 
 export interface AdditionalDesktopEventPayloads {
+  'experimental-native-terminal-input': import('../electron/nativeTerminalProtocol').NativeTerminalInput
   'restart-workspace-capture': { operationId: string }
   'whisper-download-progress': WhisperDownloadProgressPayload
 }

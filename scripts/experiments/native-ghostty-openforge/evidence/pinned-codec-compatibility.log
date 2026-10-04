@@ -1,0 +1,158 @@
+Build Summary: 84/84 steps succeeded; 71/71 tests passed
+test success
++- run test ghostty-test 71 pass (71 total) 693ms MaxRSS:34M
+   +- compile test ghostty-test Debug aarch64-macos.13.0 success 13s MaxRSS:1G
+      +- WriteFile libc.txt cached
+      +- WriteFile helpgen.zig cached
+      |  +- run exe helpgen cached
+      |     +- compile exe helpgen Debug native cached 67ms MaxRSS:31M
+      |        +- options cached
+      +- WriteFile props.zig success
+      |  +- run exe props-unigen success 793ms
+      |  |  +- compile exe props-unigen Debug native success 1s MaxRSS:267M
+      |  |     +- run exe uucode_generate (tables.zig) success 1s
+      |  |        +- compile exe uucode_generate Debug native cached 70ms MaxRSS:31M
+      |  +- run exe symbols-unigen success 405ms
+      |     +- compile exe symbols-unigen Debug native success 1s MaxRSS:288M
+      |        +- run exe uucode_generate (tables.zig) (+1 more reused dependencies)
+      +- WriteFile props.zig (+2 more reused dependencies)
+      +- WriteFile framedata.compressed cached
+      |  +- run exe framegen (framedata.compressed) cached
+      |     +- compile exe framegen Debug native cached 63ms MaxRSS:31M
+      |        +- WriteFile  cached
+      |        +- compile lib z ReleaseFast native cached 41ms MaxRSS:30M
+      |        |  +- WriteFile libc.txt (reused)
+      |        +- compile lib z ReleaseFast native (+1 more reused dependencies)
+      +- WriteFile freetype-zig.h cached
+      +- compile lib freetype Debug aarch64-macos.13.0 cached 53ms MaxRSS:31M
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile  cached
+      |  +- compile lib z Debug aarch64-macos.13.0 cached 38ms MaxRSS:30M
+      |  |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile pnglibconf.h cached
+      |  +- compile lib png Debug aarch64-macos.13.0 cached 35ms MaxRSS:30M
+      |  |  +- WriteFile libc.txt (reused)
+      |  |  +- WriteFile  (reused)
+      |  |  +- compile lib z Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      |  |  +- compile lib z Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      |  +- compile lib z Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      |  +- compile lib png Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- WriteFile pnglibconf.h (reused)
+      +- compile lib png Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- WriteFile  (reused)
+      +- compile lib z Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- WriteFile  cached
+      +- compile lib oniguruma Debug aarch64-macos.13.0 cached 43ms MaxRSS:30M
+      |  +- WriteFile libc.txt (reused)
+      |  +- configure cmake header dependency to config.h cached
+      +- WriteFile  cached
+      +- compile lib glslang Debug aarch64-macos.13.0 cached 54ms MaxRSS:31M
+      |  +- WriteFile libc.txt (reused)
+      +- WriteFile  cached
+      +- compile lib spirv_cross Debug aarch64-macos.13.0 cached 40ms MaxRSS:31M
+      |  +- WriteFile libc.txt (reused)
+      +- WriteFile  cached
+      +- compile lib sentry Debug aarch64-macos.13.0 cached 53ms MaxRSS:31M
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile  cached
+      |  +- compile lib breakpad Debug aarch64-macos.13.0 cached 39ms MaxRSS:31M
+      |  |  +- WriteFile libc.txt (reused)
+      |  +- compile lib breakpad Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- WriteFile  cached
+      +- compile lib simdutf Debug aarch64-macos.13.0 cached 64ms MaxRSS:30M
+      |  +- WriteFile libc.txt (reused)
+      +- WriteFile hwy cached
+      +- compile lib highway Debug aarch64-macos.13.0 cached 45ms MaxRSS:31M
+      |  +- WriteFile libc.txt (reused)
+      +- WriteFile cached
+      +- compile lib macos Debug aarch64-macos.13.0 cached 55ms MaxRSS:30M
+      |  +- WriteFile libc.txt (reused)
+      +- WriteFile libintl.h cached
+      +- compile lib intl Debug aarch64-macos.13.0 cached 40ms MaxRSS:30M
+      |  +- WriteFile libc.txt (reused)
+      +- WriteFile  cached
+      +- compile lib dcimgui Debug aarch64-macos.13.0 cached 58ms MaxRSS:31M
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile freetype-zig.h (reused)
+      |  +- compile lib freetype Debug aarch64-macos.13.0 (+7 more reused dependencies)
+      |  +- compile lib freetype Debug aarch64-macos.13.0 (+7 more reused dependencies)
+      +- compile lib freetype Debug aarch64-macos.13.0 (+7 more reused dependencies)
+      +- compile lib png Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- compile lib z Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib oniguruma Debug aarch64-macos.13.0 (+2 more reused dependencies)
+      +- compile lib glslang Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib spirv_cross Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib sentry Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- compile lib simdutf Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib highway Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib macos Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib intl Debug aarch64-macos.13.0 (+1 more reused dependencies)
+      +- compile lib dcimgui Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- options cached
+      +- options cached
+      +- translate-c cached 18ms MaxRSS:30M
+      +- translate-c cached 35ms MaxRSS:30M
+      +- WriteFile  (reused)
+      +- compile lib dcimgui Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- compile lib dcimgui Debug aarch64-macos.13.0 (+4 more reused dependencies)
+      +- WriteFile helpgen.zig (+1 more reused dependencies)
+      +- WriteFile props.zig (+2 more reused dependencies)
+      +- WriteFile props.zig (+2 more reused dependencies)
+      +- WriteFile framedata.compressed (+1 more reused dependencies)
+      +- translate-c hb_c.h cached
+      |  +- compile exe translate-c Debug native cached 49ms MaxRSS:31M
+      |  |  +- options cached
+      |  |  +- options cached
+      |  |  +- options cached
+      |  |  +- run exe generate-def (aarch64.zig) cached
+      |  |  |  +- compile exe generate-def Debug native cached 55ms MaxRSS:31M
+      |  |  +- run exe generate-def (amdgcn.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (arm.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (bpf.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (common.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (hexagon.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (loongarch.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (mips.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (neon.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (nvptx.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (powerpc.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (riscv.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (s390x.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (ve.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (wasm.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (x86_64.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (x86.zig) cached
+      |  |  |  +- compile exe generate-def Debug native (reused)
+      |  |  +- run exe generate-def (xcore.zig) cached
+      |  |     +- compile exe generate-def Debug native (reused)
+      |  +- WriteFile hb_c.h cached
+      +- run exe uucode_generate (tables.zig) (+1 more reused dependencies)
+      +- translate-c wuffs_c.h cached
+      |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile wuffs_c.h cached
+      +- options cached
+      +- translate-c cached 35ms MaxRSS:30M
+      |  +- WriteFile objc/runtime.h cached
+      |  +- WriteFile objc/runtime.h (reused)
+      +- translate-c macos_c.h cached
+      |  +- compile exe translate-c Debug native (+21 more reused dependencies)
+      |  +- WriteFile libc.txt (reused)
+      |  +- WriteFile macos_c.h cached
+      +- options cached
+

@@ -17,7 +17,9 @@ function pasteAndSubmit(body: string): string {
 }
 
 function writtenText(): string {
-  return vi.mocked(writePty).mock.calls[0][1]
+  const data = vi.mocked(writePty).mock.calls[0][1]
+  if (typeof data !== 'string') throw new Error('Prompt submission must remain textual')
+  return data
 }
 
 describe('writePtyWithSubmit', () => {

@@ -1,0 +1,20 @@
+[
+  {
+    "name": "focused-default",
+    "command": "pnpm exec vitest run src/lib/terminalSessionService src/lib/ipc.moduleBoundaries.test.ts src/components/task-detail/AgentStatusPill.test.ts",
+    "status": 0,
+    "elapsedMs": 24184
+  },
+  {
+    "name": "controls-retry",
+    "command": "pnpm exec vitest run packages/plugin-sdk/src/ui/CoreControls.browser.test.ts",
+    "status": 0,
+    "elapsedMs": 29600
+  },
+  {
+    "name": "types-current",
+    "command": "pnpm exec tsc --noEmit && pnpm exec tsc -p tsconfig.electron.json --noEmit && node scripts/generate-desktop-ipc-registry.mjs --check",
+    "status": 1,
+    "elapsedMs": 3957
+  }
+]

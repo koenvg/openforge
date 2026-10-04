@@ -15,7 +15,7 @@ export type TerminalRuntimeUnlistenFn = () => void
 export type TerminalStateSource = 'bootstrapping' | 'ghostty-snapshot'
 
 export interface TerminalSessionConfiguration {
-  renderer: 'xterm'
+  renderer: 'xterm' | 'ghostty-native'
   enableImages?: boolean
 }
 

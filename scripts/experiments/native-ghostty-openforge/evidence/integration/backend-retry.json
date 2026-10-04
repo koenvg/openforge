@@ -1,0 +1,10 @@
+{
+  "args": [
+    "test",
+    "--locked",
+    "--offline",
+    "--",
+    "--test-threads=4"
+  ],
+  "status": 0
+}

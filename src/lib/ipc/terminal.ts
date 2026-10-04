@@ -6,6 +6,11 @@ import type {
 import { invokeDesktopCommand as invoke } from '../desktopIpc'
 import type { DesktopPtyBufferState } from '../desktopTerminalTransport'
 import type { RestartTerminalFence, RestartTerminalInventory } from '../../electron/restartWorkspace'
+import type { NativeTerminalReply, NativeTerminalRequest } from '../../electron/nativeTerminalProtocol'
+
+export async function nativeTerminalCommand<T extends NativeTerminalRequest>(request: T): Promise<NativeTerminalReply<T>> {
+  return invoke<NativeTerminalReply<T>>('experimental_native_terminal', { request })
+}
 
 export async function getRestartTerminalInventory(): Promise<RestartTerminalInventory> {
   return invoke('get_restart_terminal_inventory')
@@ -37,11 +42,12 @@ export async function spawnShellPty(
 // in order. Keep one write in flight per shell, without blocking other terminals.
 const pendingWrites = new Map<string, Promise<void>>()
 
-export async function writePty(shellSessionKey: string, data: string, fence?: RestartTerminalFence): Promise<void> {
+export async function writePty(shellSessionKey: string, data: string | Uint8Array, fence?: RestartTerminalFence): Promise<void> {
   const identity = fence ? { ...fence, controller: { ...fence.controller } } : undefined
+  const input = typeof data === 'string' ? data : Array.from(data)
   const send = () => identity
-    ? invoke<void>('pty_write', { shellSessionKey, data, fence: identity })
-    : invoke<void>('pty_write', { shellSessionKey, data })
+    ? invoke<void>('pty_write', { shellSessionKey, data: input, fence: identity })
+    : invoke<void>('pty_write', { shellSessionKey, data: input })
   const previous = pendingWrites.get(shellSessionKey)
   const write = previous ? previous.then(send) : send()
   // A failed write is reported to its caller, never retried, and does not poison

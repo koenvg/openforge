@@ -1,6 +1,11 @@
 {
   "valid": [
     {
+      "name": "native_input_preserves_non_utf8_bytes",
+      "command": "pty_write",
+      "payload": { "shellSessionKey": "T-pty-shell-2", "data": [0, 128, 255, 13] }
+    },
+    {
       "name": "set_terminal_color_profile",
       "command": "set_terminal_color_profile",
       "payload": {

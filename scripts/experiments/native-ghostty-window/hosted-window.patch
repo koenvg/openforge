@@ -1,0 +1,420 @@
+diff --git a/build.zig b/build.zig
+index d09cc17..5a08c4f 100644
+--- a/build.zig
++++ b/build.zig
+@@ -225,6 +225,8 @@ pub fn build(b: *std.Build) !void {
+         // the full Ghostty GUI core.
+         const lib_shared = try buildpkg.GhosttyLib.initShared(b, &deps);
+         const lib_static = try buildpkg.GhosttyLib.initStatic(b, &deps);
++        const hosted_lib_step = b.step("experimental-native-lib", "Build the local hosted Metal demo library");
++        hosted_lib_step.dependOn(&b.addInstallLibFile(lib_static.output, "libghostty-hosted.a").step);
+ 
+         // We shouldn't have this guard but we don't currently
+         // build on macOS this way ironically so we need to fix that.
+diff --git a/include/ghostty-hosted.h b/include/ghostty-hosted.h
+new file mode 100644
+index 0000000..b4de33a
+--- /dev/null
++++ b/include/ghostty-hosted.h
+@@ -0,0 +1,42 @@
++// Experimental fork API. Not part of upstream Ghostty or OpenForge production.
++#pragma once
++#include "ghostty.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++// All calls below run on the host main thread. Callbacks may run on the native
++// I/O thread: copy borrowed bytes and enqueue host work, never reenter Ghostty.
++// Keep userdata alive until surface_free has joined the native threads.
++typedef struct {
++  void* userdata;
++  uint64_t owner_token;
++  uint64_t output_offset;
++  uint32_t width_px;
++  uint32_t height_px;
++  const uint8_t* snapshot;
++  size_t snapshot_len;
++  void (*write_cb)(void*, const uint8_t*, size_t);
++  void (*resize_cb)(void*, uint16_t, uint16_t, uint32_t, uint32_t);
++} ghostty_host_config_s;
++
++typedef struct {
++  uint64_t rows_applied;
++  uint32_t remaining;
++  bool finished;
++  bool history_lost;
++} ghostty_host_history_s;
++
++GHOSTTY_API ghostty_surface_t ghostty_surface_new_hosted(
++    ghostty_app_t, const ghostty_surface_config_s*, const ghostty_host_config_s*);
++GHOSTTY_API bool ghostty_surface_hosted_output(
++    ghostty_surface_t, uint64_t, uint64_t, const uint8_t*, size_t);
++// Free a successful binary result with ghostty_string_free, not strlen/free.
++GHOSTTY_API bool ghostty_surface_hosted_snapshot(ghostty_surface_t, ghostty_string_s*);
++GHOSTTY_API bool ghostty_surface_hosted_next_history(ghostty_surface_t, ghostty_host_history_s*);
++GHOSTTY_API void ghostty_surface_hosted_cancel_history(ghostty_surface_t);
++
++#ifdef __cplusplus
++}
++#endif
+diff --git a/src/Surface.zig b/src/Surface.zig
+index 24d2d26..c2efc53 100644
+--- a/src/Surface.zig
++++ b/src/Surface.zig
+@@ -635,53 +635,57 @@ pub fn init(
+     // This separate block ({}) is important because our errdefers must
+     // be scoped here to be valid.
+     {
+-        var env = rt_surface.defaultTermioEnv() catch |err| env: {
+-            // If an error occurs, we don't want to block surface startup.
+-            log.warn("error getting env map for surface err={}", .{err});
+-            break :env global.environMap() catch std.process.Environ.Map.init(alloc);
++        const host = if (comptime @hasField(apprt.runtime.Surface, "host_config")) rt_surface.host_config else null;
++        var io_backend: termio.Backend = if (host != null) @import("apprt/hosted.zig").backend(rt_surface) else exec: {
++            var env = rt_surface.defaultTermioEnv() catch |err| env: {
++                log.warn("error getting env map for surface err={}", .{err});
++                break :env global.environMap() catch std.process.Environ.Map.init(alloc);
++            };
++            errdefer env.deinit();
++            _ = env.orderedRemove("GHOSTTY_LOG");
++            var buf: [18]u8 = undefined;
++            try env.put("GHOSTTY_SURFACE_ID", std.fmt.bufPrint(&buf, "0x{x:0>16}", .{self.id}) catch unreachable);
++            break :exec .{ .exec = try termio.Exec.init(alloc, .{
++                .command = command,
++                .env = env,
++                .env_override = config.env,
++                .shell_integration = config.@"shell-integration",
++                .shell_integration_features = config.@"shell-integration-features",
++                .cursor_blink = config.@"cursor-style-blink",
++                .working_directory = if (config.@"working-directory") |wd| wd.value() else null,
++                .resources_dir = global.resourcesDir().host(),
++                .term = config.term,
++                .rt_pre_exec_info = .init(config),
++                .rt_post_fork_info = .init(config),
++            }) };
+         };
+-        errdefer env.deinit();
+-
+-        // don't leak GHOSTTY_LOG to any subprocesses
+-        _ = env.orderedRemove("GHOSTTY_LOG");
+-
+-        var buf: [18]u8 = undefined;
+-        try env.put(
+-            "GHOSTTY_SURFACE_ID",
+-            std.fmt.bufPrint(&buf, "0x{x:0>16}", .{self.id}) catch unreachable,
+-        );
+-
+-        // Initialize our IO backend
+-        var io_exec = try termio.Exec.init(alloc, .{
+-            .command = command,
+-            .env = env,
+-            .env_override = config.env,
+-            .shell_integration = config.@"shell-integration",
+-            .shell_integration_features = config.@"shell-integration-features",
+-            .cursor_blink = config.@"cursor-style-blink",
+-            .working_directory = if (config.@"working-directory") |wd| wd.value() else null,
+-            .resources_dir = global.resourcesDir().host(),
+-            .term = config.term,
+-            .rt_pre_exec_info = .init(config),
+-            .rt_post_fork_info = .init(config),
+-        });
+-        errdefer io_exec.deinit();
++        errdefer io_backend.deinit();
+ 
+         // Initialize our IO mailbox
+         var io_mailbox = try termio.Mailbox.initSPSC(alloc);
+         errdefer io_mailbox.deinit(alloc);
++        var io_config = try termio.Termio.DerivedConfig.init(alloc, config);
++        errdefer io_config.deinit();
+ 
+         try termio.Termio.init(&self.io, alloc, .{
+             .size = size,
+             .full_config = config,
+-            .config = try termio.Termio.DerivedConfig.init(alloc, config),
+-            .backend = .{ .exec = io_exec },
++            .config = io_config,
++            .backend = io_backend,
++            .host_snapshot = if (host) |value| if (value.snapshot) |ptr| ptr[0..value.snapshot_len] else null else null,
+             .mailbox = io_mailbox,
+             .renderer_state = &self.renderer_state,
+             .renderer_wakeup = render_thread.wakeup,
+             .renderer_mailbox = render_thread.mailbox,
+             .surface_mailbox = .{ .surface = self, .app = app_mailbox },
+         });
++        // Clear the borrowed snapshot before either native thread starts.
++        if (comptime @hasField(apprt.runtime.Surface, "host_config")) {
++            if (rt_surface.host_config) |*value| {
++                value.snapshot = null;
++                value.snapshot_len = 0;
++            }
++        }
+     }
+     // Outside the block, IO has now taken ownership of our temporary state
+     // so we can just defer this and not the subcomponents.
+@@ -1329,6 +1333,7 @@ fn childExitedAbnormally(
+     // Build up our command for the error message
+     const command = try std.mem.join(alloc, " ", switch (self.io.backend) {
+         .exec => |*exec| exec.subprocess.args,
++        .host => return error.HostOwnsExitStatus,
+     });
+     const runtime_str = try std.fmt.allocPrint(alloc, "{d} ms", .{info.runtime_ms});
+ 
+diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
+index b90366a..9843134 100644
+--- a/src/apprt/embedded.zig
++++ b/src/apprt/embedded.zig
+@@ -453,6 +453,7 @@ pub const Surface = struct {
+     size: apprt.SurfaceSize,
+     cursor_pos: apprt.CursorPos,
+     inspector: ?*Inspector = null,
++    host_config: ?@import("hosted.zig").Config = null,
+ 
+     /// The current title of the surface. The embedded apprt saves this so
+     /// that getTitle works without the implementer needing to save it.
+@@ -502,6 +503,10 @@ pub const Surface = struct {
+     };
+ 
+     pub fn init(self: *Surface, app: *App, opts: Options) !void {
++        return self.initWithHost(app, opts, null);
++    }
++
++    pub fn initWithHost(self: *Surface, app: *App, opts: Options, host: ?@import("hosted.zig").Config) !void {
+         self.* = .{
+             .app = app,
+             .platform = try .init(opts.platform_tag, opts.platform),
+@@ -511,7 +516,8 @@ pub const Surface = struct {
+                 .x = @floatCast(opts.scale_factor),
+                 .y = @floatCast(opts.scale_factor),
+             },
+-            .size = .{ .width = 800, .height = 600 },
++            .size = if (host) |value| .{ .width = value.width_px, .height = value.height_px } else .{ .width = 800, .height = 600 },
++            .host_config = host,
+             .cursor_pos = .{ .x = -1, .y = -1 },
+         };
+ 
+@@ -1470,6 +1476,10 @@ pub const Inspector = struct {
+ 
+ // C API
+ pub const CAPI = struct {
++    comptime {
++        _ = @import("hosted.zig").CAPI;
++    }
++
+     /// This is the same as Surface.KeyEvent but this is the raw C API version.
+     const KeyEvent = extern struct {
+         action: input.Action,
+diff --git a/src/apprt/hosted.zig b/src/apprt/hosted.zig
+new file mode 100644
+index 0000000..d03d1b5
+--- /dev/null
++++ b/src/apprt/hosted.zig
+@@ -0,0 +1,114 @@
++//! Local experiment API for a host-owned native surface.
++const std = @import("std");
++const embedded = @import("embedded.zig");
++const renderer = @import("../renderer.zig");
++const termio = @import("../termio.zig");
++const String = @import("../main_c.zig").String;
++const log = std.log.scoped(.hosted_surface);
++
++pub const Config = extern struct {
++    userdata: ?*anyopaque,
++    owner_token: u64,
++    output_offset: u64,
++    width_px: u32,
++    height_px: u32,
++    snapshot: ?[*]const u8,
++    snapshot_len: usize,
++    write_cb: ?*const fn (?*anyopaque, [*]const u8, usize) callconv(.c) void,
++    resize_cb: ?*const fn (?*anyopaque, u16, u16, u32, u32) callconv(.c) void,
++
++    fn valid(self: Config) bool {
++        return self.owner_token != 0 and self.write_cb != null and
++            self.width_px > 0 and self.width_px <= 16384 and
++            self.height_px > 0 and self.height_px <= 16384 and
++            self.snapshot_len <= @import("../termio/HostedRestore.zig").snapshot_limit and
++            (self.snapshot_len == 0 or self.snapshot != null);
++    }
++};
++
++pub const History = extern struct {
++    rows_applied: u64 = 0,
++    remaining: u32 = 0,
++    finished: bool = false,
++    history_lost: bool = false,
++};
++
++pub fn backend(surface: *embedded.Surface) termio.Backend {
++    const config = surface.host_config.?;
++    return .{ .host = .{
++        .userdata = surface,
++        .instance_id = config.owner_token,
++        .output_offset = config.output_offset,
++        .write = write,
++        .on_resize = resize,
++    } };
++}
++
++fn write(ptr: ?*anyopaque, bytes: []const u8) void {
++    const surface: *embedded.Surface = @ptrCast(@alignCast(ptr.?));
++    const config = surface.host_config.?;
++    config.write_cb.?(config.userdata, bytes.ptr, bytes.len);
++}
++
++fn resize(ptr: ?*anyopaque, grid: renderer.GridSize, screen: renderer.ScreenSize) void {
++    const surface: *embedded.Surface = @ptrCast(@alignCast(ptr.?));
++    const config = surface.host_config.?;
++    if (config.resize_cb) |callback| callback(config.userdata, grid.columns, grid.rows, screen.width, screen.height);
++}
++
++pub const CAPI = struct {
++    export fn ghostty_surface_new_hosted(app_: ?*embedded.App, opts_: ?*const embedded.Surface.Options, config_: ?*const Config) ?*embedded.Surface {
++        const app = app_ orelse return null;
++        const opts = opts_ orelse return null;
++        const config = config_ orelse return null;
++        if (!config.valid()) return null;
++        const surface = app.core_app.alloc.create(embedded.Surface) catch return null;
++        surface.initWithHost(app, opts.*, config.*) catch |err| {
++            log.warn("hosted surface creation failed: {}", .{err});
++            app.core_app.alloc.destroy(surface);
++            return null;
++        };
++        return surface;
++    }
++
++    export fn ghostty_surface_hosted_output(surface_: ?*embedded.Surface, owner: u64, offset: u64, bytes: ?[*]const u8, len: usize) bool {
++        const surface = surface_ orelse return false;
++        const slice = if (bytes) |ptr| ptr[0..len] else if (len == 0) "" else return false;
++        surface.core_surface.io.processHostedOutput(owner, offset, slice) catch return false;
++        return true;
++    }
++
++    export fn ghostty_surface_hosted_snapshot(surface_: ?*embedded.Surface, result: *String) bool {
++        result.* = .empty;
++        const surface = surface_ orelse return false;
++        var writer: std.Io.Writer.Allocating = .init(surface.app.core_app.alloc);
++        defer writer.deinit();
++        surface.core_surface.io.writeHostedSnapshot(&writer.writer) catch |err| {
++            log.warn("hosted snapshot refused: {}", .{err});
++            return false;
++        };
++        const bytes = writer.toOwnedSlice() catch return false;
++        result.* = .{ .ptr = bytes.ptr, .len = bytes.len, .sentinel = false };
++        return true;
++    }
++
++    export fn ghostty_surface_hosted_next_history(surface_: ?*embedded.Surface, result: *History) bool {
++        result.* = .{};
++        const surface = surface_ orelse return false;
++        const io = &surface.core_surface.io;
++        const progress = io.nextHostedHistory() catch {
++            result.history_lost = true;
++            return false;
++        };
++        if (progress) |value| {
++            result.rows_applied = value.rows;
++            result.remaining = value.remaining;
++        } else result.finished = true;
++        result.history_lost = io.host_history_lost;
++        return true;
++    }
++
++    export fn ghostty_surface_hosted_cancel_history(surface: *embedded.Surface) void {
++        surface.core_surface.io.cancelHostedHistory();
++    }
++};
+diff --git a/src/build/Config.zig b/src/build/Config.zig
+index 71fa4d2..faeeced 100644
+--- a/src/build/Config.zig
++++ b/src/build/Config.zig
+@@ -34,6 +34,8 @@ sentry: bool = true,
+ simd: bool = true,
+ i18n: bool = true,
+ wasm_shared: bool = true,
++/// Local demo only: compile the unchanged built-in shaders with Metal at runtime.
++experimental_runtime_metal: bool = false,
+ 
+ /// Ghostty exe properties
+ exe_entrypoint: ExeEntrypoint = .ghostty,
+@@ -206,6 +208,8 @@ pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8) !Conf
+         "The app runtime to use. Not all values supported on all platforms.",
+     ) orelse RendererBackend.default(target.result, wasm_target);
+ 
++    config.experimental_runtime_metal = b.option(bool, "experimental-runtime-metal", "Local demo: runtime-compile Metal shaders") orelse false;
++
+     //---------------------------------------------------------------
+     // Feature Flags
+ 
+@@ -660,6 +664,7 @@ pub fn addOptions(self: *const Config, step: *std.Build.Step.Options) !void {
+     // We need to break these down individual because addOption doesn't
+     // support all types.
+     step.addOption(bool, "flatpak", self.flatpak);
++    step.addOption(bool, "experimental_runtime_metal", self.experimental_runtime_metal);
+     step.addOption(bool, "snap", self.snap);
+     step.addOption(bool, "x11", self.x11);
+     step.addOption(bool, "wayland", self.wayland);
+@@ -765,6 +770,7 @@ pub fn fromOptions() Config {
+         .app_runtime = std.meta.stringToEnum(ApprtRuntime, @tagName(options.app_runtime)).?,
+         .font_backend = std.meta.stringToEnum(FontBackend, @tagName(options.font_backend)).?,
+         .renderer = std.meta.stringToEnum(RendererBackend, @tagName(options.renderer)).?,
++        .experimental_runtime_metal = options.experimental_runtime_metal,
+         .snap = options.snap,
+         .exe_entrypoint = std.meta.stringToEnum(ExeEntrypoint, @tagName(options.exe_entrypoint)).?,
+         .wasm_target = std.meta.stringToEnum(WasmTarget, @tagName(options.wasm_target)).?,
+diff --git a/src/build/SharedDeps.zig b/src/build/SharedDeps.zig
+index f5aad09..5cd318c 100644
+--- a/src/build/SharedDeps.zig
++++ b/src/build/SharedDeps.zig
+@@ -502,11 +502,17 @@ pub fn add(
+ 
+         // The local fork's headless OpenGL tests do not consume Metal shaders.
+         if (self.config.renderer == .metal) {
+-            const metallib = self.metallib.?;
+-            metallib.output.addStepDependencies(&step.step);
+-            step.root_module.addAnonymousImport("ghostty_metallib", .{
+-                .root_source_file = metallib.output,
+-            });
++            if (self.config.experimental_runtime_metal) {
++                step.root_module.addAnonymousImport("ghostty_metal_source", .{
++                    .root_source_file = b.path("src/renderer/shaders/shaders.metal"),
++                });
++            } else {
++                const metallib = self.metallib.?;
++                metallib.output.addStepDependencies(&step.step);
++                step.root_module.addAnonymousImport("ghostty_metallib", .{
++                    .root_source_file = metallib.output,
++                });
++            }
+         }
+     }
+ 
+diff --git a/src/renderer/metal/shaders.zig b/src/renderer/metal/shaders.zig
+index 84d536c..de3658d 100644
+--- a/src/renderer/metal/shaders.zig
++++ b/src/renderer/metal/shaders.zig
+@@ -335,6 +335,23 @@ pub const BgImage = extern struct {
+ /// Initialize the MTLLibrary. A MTLLibrary is a collection of shaders.
+ fn initLibrary(device: objc.Object) !objc.Object {
+     const start: std.Io.Timestamp = .now(global.io(), .awake);
++    if (comptime @import("build_options").experimental_runtime_metal) {
++        const source = try macos.foundation.String.createWithBytes(
++            @embedFile("ghostty_metal_source"),
++            .utf8,
++            false,
++        );
++        defer source.release();
++        var err: ?*anyopaque = null;
++        const library = device.msgSend(
++            objc.Object,
++            objc.sel("newLibraryWithSource:options:error:"),
++            .{ source, @as(?*anyopaque, null), &err },
++        );
++        try checkError(err);
++        log.info("experimental runtime Metal shader compilation completed", .{});
++        return library;
++    }
+ 
+     const data = try macos.dispatch.Data.create(
+         @embedFile("ghostty_metallib"),

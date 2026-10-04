@@ -41,11 +41,35 @@ impl PtySpawnShellPayload {
     }
 }
 
+/// Desktop input is UTF-8 text or an exact native terminal byte sequence.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub(super) enum PtyInput {
+    Text(String),
+    Bytes(Vec<u8>),
+}
+
+impl PtyInput {
+    pub(super) fn as_bytes(&self) -> &[u8] {
+        match self {
+            Self::Text(text) => text.as_bytes(),
+            Self::Bytes(bytes) => bytes,
+        }
+    }
+
+    pub(super) fn into_bytes(self) -> Vec<u8> {
+        match self {
+            Self::Text(text) => text.into_bytes(),
+            Self::Bytes(bytes) => bytes,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct PtyWritePayload {
     pub(super) shell_session_key: String,
-    pub(super) data: String,
+    pub(super) data: PtyInput,
     pub(super) fence: Option<crate::pty_manager::daemon_shells::CommandFence>,
 }
 

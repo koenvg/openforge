@@ -4,7 +4,7 @@ import type { DesktopPtyBufferState } from './desktopTerminalTransport'
 
 interface RestartTerminalPort {
   getPtyBuffer(key: string, fence?: RestartTerminalFence): Promise<DesktopPtyBufferState>
-  writePty(key: string, data: string, fence?: RestartTerminalFence): Promise<void>
+  writePty(key: string, data: string | Uint8Array, fence?: RestartTerminalFence): Promise<void>
   resizePty(key: string, cols: number, rows: number, fence?: RestartTerminalFence, attachment?: TerminalResizeAttachment): Promise<void>
   inventory(): Promise<RestartTerminalInventory>
   killPty(key: string, fence?: RestartTerminalFence): Promise<void>
@@ -95,7 +95,7 @@ export function createRestartTerminalControl(port: RestartTerminalPort) {
       reconciled.delete(key)
       await port.killPty(key, identity)
     },
-    async writePty(key: string, data: string): Promise<void> {
+    async writePty(key: string, data: string | Uint8Array): Promise<void> {
       const identity = fence(key, true)
       if (identity) await port.writePty(key, data, identity)
       else await port.writePty(key, data)

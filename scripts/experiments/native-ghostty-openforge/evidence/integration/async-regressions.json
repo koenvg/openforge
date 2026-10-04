@@ -1,0 +1,22 @@
+[
+  {
+    "mode": "normal",
+    "status": 0,
+    "signal": null,
+    "expectedTimeout": false
+  },
+  {
+    "mode": "sync-red",
+    "status": null,
+    "signal": "SIGKILL",
+    "error": "spawnSync /Users/koen/.openforge/worktrees/openforge/KVG-5198/node_modules/.bin/electron ETIMEDOUT",
+    "expectedTimeout": true
+  },
+  {
+    "mode": "exit-pending",
+    "status": null,
+    "signal": "SIGKILL",
+    "error": "spawnSync /Users/koen/.openforge/worktrees/openforge/KVG-5198/node_modules/.bin/electron ETIMEDOUT",
+    "expectedTimeout": false
+  }
+]

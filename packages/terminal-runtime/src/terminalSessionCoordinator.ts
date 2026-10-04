@@ -184,6 +184,20 @@ export function createTerminalSessionCoordinator({
         console.error(terminalLogMessage(environment.loggerName, 'write failed:'), error)
       })
     }))
+    viewSubscriptions.push(view.onRendererFailure(failure => {
+      if (!failure.requiresRecovery || disposed) return
+      attachment.markNeedsRecovery()
+      const pending = authority.isRecoveryPending() ? authority.recoverFromAuthority() : Promise.resolve()
+      void pending.then(async () => {
+        if (disposed || !attachment.isActive()) return
+        await attachment.refitCurrent()
+        if (disposed || !attachment.isActive()) return
+        attachment.markNeedsRecovery()
+        await authority.recoverFromAuthority()
+      }).catch(error => {
+        console.warn(terminalLogMessage(environment.loggerName, 'Renderer recovery failed:'), error)
+      })
+    }))
   }
 
   function beginPtySpawn(): TerminalPtySpawnLease | null {

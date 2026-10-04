@@ -1,0 +1,587 @@
+{
+  "revision": "4ae9f1a2de5484de3d6a13fe03676b8853b9c41c",
+  "recordedAt": "2026-09-22T20:33:05.879Z",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "node": "v24.14.0",
+  "compiler": "Apple clang version 21.0.0 (clang-2100.3.34.2)",
+  "compileFlags": [
+    "-std=c11",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-fsyntax-only"
+  ],
+  "compileControls": [
+    {
+      "file": "native-probe.c",
+      "exit": 0,
+      "expectedSuccess": true,
+      "linked": false,
+      "executed": false,
+      "sha256": "6b9fffc56800784f289f6da84e4f33e33a0676689ac545b1c40c557723dd5778",
+      "diagnostics": ""
+    },
+    {
+      "file": "snapshot-probe.c",
+      "exit": 0,
+      "expectedSuccess": true,
+      "linked": false,
+      "executed": false,
+      "sha256": "795306dfcd54c503bf1340603d2829b75f5e59b4e43edd10bbcccbd1b3c57b21",
+      "diagnostics": ""
+    },
+    {
+      "file": "probe.c",
+      "exit": 1,
+      "expectedSuccess": false,
+      "linked": false,
+      "executed": false,
+      "sha256": "166f3b2c3149878ce4cb592dca7ff62119437fa08260c443539e94f33a2e65e0",
+      "diagnostics": "In file included from <probe>/probe.c:6:\nIn file included from <source>/include/ghostty/vt/snapshot.h:14:\nIn file included from <source>/include/ghostty/vt/allocator.h:13:\n<source>/include/ghostty/vt/types.h:90:5: error: expected identifier\n   90 |     GHOSTTY_SUCCESS = 0,\n      |     ^\n<source>/include/ghostty.h:33:25: note: expanded from macro 'GHOSTTY_SUCCESS'\n   33 | #define GHOSTTY_SUCCESS 0\n      |                         ^\nIn file included from <probe>/probe.c:6:\nIn file included from <source>/include/ghostty/vt/snapshot.h:16:\nIn file included from <source>/include/ghostty/vt/terminal.h:15:\n<source>/include/ghostty/vt/device.h:77:5: error: redefinition of enumerator 'GHOSTTY_COLOR_SCHEME_LIGHT'\n   77 |     GHOSTTY_COLOR_SCHEME_LIGHT = 0,\n      |     ^\n<source>/include/ghostty.h:159:3: note: previous definition is here\n  159 |   GHOSTTY_COLOR_SCHEME_LIGHT = 0,\n      |   ^\nIn file included from <probe>/probe.c:6:\nIn file included from <source>/include/ghostty/vt/snapshot.h:16:\nIn file included from <source>/include/ghostty/vt/terminal.h:15:\n<source>/include/ghostty/vt/device.h:78:5: error: redefinition of enumerator 'GHOSTTY_COLOR_SCHEME_DARK'\n   78 |     GHOSTTY_COLOR_SCHEME_DARK = 1,\n      |     ^\n<source>/include/ghostty.h:160:3: note: previous definition is here\n  160 |   GHOSTTY_COLOR_SCHEME_DARK = 1,\n      |   ^\n3 errors generated.\n"
+    }
+  ],
+  "metalCompiler": {
+    "exit": 72,
+    "output": "xcrun: error: unable to find utility \"metal\", not a developer tool or in PATH\n",
+    "error": null
+  },
+  "sources": {
+    "include/ghostty.h": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/include/ghostty.h",
+      "bytes": 38283,
+      "sha256": "de852e83da67af1bd6b1ebcfab1b3ac3fd7d0fddacc85d95d1d0d9d2c6a72b29"
+    },
+    "include/ghostty/vt/snapshot.h": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/include/ghostty/vt/snapshot.h",
+      "bytes": 22702,
+      "sha256": "6fb8e35fb09f47fa37907eb9e6b6ee1e55816437e280a001559a9c7498149597"
+    },
+    "include/ghostty/vt/allocator.h": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/include/ghostty/vt/allocator.h",
+      "bytes": 11017,
+      "sha256": "7cb27e69a89d30368638c5c6e7f233bd73f203ddaec38ecf23899760994c83f6"
+    },
+    "include/ghostty/vt/types.h": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/include/ghostty/vt/types.h",
+      "bytes": 12864,
+      "sha256": "6c30315aa292971c5863b90ace46d241682f8baac2fe9244acb785b0c883020e"
+    },
+    "include/ghostty/vt/io.h": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/include/ghostty/vt/io.h",
+      "bytes": 4950,
+      "sha256": "2d79995aadc23ce175b519e3ff401ca20664da9068177aac117e0b490f45daee"
+    },
+    "include/ghostty/vt/terminal.h": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/include/ghostty/vt/terminal.h",
+      "bytes": 93950,
+      "sha256": "955b5b523cb4d3ee2bb1d4ab7aeed2722a50451efdcb7e74a941a8b022ccb207"
+    },
+    "include/ghostty/vt/device.h": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/include/ghostty/vt/device.h",
+      "bytes": 4679,
+      "sha256": "79c61cd5d54fc15c60d0ce87c69adf89c85b7b748b912c41b91230979f4319fe"
+    },
+    "include/ghostty/vt/modes.h": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/include/ghostty/vt/modes.h",
+      "bytes": 8388,
+      "sha256": "bd40aa01f76e4351e09a1825693b27c1e4a53539411968432fc3e59e0f890f66"
+    },
+    "include/ghostty/vt/size_report.h": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/include/ghostty/vt/size_report.h",
+      "bytes": 2994,
+      "sha256": "a86cd1b0e5cf2307411030646285e5f2dcb1e6ca26e938cb6d578b16301e94a7"
+    },
+    "include/ghostty/vt/grid_ref.h": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/include/ghostty/vt/grid_ref.h",
+      "bytes": 8028,
+      "sha256": "80cc49f02d63025605d605c86f1207638ad9534ce74e9a14766299e0518d4987"
+    },
+    "include/ghostty/vt/screen.h": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/include/ghostty/vt/screen.h",
+      "bytes": 11336,
+      "sha256": "d9a3ab36f8410184fd0af4a20de1c1d3a0f09e8bd28ec2de89cb243dbd008fa3"
+    },
+    "include/ghostty/vt/color.h": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/include/ghostty/vt/color.h",
+      "bytes": 14598,
+      "sha256": "73e0db10e4b324122be1a8a46bb6619fe5ab264bf6713543336c3e5deb7035f3"
+    },
+    "include/ghostty/vt/style.h": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/include/ghostty/vt/style.h",
+      "bytes": 2987,
+      "sha256": "ebb50a1821952dd954dd51d5897f9881c6927abd73b909e2e2f1deb3a52f31a9"
+    },
+    "include/ghostty/vt/kitty_graphics.h": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/include/ghostty/vt/kitty_graphics.h",
+      "bytes": 31132,
+      "sha256": "a7e1f37191684e66835b54339fe714b14eaa882b5c1d3459fb6fc8b4a32ec8eb"
+    },
+    "include/ghostty/vt/selection.h": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/include/ghostty/vt/selection.h",
+      "bytes": 43415,
+      "sha256": "839b495f8e24ed678fd71b6eeb75a7cebd9d634334a3303ec31d05d468f2c520"
+    },
+    "include/ghostty/vt/point.h": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/include/ghostty/vt/point.h",
+      "bytes": 1729,
+      "sha256": "1ed7b2cda14904814727b93d406f39284e8392af706f938cf0fa1dbeaa42e774"
+    },
+    "src/apprt/embedded.zig": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/src/apprt/embedded.zig",
+      "bytes": 87865,
+      "sha256": "387cab3590e9455f7015ecd961a23d8897fdad8fd825e1ec0c93ac9b08488f40"
+    },
+    "src/apprt/action.zig": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/src/apprt/action.zig",
+      "bytes": 30302,
+      "sha256": "aa44fd54cf06fa7ed51c42bab4ba8c22daf29d81f6aba762ff57a790a3d4a207"
+    },
+    "src/Surface.zig": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/src/Surface.zig",
+      "bytes": 241134,
+      "sha256": "5fc775ab9f64ec1f512e1615ff6232c996b36e3c8fd4638a4f52b0f844478784"
+    },
+    "src/termio/backend.zig": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/src/termio/backend.zig",
+      "bytes": 3612,
+      "sha256": "6e43588d743c0287af725b83a5696db9a11b1e90c7658c54042bd21368434724"
+    },
+    "src/termio/Exec.zig": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/src/termio/Exec.zig",
+      "bytes": 89188,
+      "sha256": "8e6a135bb4b592eb11b99068ff9956731e1c35d073eb4d3d5f75948b6a195515"
+    },
+    "src/renderer/metal/Target.zig": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/src/renderer/metal/Target.zig",
+      "bytes": 3123,
+      "sha256": "42f91c369484252d2e3ba8417a0d91aefa5ccfcab2c3ac52aa3d93febda65c04"
+    },
+    "build.zig.zon": {
+      "url": "https://raw.githubusercontent.com/ghostty-org/ghostty/4ae9f1a2de5484de3d6a13fe03676b8853b9c41c/build.zig.zon",
+      "bytes": 5808,
+      "sha256": "1e62dee14f74bcf146a982c9c84fdb48596ad88159e1b85f31e3597dcaa8869c"
+    }
+  },
+  "nativeDeclarations": [
+    {
+      "name": "ghostty_app_free",
+      "type": "void (ghostty_app_t)"
+    },
+    {
+      "name": "ghostty_app_has_global_keybinds",
+      "type": "bool (ghostty_app_t)"
+    },
+    {
+      "name": "ghostty_app_key",
+      "type": "bool (ghostty_app_t, ghostty_input_key_s)"
+    },
+    {
+      "name": "ghostty_app_keyboard_changed",
+      "type": "void (ghostty_app_t)"
+    },
+    {
+      "name": "ghostty_app_needs_confirm_quit",
+      "type": "bool (ghostty_app_t)"
+    },
+    {
+      "name": "ghostty_app_new",
+      "type": "ghostty_app_t (const ghostty_runtime_config_s *, ghostty_config_t)"
+    },
+    {
+      "name": "ghostty_app_open_config",
+      "type": "void (ghostty_app_t)"
+    },
+    {
+      "name": "ghostty_app_set_color_scheme",
+      "type": "void (ghostty_app_t, ghostty_color_scheme_e)"
+    },
+    {
+      "name": "ghostty_app_set_focus",
+      "type": "void (ghostty_app_t, bool)"
+    },
+    {
+      "name": "ghostty_app_tick",
+      "type": "void (ghostty_app_t)"
+    },
+    {
+      "name": "ghostty_app_update_config",
+      "type": "void (ghostty_app_t, ghostty_config_t)"
+    },
+    {
+      "name": "ghostty_app_userdata",
+      "type": "void *(ghostty_app_t)"
+    },
+    {
+      "name": "ghostty_benchmark_cli",
+      "type": "bool (const char *, const char *)"
+    },
+    {
+      "name": "ghostty_cli_try_action",
+      "type": "void (void)"
+    },
+    {
+      "name": "ghostty_config_clone",
+      "type": "ghostty_config_t (ghostty_config_t)"
+    },
+    {
+      "name": "ghostty_config_diagnostics_count",
+      "type": "uint32_t (ghostty_config_t)"
+    },
+    {
+      "name": "ghostty_config_finalize",
+      "type": "void (ghostty_config_t)"
+    },
+    {
+      "name": "ghostty_config_free",
+      "type": "void (ghostty_config_t)"
+    },
+    {
+      "name": "ghostty_config_get",
+      "type": "bool (ghostty_config_t, void *, const char *, uintptr_t)"
+    },
+    {
+      "name": "ghostty_config_get_diagnostic",
+      "type": "ghostty_diagnostic_s (ghostty_config_t, uint32_t)"
+    },
+    {
+      "name": "ghostty_config_key_is_binding",
+      "type": "bool (ghostty_config_t, ghostty_input_key_s)"
+    },
+    {
+      "name": "ghostty_config_load_cli_args",
+      "type": "void (ghostty_config_t)"
+    },
+    {
+      "name": "ghostty_config_load_default_files",
+      "type": "void (ghostty_config_t)"
+    },
+    {
+      "name": "ghostty_config_load_file",
+      "type": "void (ghostty_config_t, const char *)"
+    },
+    {
+      "name": "ghostty_config_load_recursive_files",
+      "type": "void (ghostty_config_t)"
+    },
+    {
+      "name": "ghostty_config_new",
+      "type": "ghostty_config_t ()"
+    },
+    {
+      "name": "ghostty_config_open_path",
+      "type": "ghostty_string_s (void)"
+    },
+    {
+      "name": "ghostty_config_trigger",
+      "type": "ghostty_input_trigger_s (ghostty_config_t, const char *, uintptr_t)"
+    },
+    {
+      "name": "ghostty_info",
+      "type": "ghostty_info_s (void)"
+    },
+    {
+      "name": "ghostty_init",
+      "type": "int (uintptr_t, char **)"
+    },
+    {
+      "name": "ghostty_inspector_free",
+      "type": "void (ghostty_surface_t)"
+    },
+    {
+      "name": "ghostty_inspector_key",
+      "type": "void (ghostty_inspector_t, ghostty_input_action_e, ghostty_input_key_e, ghostty_input_mods_e)"
+    },
+    {
+      "name": "ghostty_inspector_metal_init",
+      "type": "bool (ghostty_inspector_t, void *)"
+    },
+    {
+      "name": "ghostty_inspector_metal_render",
+      "type": "void (ghostty_inspector_t, void *, void *)"
+    },
+    {
+      "name": "ghostty_inspector_metal_shutdown",
+      "type": "bool (ghostty_inspector_t)"
+    },
+    {
+      "name": "ghostty_inspector_mouse_button",
+      "type": "void (ghostty_inspector_t, ghostty_input_mouse_state_e, ghostty_input_mouse_button_e, ghostty_input_mods_e)"
+    },
+    {
+      "name": "ghostty_inspector_mouse_pos",
+      "type": "void (ghostty_inspector_t, double, double)"
+    },
+    {
+      "name": "ghostty_inspector_mouse_scroll",
+      "type": "void (ghostty_inspector_t, double, double, ghostty_input_scroll_mods_t)"
+    },
+    {
+      "name": "ghostty_inspector_set_content_scale",
+      "type": "void (ghostty_inspector_t, double, double)"
+    },
+    {
+      "name": "ghostty_inspector_set_focus",
+      "type": "void (ghostty_inspector_t, bool)"
+    },
+    {
+      "name": "ghostty_inspector_set_size",
+      "type": "void (ghostty_inspector_t, uint32_t, uint32_t)"
+    },
+    {
+      "name": "ghostty_inspector_text",
+      "type": "void (ghostty_inspector_t, const char *)"
+    },
+    {
+      "name": "ghostty_set_window_background_blur",
+      "type": "void (ghostty_app_t, void *)"
+    },
+    {
+      "name": "ghostty_string_free",
+      "type": "void (ghostty_string_s)"
+    },
+    {
+      "name": "ghostty_surface_app",
+      "type": "ghostty_app_t (ghostty_surface_t)"
+    },
+    {
+      "name": "ghostty_surface_binding_action",
+      "type": "bool (ghostty_surface_t, const char *, uintptr_t)"
+    },
+    {
+      "name": "ghostty_surface_complete_clipboard_request",
+      "type": "void (ghostty_surface_t, const ghostty_clipboard_complete_s *, void *)"
+    },
+    {
+      "name": "ghostty_surface_config_new",
+      "type": "ghostty_surface_config_s ()"
+    },
+    {
+      "name": "ghostty_surface_deny_clipboard_request",
+      "type": "void (ghostty_surface_t, void *)"
+    },
+    {
+      "name": "ghostty_surface_draw",
+      "type": "void (ghostty_surface_t)"
+    },
+    {
+      "name": "ghostty_surface_foreground_pid",
+      "type": "uint64_t (ghostty_surface_t)"
+    },
+    {
+      "name": "ghostty_surface_free",
+      "type": "void (ghostty_surface_t)"
+    },
+    {
+      "name": "ghostty_surface_free_text",
+      "type": "void (ghostty_surface_t, ghostty_text_s *)"
+    },
+    {
+      "name": "ghostty_surface_has_selection",
+      "type": "bool (ghostty_surface_t)"
+    },
+    {
+      "name": "ghostty_surface_ime_point",
+      "type": "void (ghostty_surface_t, double *, double *, double *, double *)"
+    },
+    {
+      "name": "ghostty_surface_inherited_config",
+      "type": "ghostty_surface_config_s (ghostty_surface_t, ghostty_surface_context_e)"
+    },
+    {
+      "name": "ghostty_surface_inspector",
+      "type": "ghostty_inspector_t (ghostty_surface_t)"
+    },
+    {
+      "name": "ghostty_surface_key",
+      "type": "bool (ghostty_surface_t, ghostty_input_key_s)"
+    },
+    {
+      "name": "ghostty_surface_key_is_binding",
+      "type": "bool (ghostty_surface_t, ghostty_input_key_s, ghostty_binding_flags_e *)"
+    },
+    {
+      "name": "ghostty_surface_key_translation_mods",
+      "type": "ghostty_input_mods_e (ghostty_surface_t, ghostty_input_mods_e)"
+    },
+    {
+      "name": "ghostty_surface_mouse_button",
+      "type": "bool (ghostty_surface_t, ghostty_input_mouse_state_e, ghostty_input_mouse_button_e, ghostty_input_mods_e)"
+    },
+    {
+      "name": "ghostty_surface_mouse_captured",
+      "type": "bool (ghostty_surface_t)"
+    },
+    {
+      "name": "ghostty_surface_mouse_pos",
+      "type": "void (ghostty_surface_t, double, double, ghostty_input_mods_e)"
+    },
+    {
+      "name": "ghostty_surface_mouse_pressure",
+      "type": "void (ghostty_surface_t, uint32_t, double)"
+    },
+    {
+      "name": "ghostty_surface_mouse_scroll",
+      "type": "void (ghostty_surface_t, double, double, ghostty_input_scroll_mods_t)"
+    },
+    {
+      "name": "ghostty_surface_needs_confirm_quit",
+      "type": "bool (ghostty_surface_t)"
+    },
+    {
+      "name": "ghostty_surface_new",
+      "type": "ghostty_surface_t (ghostty_app_t, const ghostty_surface_config_s *)"
+    },
+    {
+      "name": "ghostty_surface_preedit",
+      "type": "void (ghostty_surface_t, const char *, uintptr_t)"
+    },
+    {
+      "name": "ghostty_surface_process_exited",
+      "type": "bool (ghostty_surface_t)"
+    },
+    {
+      "name": "ghostty_surface_quicklook_font",
+      "type": "void *(ghostty_surface_t)"
+    },
+    {
+      "name": "ghostty_surface_quicklook_word",
+      "type": "bool (ghostty_surface_t, ghostty_text_s *)"
+    },
+    {
+      "name": "ghostty_surface_read_selection",
+      "type": "bool (ghostty_surface_t, ghostty_text_s *)"
+    },
+    {
+      "name": "ghostty_surface_read_text",
+      "type": "bool (ghostty_surface_t, ghostty_selection_s, ghostty_text_s *)"
+    },
+    {
+      "name": "ghostty_surface_refresh",
+      "type": "void (ghostty_surface_t)"
+    },
+    {
+      "name": "ghostty_surface_request_close",
+      "type": "void (ghostty_surface_t)"
+    },
+    {
+      "name": "ghostty_surface_set_color_scheme",
+      "type": "void (ghostty_surface_t, ghostty_color_scheme_e)"
+    },
+    {
+      "name": "ghostty_surface_set_content_scale",
+      "type": "void (ghostty_surface_t, double, double)"
+    },
+    {
+      "name": "ghostty_surface_set_display_id",
+      "type": "void (ghostty_surface_t, uint32_t)"
+    },
+    {
+      "name": "ghostty_surface_set_focus",
+      "type": "void (ghostty_surface_t, bool)"
+    },
+    {
+      "name": "ghostty_surface_set_occlusion",
+      "type": "void (ghostty_surface_t, bool)"
+    },
+    {
+      "name": "ghostty_surface_set_size",
+      "type": "void (ghostty_surface_t, uint32_t, uint32_t)"
+    },
+    {
+      "name": "ghostty_surface_size",
+      "type": "ghostty_surface_size_s (ghostty_surface_t)"
+    },
+    {
+      "name": "ghostty_surface_split",
+      "type": "void (ghostty_surface_t, ghostty_action_split_direction_e)"
+    },
+    {
+      "name": "ghostty_surface_split_equalize",
+      "type": "void (ghostty_surface_t)"
+    },
+    {
+      "name": "ghostty_surface_split_focus",
+      "type": "void (ghostty_surface_t, ghostty_action_goto_split_e)"
+    },
+    {
+      "name": "ghostty_surface_split_resize",
+      "type": "void (ghostty_surface_t, ghostty_action_resize_split_direction_e, uint16_t)"
+    },
+    {
+      "name": "ghostty_surface_text",
+      "type": "void (ghostty_surface_t, const char *, uintptr_t)"
+    },
+    {
+      "name": "ghostty_surface_tty_name",
+      "type": "ghostty_string_s (ghostty_surface_t)"
+    },
+    {
+      "name": "ghostty_surface_update_config",
+      "type": "void (ghostty_surface_t, ghostty_config_t)"
+    },
+    {
+      "name": "ghostty_surface_userdata",
+      "type": "void *(ghostty_surface_t)"
+    },
+    {
+      "name": "ghostty_translate",
+      "type": "const char *(const char *)"
+    }
+  ],
+  "excerpts": [
+    {
+      "path": "include/ghostty.h",
+      "first": 1,
+      "last": 12,
+      "text": "// Ghostty's internal embedder API, a.k.a. \"libghostty-internal\".\n//\n// The only consumer of this API is the macOS app, and while it is fairly\n// comprehensive, it is tailored to the needs of the macOS app and not designed\n// for external use, hence why most functions are undocumented and some are\n// macOS-specific (e.g. ones dealing with the Metal graphics API).\n// \n// External embedders should instead use `libghostty-vt` or other related\n// packages, which are extensively documented and designed from the ground up\n// to be used in other software. Header files for which can be found in\n// `include/ghostty/`.\n#ifndef GHOSTTY_H"
+    },
+    {
+      "path": "include/ghostty.h",
+      "first": 489,
+      "last": 521,
+      "text": "typedef struct {\n  void* nsview;\n} ghostty_platform_macos_s;\n\ntypedef struct {\n  void* uiview;\n} ghostty_platform_ios_s;\n\ntypedef union {\n  ghostty_platform_macos_s macos;\n  ghostty_platform_ios_s ios;\n} ghostty_platform_u;\n\ntypedef enum {\n  GHOSTTY_SURFACE_CONTEXT_WINDOW = 0,\n  GHOSTTY_SURFACE_CONTEXT_TAB = 1,\n  GHOSTTY_SURFACE_CONTEXT_SPLIT = 2,\n} ghostty_surface_context_e;\n\ntypedef struct {\n  ghostty_platform_e platform_tag;\n  ghostty_platform_u platform;\n  void* userdata;\n  double scale_factor;\n  float font_size;\n  const char* working_directory;\n  const char* command;\n  ghostty_env_var_s* env_vars;\n  size_t env_var_count;\n  const char* initial_input;\n  bool wait_after_command;\n  ghostty_surface_context_e context;\n} ghostty_surface_config_s;"
+    },
+    {
+      "path": "include/ghostty.h",
+      "first": 1075,
+      "last": 1094,
+      "text": "typedef void (*ghostty_runtime_write_clipboard_cb)(void*,\n                                                   ghostty_clipboard_e,\n                                                   const ghostty_clipboard_content_s*,\n                                                   size_t,\n                                                   bool);\ntypedef void (*ghostty_runtime_close_surface_cb)(void*, bool);\ntypedef bool (*ghostty_runtime_action_cb)(ghostty_app_t,\n                                          ghostty_target_s,\n                                          ghostty_action_s);\n\ntypedef struct {\n  void* userdata;\n  bool supports_selection_clipboard;\n  ghostty_runtime_wakeup_cb wakeup_cb;\n  ghostty_runtime_action_cb action_cb;\n  ghostty_runtime_read_clipboard_cb read_clipboard_cb;\n  ghostty_runtime_confirm_read_clipboard_cb confirm_read_clipboard_cb;\n  ghostty_runtime_write_clipboard_cb write_clipboard_cb;\n  ghostty_runtime_close_surface_cb close_surface_cb;\n} ghostty_runtime_config_s;"
+    },
+    {
+      "path": "src/apprt/embedded.zig",
+      "first": 2070,
+      "last": 2076,
+      "text": "    export fn ghostty_surface_text(\n        surface: *Surface,\n        ptr: [*]const u8,\n        len: usize,\n    ) void {\n        surface.textCallback(ptr[0..len]);\n    }"
+    },
+    {
+      "path": "src/Surface.zig",
+      "first": 3328,
+      "last": 3334,
+      "text": "pub fn textCallback(self: *Surface, text: []const u8) !void {\n    // Crash metadata in case we crash in here\n    crash.sentry.thread_state = self.crashThreadState();\n    defer crash.sentry.thread_state = null;\n\n    try self.completeClipboardPaste(text, true);\n}"
+    },
+    {
+      "path": "src/Surface.zig",
+      "first": 6146,
+      "last": 6223,
+      "text": "fn completeClipboardPaste(\n    self: *Surface,\n    data: []const u8,\n    allow_unsafe: bool,\n) !void {\n    if (data.len == 0) return;\n\n    const encode_opts: input.paste.Options = encode_opts: {\n        self.renderer_state.mutex.lockUncancelable(global.io());\n        defer self.renderer_state.mutex.unlock(global.io());\n        const opts: input.paste.Options = .fromTerminal(&self.io.terminal);\n\n        // If we have paste protection enabled, we detect unsafe pastes and return\n        // an error. The error approach allows apprt to attempt to complete the paste\n        // before falling back to requesting confirmation.\n        //\n        // We do not do this for bracketed pastes because bracketed pastes are\n        // by definition safe since they're framed.\n        const unsafe = unsafe: {\n            // If we've disabled paste protection then we always allow the paste.\n            if (!self.config.clipboard_paste_protection) break :unsafe false;\n\n            // If we're allowed to paste unsafe data then we always allow the paste.\n            // This is set during confirmation usually.\n            if (allow_unsafe) break :unsafe false;\n\n            if (opts.bracketed) {\n                // If we're bracketed and the paste contains and ending\n                // bracket then something naughty might be going on and we\n                // never trust it.\n                if (std.mem.indexOf(u8, data, \"\\x1B[201~\") != null) break :unsafe true;\n\n                // If we are bracketed and configured to trust that then the\n                // paste is not unsafe.\n                if (self.config.clipboard_paste_bracketed_safe) break :unsafe false;\n            }\n\n            break :unsafe !input.paste.isSafe(data);\n        };\n\n        if (unsafe) {\n            log.info(\"potentially unsafe paste detected, rejecting until confirmation\", .{});\n            return error.UnsafePaste;\n        }\n\n        // With the lock held, we must scroll to the bottom.\n        // We always scroll to the bottom for these inputs.\n        self.scrollToBottom() catch |err| {\n            log.warn(\"error scrolling to bottom err={}\", .{err});\n        };\n\n        break :encode_opts opts;\n    };\n\n    // Encode the data. In most cases this doesn't require any\n    // copies, so we optimize for that case.\n    var data_duped: ?[]u8 = null;\n    const vecs = input.paste.encode(data, encode_opts) catch |err| switch (err) {\n        error.MutableRequired => vecs: {\n            const buf: []u8 = try self.alloc.dupe(u8, data);\n            errdefer self.alloc.free(buf);\n            data_duped = buf;\n            break :vecs input.paste.encode(buf, encode_opts);\n        },\n    };\n    defer if (data_duped) |v| {\n        // This code path means the data did require a copy and mutation.\n        // We must free it.\n        self.alloc.free(v);\n    };\n\n    for (vecs) |vec| if (vec.len > 0) {\n        self.queueIo(try termio.Message.writeReq(\n            self.alloc,\n            vec,\n        ), .unlocked);\n    };\n}"
+    },
+    {
+      "path": "src/termio/backend.zig",
+      "first": 13,
+      "last": 26,
+      "text": "/// The kinds of backends.\npub const Kind = enum { exec };\n\n/// Configuration for the various backend types.\npub const Config = union(Kind) {\n    /// Exec uses posix exec to run a command with a pty.\n    exec: termio.Exec.Config,\n};\n\n/// Backend implementations. A backend is responsible for owning the pty\n/// behavior and providing read/write capabilities.\npub const Backend = union(Kind) {\n    exec: termio.Exec,\n"
+    },
+    {
+      "path": "src/Surface.zig",
+      "first": 668,
+      "last": 684,
+      "text": "        errdefer io_exec.deinit();\n\n        // Initialize our IO mailbox\n        var io_mailbox = try termio.Mailbox.initSPSC(alloc);\n        errdefer io_mailbox.deinit(alloc);\n\n        try termio.Termio.init(&self.io, alloc, .{\n            .size = size,\n            .full_config = config,\n            .config = try termio.Termio.DerivedConfig.init(alloc, config),\n            .backend = .{ .exec = io_exec },\n            .mailbox = io_mailbox,\n            .renderer_state = &self.renderer_state,\n            .renderer_wakeup = render_thread.wakeup,\n            .renderer_mailbox = render_thread.mailbox,\n            .surface_mailbox = .{ .surface = self, .app = app_mailbox },\n        });"
+    }
+  ],
+  "limitations": [
+    "Compile-only declaration control; no native library linked or renderer executed.",
+    "This inventory requires semantic source review. It does not automatically prove a missing capability.",
+    "No READY-to-pixel, history-load, resize, image, lifecycle or performance measurement was made."
+  ]
+}

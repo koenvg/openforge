@@ -1,0 +1,61 @@
+{
+  "status": "native prerequisites validated; OpenForge session integration incomplete",
+  "baselineCommit": "855d845547eaeb8e7625599b15d1a308883ba70a",
+  "architectureApproval": "User approved the dev-only in-process Electron addon exception; xterm stays default and the backend remains protocol authority.",
+  "failures": [
+    {
+      "stage": "production codec into newer experimental Ghostty",
+      "log": "codec-compatibility.log",
+      "error": "PayloadNotExhausted at READY; 76 of 77 tests passed",
+      "resolution": "Rebased the native fork onto production Ghostty 22d13172cde98a0a4dda05d3d6a3fcb0dd8ed018. Did not change production pins or remove checksum validation."
+    },
+    {
+      "stage": "rebased native build dependency generator",
+      "evidence": "Tool output, not a retained complete log",
+      "error": "uucode_generate: FileNotFound through a symlinked package directory",
+      "resolution": "Materialized the local generator package. New preparation copies cached dependency directories."
+    },
+    {
+      "stage": "external reply authority headless red test",
+      "log": "external-authority-red.log",
+      "error": "No field named protocol_replies in termio.Host",
+      "resolution": "Added host policy and a separate user-input write route; the test passed."
+    },
+    {
+      "stage": "native Surface input route red test",
+      "log": "authority-surface-red.log",
+      "error": "Callback bytes=0, expected=6",
+      "resolution": "Classified native user input before I/O enqueueing. Exact typeda callback now survives while native replies are suppressed."
+    },
+    {
+      "stage": "Electron addon red test",
+      "log": "electron-red.log",
+      "error": "Cannot find module openforge-ghostty.node",
+      "resolution": "Implemented and linked the N-API addon."
+    },
+    {
+      "stage": "Electron empty snapshot boundary",
+      "log": "electron-empty-buffer-red.log",
+      "error": "Cannot create native surface",
+      "resolution": "Represent an empty Node Buffer as a null native snapshot pointer rather than a non-null zero-length snapshot."
+    }
+  ],
+  "reproduction": {
+    "source": "artifacts/terminal-presentation/native-ghostty-openforge-reproduction/pinned-upstream",
+    "method": "Clean checkout using local Git objects, then retained patch and preparation",
+    "verifiedSourceFiles": 18,
+    "cachedPackages": 38,
+    "independentRebuild": false
+  },
+  "notEstablished": [
+    "Existing OpenForge session attachment or production desktop IPC",
+    "End-to-end backend reply delivery and transport drains",
+    "Lossless native input across the current string-based desktop contract",
+    "All restored native input-mode behavior",
+    "Image-bearing backend snapshot eligibility or image-resource transfer",
+    "Input queue overflow/allocation fault injection and exhaustive queued-callback races",
+    "Window-close/navigation ownership, overlays, all input methods and accessibility",
+    "Visible pixel correctness, presentation acknowledgments or latency benefit",
+    "Production affected-system validation or final completion review"
+  ]
+}

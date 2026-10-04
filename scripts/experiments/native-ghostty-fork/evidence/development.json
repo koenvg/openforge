@@ -1,0 +1,49 @@
+{
+  "revision": "4ae9f1a2de5484de3d6a13fe03676b8853b9c41c",
+  "description": "Development checkpoints, separate from final runner evidence. Excerpts retain failures, not final pass claims.",
+  "checkpoints": [
+    {
+      "name": "baseline-build",
+      "rawLogSha256": "30bcb9cd84729044584edf594fb7e3b278ab9eeafe9b3b3c73ce7f175c7dd9cf",
+      "excerpt": "test\n+- run test ghostty-test\n   +- compile test ghostty-test Debug aarch64-macos.13.0\n      +- metallib Ghostty (Ghostty.metallib)\n         +- metal Ghostty (Ghostty.ir) failure\nxcrun: error: unable to find utility \"metal\", not a developer tool or in PATH\nerror: process exited with error code 72\nfailed command: /usr/bin/xcrun -sdk macosx metal -o /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-fork/upstream/.zig-cache/o/c9b34b34a3e2cc58efa27cf895fda642/Ghostty.ir -c /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-fork/upstream/src/renderer/shaders/shaders.metal -mmacos-version-min=13.0.0\n\nBuild Summary: 99/104 steps succeeded (1 failed)\ntest transitive failure\n+- run test ghostty-test transitive failure\n   +- compile test ghostty-test Debug aarch64-macos.13.0 transitive failure\n      +- metallib Ghostty (Ghostty.metallib) transitive failure\n      |  +- metal Ghostty (Ghostty.ir) failure\n      |  +- metal Ghostty (Ghostty.ir) (reused)\n      +- metallib Ghostty (Ghostty.metallib) (+2 more reused dependencies)\n\nerror: the following build command failed with exit code 1:\n.zig-cache/o/3cfa2d04ffa8bba8838647f506806e2d/build /Users/koen/.local/share/zig/zig-aarch64-macos-0.16.0/zig /Users/koen/.local/share/zig/zig-aarch64-macos-0.16.0/lib /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-fork/upstream .zig-cache /Users/koen/.cache/zig --seed 0xd091bc9a -Zdf8d4f2097bafd7e test -Dtest-filter=termio -Demit-macos-app=false -Demit-xcframework=false -Drenderer=opengl --system\n"
+    },
+    {
+      "name": "host-red",
+      "rawLogSha256": "79739222f94cc8a99f84d08077443ecad6dbdeca9f50378986bfb0f90c961bf3",
+      "excerpt": "test\n+- run test ghostty-test\n   +- compile test ghostty-test Debug aarch64-macos.13.0 1 errors\nsrc/termio/hosted_tests.zig:51:28: error: no field named 'host' in union 'termio.backend.Backend'\n            .backend = .{ .host = .{ .userdata = self, .write = write } },\n                           ^~~~\nsrc/termio/backend.zig:24:21: note: union declared here\npub const Backend = union(Kind) {\n                    ^~~~~\nreferenced by:\n    test.hosted: native Termio accepts host-owned input without a child: src/termio/hosted_tests.zig:77:33\n    test_0: src/termio.zig:39:17\n    3 reference(s) hidden; use '-freference-trace=5' to see all references\nerror: 1 compilation errors\n\nBuild Summary: 99/102 steps succeeded (1 failed)\ntest transitive failure\n+- run test ghostty-test transitive failure\n   +- compile test ghostty-test Debug aarch64-macos.13.0 1 errors\n      +- WriteFile libc.txt cached\n      +- WriteFile helpgen.zig success\n      |  +- run exe helpgen success 366ms\n      |     +- compile exe helpgen Debug native success 2s MaxRSS:368M\n      |        +- options cached\n      +- WriteFile props.zig cached\n      |  +- run exe props-unigen cached\n      |  |  +- compile exe props-unigen Debug native cached 66ms MaxRSS:31M\n      |  |     +- run exe uucode_generate (tables.zig) cached"
+    },
+    {
+      "name": "snapshot-red",
+      "rawLogSha256": "2cf5aab6dc34f4f55a5770a0b108c0fef9877dd7f35158abc03727d487068fd7",
+      "excerpt": "test\n+- run test ghostty-test\n   +- compile test ghostty-test Debug aarch64-macos.13.0 1 errors\nsrc/termio/hosted_tests.zig:51:14: error: no field named 'host_snapshot' in struct 'termio.Options'\n            .host_snapshot = snapshot,\n             ^~~~~~~~~~~~~\nsrc/termio/Options.zig:1:1: note: struct declared here\n//! The options that are used to configure a terminal IO implementation.\n^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\nreferenced by:\n    test.hosted: native Termio accepts host-owned input without a child: src/termio/hosted_tests.zig:78:33\n    test_0: src/termio.zig:39:17\n    3 reference(s) hidden; use '-freference-trace=5' to see all references\nerror: 1 compilation errors\n\nBuild Summary: 99/102 steps succeeded (1 failed)\ntest transitive failure\n+- run test ghostty-test transitive failure\n   +- compile test ghostty-test Debug aarch64-macos.13.0 1 errors\n      +- WriteFile libc.txt cached\n      +- WriteFile helpgen.zig success\n      |  +- run exe helpgen success 386ms\n      |     +- compile exe helpgen Debug native success 7s MaxRSS:368M\n      |        +- options cached\n      +- WriteFile props.zig cached\n      |  +- run exe props-unigen cached\n      |  |  +- compile exe props-unigen Debug native cached 149ms MaxRSS:31M\n      |  |     +- run exe uucode_generate (tables.zig) cached"
+    },
+    {
+      "name": "fencing-red",
+      "rawLogSha256": "1ff53aeb608380fb507537019fb35ae8978fc2c50ce016cd91782256c7f39fc7",
+      "excerpt": "test\n+- run test ghostty-test\n   +- compile test ghostty-test Debug aarch64-macos.13.0 1 errors\nsrc/termio/hosted_tests.zig:52:73: error: no field named 'instance_id' in struct 'termio.Host'\n            .backend = .{ .host = .{ .userdata = self, .write = write, .instance_id = 17 } },\n                                                                        ^~~~~~~~~~~\nsrc/termio/Host.zig:1:1: note: struct declared here\n//! Experimental host-owned transport. Owns no PTY or child process.\n^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\nreferenced by:\n    test.hosted: native Termio accepts host-owned input without a child: src/termio/hosted_tests.zig:78:33\n    test_0: src/termio.zig:39:17\n    3 reference(s) hidden; use '-freference-trace=5' to see all references\nerror: 1 compilation errors\n\nBuild Summary: 99/102 steps succeeded (1 failed)\ntest transitive failure\n+- run test ghostty-test transitive failure\n   +- compile test ghostty-test Debug aarch64-macos.13.0 1 errors\n      +- WriteFile libc.txt cached\n      +- WriteFile helpgen.zig success\n      |  +- run exe helpgen success 387ms\n      |     +- compile exe helpgen Debug native success 1s MaxRSS:367M\n      |        +- options cached\n      +- WriteFile props.zig cached\n      |  +- run exe props-unigen cached\n      |  |  +- compile exe props-unigen Debug native cached 80ms MaxRSS:31M\n      |  |     +- run exe uucode_generate (tables.zig) cached"
+    },
+    {
+      "name": "images-red",
+      "rawLogSha256": "2e06c532b66887c6b09d4ceeece9c09ccb586aea3ce704b3452a2683288f712c",
+      "excerpt": "test\n+- run test ghostty-test 80 pass, 1 fail (81 total)\nerror: 'termio.hosted_tests.test.hosted: image state is live but unsupported checkpoint export fails closed' failed:\n       expected error.ImagesNotCheckpointed, found void\n       /Users/koen/.local/share/zig/zig-aarch64-macos-0.16.0/lib/std/testing.zig:65:9: 0x103e8aef7 in expectError__anon_680333 (ghostty-test)\n               return error.TestExpectedError;\n               ^\n       /Users/koen/.openforge/worktrees/openforge/KVG-5198/artifacts/terminal-presentation/native-ghostty-fork/upstream/src/termio/hosted_tests.zig:160:5: 0x103e8b2a7 in test.hosted: image state is live but unsupported checkpoint export fails closed (ghostty-test)\n           try testing.expectError(error.ImagesNotCheckpointed, source.io.writeHostedSnapshot(&bytes.writer));\n           ^\nfailed command: ./.zig-cache/o/682dfcb507454dea01757694fe7cc5d9/ghostty-test --cache-dir=./.zig-cache --seed=0xc6831040 --listen=-\n\nBuild Summary: 100/102 steps succeeded (1 failed); 80/81 tests passed (1 failed)\ntest transitive failure\n+- run test ghostty-test 80 pass, 1 fail (81 total)\n   +- compile test ghostty-test Debug aarch64-macos.13.0 success 16s MaxRSS:1G\n      +- WriteFile libc.txt cached\n      +- WriteFile helpgen.zig success\n      |  +- run exe helpgen success 591ms\n      |     +- compile exe helpgen Debug native success 2s MaxRSS:370M\n      |        +- options cached\n      +- WriteFile props.zig cached\n      |  +- run exe props-unigen cached\n      |  |  +- compile exe props-unigen Debug native cached 87ms MaxRSS:31M\n      |  |     +- run exe uucode_generate (tables.zig) cached\n      |  |        +- compile exe uucode_generate Debug native cached 120ms MaxRSS:31M\n      |  +- run exe symbols-unigen cached\n      |     +- compile exe symbols-unigen Debug native cached 85ms MaxRSS:31M"
+    }
+  ],
+  "earlyFocusedFailure": {
+    "log": "hosted-early-failure.log",
+    "sha256": "2b1dfb0ba7dae40fd0661ac52809d294779b5204df534b2942609600c0cfd354",
+    "findings": [
+      "Unchanged upstream search Thread unnamed test crashed after its 100 ms completion wait; teardown lacks guaranteed stop/join on error. Follow-up KVG-5225.",
+      "Alternate-screen assertion expected text at row zero but source inherited its previous cursor row. Corrected the fixture to send cursor-home before ALT, not the implementation."
+    ]
+  },
+  "firstFullSuiteAttempt": {
+    "limitMs": 600000,
+    "exitCode": null,
+    "error": "spawnSync zig ETIMEDOUT",
+    "outcome": "Not passed. The remaining owned build/test children were explicitly terminated."
+  },
+  "patchRoundTrip": {
+    "result": "passed",
+    "method": "Archive the six original files at pinned HEAD into a temporary clean Git directory; apply and reverse-check the saved patch; compare all nine output files byte-for-byte with the tested checkout."
+  }
+}

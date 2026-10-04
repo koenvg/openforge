@@ -1,0 +1,729 @@
+diff --git a/src/apprt/none.zig b/src/apprt/none.zig
+index 0483d82..b4e10c2 100644
+--- a/src/apprt/none.zig
++++ b/src/apprt/none.zig
+@@ -6,6 +6,11 @@ const apprt = @import("../apprt.zig");
+ pub const resourcesDir = internal_os.resourcesDir;
+ 
+ pub const App = struct {
++    /// The headless test fixture drains its own mailbox; there is no GUI loop.
++    pub fn wakeup(_: *App) void {
++        comptime std.debug.assert(@import("builtin").is_test);
++    }
++
+     /// Always return false as there is no apprt to communicate with.
+     pub fn performIpc(
+         _: Allocator,
+diff --git a/src/build/SharedDeps.zig b/src/build/SharedDeps.zig
+index e810074..f5aad09 100644
+--- a/src/build/SharedDeps.zig
++++ b/src/build/SharedDeps.zig
+@@ -500,11 +500,14 @@ pub fn add(
+     if (step.rootModuleTarget().os.tag.isDarwin()) {
+         try @import("apple_sdk").addPaths(b, step);
+ 
+-        const metallib = self.metallib.?;
+-        metallib.output.addStepDependencies(&step.step);
+-        step.root_module.addAnonymousImport("ghostty_metallib", .{
+-            .root_source_file = metallib.output,
+-        });
++        // The local fork's headless OpenGL tests do not consume Metal shaders.
++        if (self.config.renderer == .metal) {
++            const metallib = self.metallib.?;
++            metallib.output.addStepDependencies(&step.step);
++            step.root_module.addAnonymousImport("ghostty_metallib", .{
++                .root_source_file = metallib.output,
++            });
++        }
+     }
+ 
+     // Other dependencies, mostly pure Zig
+diff --git a/src/termio.zig b/src/termio.zig
+index b168851..ce4d4b7 100644
+--- a/src/termio.zig
++++ b/src/termio.zig
+@@ -36,4 +36,5 @@ test {
+     @import("std").testing.refAllDecls(@This());
+ 
+     _ = @import("termio/shell_integration.zig");
++    _ = @import("termio/hosted_tests.zig");
+ }
+diff --git a/src/termio/Options.zig b/src/termio/Options.zig
+index a6bf8c4..38e8a8a 100644
+--- a/src/termio/Options.zig
++++ b/src/termio/Options.zig
+@@ -20,6 +20,9 @@ config: termio.Termio.DerivedConfig,
+ /// The backend for termio that implements where reads/writes are sourced.
+ backend: termio.Backend,
+ 
++/// Experimental host-only snapshot. Copied during init; no caller buffer is retained.
++host_snapshot: ?[]const u8 = null,
++
+ /// The mailbox for the terminal. This is how messages are delivered.
+ /// If you're using termio.Thread this MUST be "mailbox".
+ mailbox: termio.Mailbox,
+diff --git a/src/termio/Termio.zig b/src/termio/Termio.zig
+index d08f2e5..845e055 100644
+--- a/src/termio/Termio.zig
++++ b/src/termio/Termio.zig
+@@ -42,6 +42,10 @@ config: DerivedConfig,
+ /// just stores internal state about a grid.
+ terminal: terminalpkg.Terminal,
+ 
++/// Restoring history is serialized with the parser through renderer_state.mutex.
++host_restore: ?*@import("HostedRestore.zig") = null,
++host_history_lost: bool = false,
++
+ /// The shared render state
+ renderer_state: *renderer.State,
+ 
+@@ -234,6 +238,10 @@ pub const DerivedConfig = struct {
+ /// This will also start the child process if the termio is configured
+ /// to run a child process.
+ pub fn init(self: *Termio, alloc: Allocator, opts: termio.Options) !void {
++    const Restore = @import("HostedRestore.zig");
++    if (opts.host_snapshot != null and opts.backend != .host) return error.NotHostBackend;
++    const restore = if (opts.host_snapshot) |bytes| try Restore.create(alloc, bytes) else null;
++    errdefer if (restore) |value| value.destroy();
+     // The default terminal modes based on our config.
+     const default_modes: terminalpkg.ModePacked = modes: {
+         var modes: terminalpkg.ModePacked = .{};
+@@ -252,7 +260,7 @@ pub fn init(self: *Termio, alloc: Allocator, opts: termio.Options) !void {
+     };
+ 
+     // Create our terminal
+-    var term = try terminalpkg.Terminal.init(global.io(), alloc, opts: {
++    var term = if (restore) |value| value.decoded.toOwned() else try terminalpkg.Terminal.init(global.io(), alloc, opts: {
+         const grid_size = opts.size.grid();
+         break :opts .{
+             .cols = grid_size.columns,
+@@ -273,14 +281,16 @@ pub fn init(self: *Termio, alloc: Allocator, opts: termio.Options) !void {
+                 .palette = .default,
+             },
+             .kitty_image_storage_limit = opts.config.image_storage_limit,
+-            .kitty_image_loading_limits = .allWithTempDir(global.tmpDirPath()),
++            .kitty_image_loading_limits = if (opts.backend == .host) .direct else .allWithTempDir(global.tmpDirPath()),
+         };
+     });
+-    errdefer term.deinit(alloc);
++    var local_owns_term = true;
++    errdefer if (local_owns_term) term.deinit(alloc);
++    if (restore != null and (term.cols != opts.size.grid().columns or term.rows != opts.size.grid().rows)) return error.SnapshotSizeMismatch;
+ 
+     // The default palette may be an allocator-owned copy, so it is set
+     // once the terminal owns its memory and can release it on deinit.
+-    try term.colors.palette.changeDefault(alloc, opts.config.palette);
++    if (restore == null) try term.colors.palette.changeDefault(alloc, opts.config.palette);
+ 
+     // Setup our terminal size in pixels for certain requests.
+     term.width_px = term.cols * opts.size.cell.width;
+@@ -307,14 +317,14 @@ pub fn init(self: *Termio, alloc: Allocator, opts: termio.Options) !void {
+         .enquiry_response = opts.config.enquiry_response,
+     };
+ 
+-    const thread_enter_state = try ThreadEnterState.create(
++    const thread_enter_state = if (opts.backend == .host) null else try ThreadEnterState.create(
+         alloc,
+         opts.full_config,
+     );
+-
+     self.* = .{
+         .alloc = alloc,
+         .terminal = term,
++        .host_restore = restore,
+         .config = opts.config,
+         .renderer_state = opts.renderer_state,
+         .renderer_wakeup = opts.renderer_wakeup,
+@@ -326,13 +336,19 @@ pub fn init(self: *Termio, alloc: Allocator, opts: termio.Options) !void {
+         .terminal_stream = .init(.{
+             .allocator = alloc,
+             .handler = handler,
++            .continuation_max_bytes = if (opts.backend == .host) Restore.continuation_limit else null,
+         }),
+         .thread_enter_state = thread_enter_state,
+     };
++    local_owns_term = false;
++    errdefer self.terminal.deinit(alloc);
++    errdefer self.terminal_stream.deinit();
++    if (restore) |value| try value.replay(&self.terminal_stream);
+ }
+ 
+ pub fn deinit(self: *Termio) void {
+     self.backend.deinit();
++    if (self.host_restore) |restore| restore.destroy();
+     self.terminal.deinit(self.alloc);
+     self.config.deinit();
+     self.mailbox.deinit(self.alloc);
+@@ -669,9 +685,77 @@ pub fn focusGained(self: *Termio, td: *ThreadData, focused: bool) !void {
+     try self.backend.focusGained(td, focused);
+ }
+ 
+-/// Process output from the pty. This is the manual API that users can
+-/// call with pty data but it is also called by the read thread when using
+-/// an exec subprocess.
++/// Export the native owner and parser at one cut. A partial restore cannot
++/// masquerade as a complete checkpoint after cancellation or discarded pages.
++pub fn writeHostedSnapshot(self: *Termio, writer: *std.Io.Writer) !void {
++    const Restore = @import("HostedRestore.zig");
++    if (self.backend != .host) return error.NotHostBackend;
++    self.renderer_state.mutex.lockUncancelable(global.io());
++    defer self.renderer_state.mutex.unlock(global.io());
++    if (self.host_restore != null or self.host_history_lost) return error.HistoryIncomplete;
++    var screens = self.terminal.screens.all.iterator();
++    while (screens.next()) |entry| {
++        const images = &entry.value.*.kitty_images;
++        if (images.images.count() != 0 or images.placements.count() != 0) return error.ImagesNotCheckpointed;
++    }
++    var continuation: std.Io.Writer.Allocating = .init(self.alloc);
++    defer continuation.deinit();
++    try self.terminal_stream.writeContinuation(&continuation.writer);
++    const bytes = continuation.written();
++    try Restore.snapshot.encode(self.alloc, writer, &self.terminal, .{
++        .continuation = if (bytes.len == 0) .ground else .{ .bytes = bytes },
++    });
++}
++
++/// Apply at most one history page to the same native terminal the renderer
++/// reads. FINISH says the stream was consumed, not that every row was applied.
++pub fn nextHostedHistory(self: *Termio) !?@import("HostedRestore.zig").snapshot.Decoder.Progress {
++    if (self.backend != .host) return error.NotHostBackend;
++    self.renderer_state.mutex.lockUncancelable(global.io());
++    defer self.renderer_state.mutex.unlock(global.io());
++    const restore = self.host_restore orelse return null;
++    const result = restore.decoder.next(self.alloc, &self.terminal) catch |err| {
++        restore.destroy();
++        self.host_restore = null;
++        self.host_history_lost = true;
++        return err;
++    };
++    if (result) |progress| {
++        if (progress.rows == 0) self.host_history_lost = true;
++        try self.terminal_stream.handler.queueRender();
++    } else {
++        restore.destroy();
++        self.host_restore = null;
++    }
++    return result;
++}
++
++pub fn cancelHostedHistory(self: *Termio) void {
++    self.renderer_state.mutex.lockUncancelable(global.io());
++    defer self.renderer_state.mutex.unlock(global.io());
++    if (self.host_restore) |restore| {
++        restore.destroy();
++        self.host_restore = null;
++        self.host_history_lost = true;
++    }
++}
++
++/// The host serializes output calls. The accepted offset is a parsed-byte
++/// acknowledgement only; it says nothing about presentation to a user.
++pub fn processHostedOutput(self: *Termio, instance_id: u64, offset: u64, bytes: []const u8) !void {
++    if (self.backend != .host) return error.NotHostBackend;
++    self.renderer_state.mutex.lockUncancelable(global.io());
++    defer self.renderer_state.mutex.unlock(global.io());
++    const host = &self.backend.host;
++    if (host.instance_id != instance_id) return error.StaleInstance;
++    if (host.output_offset != offset) return error.OutputOffsetMismatch;
++    const next = std.math.add(u64, offset, bytes.len) catch return error.OutputOffsetOverflow;
++    self.processOutputLocked(bytes);
++    host.output_offset = next;
++}
++
++/// Unfenced internal path for the existing exec backend.
++/// Host callers must use processHostedOutput instead.
+ pub fn processOutput(self: *Termio, buf: []const u8) void {
+     // We are modifying terminal state from here on out and we need
+     // the lock to grab our read data.
+diff --git a/src/termio/backend.zig b/src/termio/backend.zig
+index c29009a..11e6226 100644
+--- a/src/termio/backend.zig
++++ b/src/termio/backend.zig
+@@ -11,28 +11,32 @@ const ProcessInfo = @import("../pty.zig").ProcessInfo;
+ const WRITE_REQ_PREALLOC = std.math.pow(usize, 2, 5);
+ 
+ /// The kinds of backends.
+-pub const Kind = enum { exec };
++pub const Kind = enum { exec, host };
+ 
+ /// Configuration for the various backend types.
+ pub const Config = union(Kind) {
+     /// Exec uses posix exec to run a command with a pty.
+     exec: termio.Exec.Config,
++    host: @import("Host.zig"),
+ };
+ 
+ /// Backend implementations. A backend is responsible for owning the pty
+ /// behavior and providing read/write capabilities.
+ pub const Backend = union(Kind) {
+     exec: termio.Exec,
++    host: @import("Host.zig"),
+ 
+     pub fn deinit(self: *Backend) void {
+         switch (self.*) {
+             .exec => |*exec| exec.deinit(),
++            .host => {},
+         }
+     }
+ 
+     pub fn initTerminal(self: *Backend, t: *terminal.Terminal) void {
+         switch (self.*) {
+             .exec => |*exec| exec.initTerminal(t),
++            .host => {},
+         }
+     }
+ 
+@@ -44,12 +48,14 @@ pub const Backend = union(Kind) {
+     ) !void {
+         switch (self.*) {
+             .exec => |*exec| try exec.threadEnter(alloc, io, td),
++            .host => td.backend = .{ .host = {} },
+         }
+     }
+ 
+     pub fn threadExit(self: *Backend, td: *termio.Termio.ThreadData) void {
+         switch (self.*) {
+             .exec => |*exec| exec.threadExit(td),
++            .host => {},
+         }
+     }
+ 
+@@ -60,6 +66,7 @@ pub const Backend = union(Kind) {
+     ) !void {
+         switch (self.*) {
+             .exec => |*exec| try exec.focusGained(td, focused),
++            .host => {},
+         }
+     }
+ 
+@@ -70,6 +77,7 @@ pub const Backend = union(Kind) {
+     ) !void {
+         switch (self.*) {
+             .exec => |*exec| try exec.resize(grid_size, screen_size),
++            .host => |*host| host.resize(grid_size, screen_size),
+         }
+     }
+ 
+@@ -82,6 +90,7 @@ pub const Backend = union(Kind) {
+     ) !void {
+         switch (self.*) {
+             .exec => |*exec| try exec.queueWrite(alloc, td, data, linefeed),
++            .host => |*host| try host.queueWrite(alloc, data, linefeed),
+         }
+     }
+ 
+@@ -99,6 +108,7 @@ pub const Backend = union(Kind) {
+                 exit_code,
+                 runtime_ms,
+             ),
++            .host => {},
+         }
+     }
+ 
+@@ -108,6 +118,7 @@ pub const Backend = union(Kind) {
+     pub fn getProcessInfo(self: *Backend, comptime info: ProcessInfo) ?ProcessInfo.Type(info) {
+         return switch (self.*) {
+             .exec => |*exec| exec.getProcessInfo(info),
++            .host => null,
+         };
+     }
+ };
+@@ -115,10 +126,12 @@ pub const Backend = union(Kind) {
+ /// Termio thread data. See termio.ThreadData for docs.
+ pub const ThreadData = union(Kind) {
+     exec: termio.Exec.ThreadData,
++    host: void,
+ 
+     pub fn deinit(self: *ThreadData, alloc: Allocator) void {
+         switch (self.*) {
+             .exec => |*exec| exec.deinit(alloc),
++            .host => {},
+         }
+     }
+ 
+diff --git a/src/termio/Host.zig b/src/termio/Host.zig
+new file mode 100644
+index 0000000..d238067
+--- /dev/null
++++ b/src/termio/Host.zig
+@@ -0,0 +1,32 @@
++//! Experimental host-owned transport. Owns no PTY or child process.
++//! Callbacks consume borrowed bytes synchronously, must not reenter Termio,
++//! and must copy/queue work for the actual host transport before returning.
++const Host = @This();
++const std = @import("std");
++const renderer = @import("../renderer.zig");
++
++/// A new native owner needs a new instance token. Initialize output_offset to
++/// the checkpoint cut supplied by the host. Neither value is in the snapshot.
++instance_id: u64,
++output_offset: u64 = 0,
++userdata: ?*anyopaque,
++write: *const fn (?*anyopaque, []const u8) void,
++on_resize: ?*const fn (?*anyopaque, renderer.GridSize, renderer.ScreenSize) void = null,
++
++pub fn queueWrite(self: *Host, alloc: std.mem.Allocator, data: []const u8, linefeed: bool) !void {
++    if (!linefeed) {
++        self.write(self.userdata, data);
++        return;
++    }
++    var expanded: std.Io.Writer.Allocating = .init(alloc);
++    defer expanded.deinit();
++    for (data) |byte| {
++        try expanded.writer.writeByte(byte);
++        if (byte == '\r') try expanded.writer.writeByte('\n');
++    }
++    self.write(self.userdata, expanded.written());
++}
++
++pub fn resize(self: *Host, grid: renderer.GridSize, screen: renderer.ScreenSize) void {
++    if (self.on_resize) |callback| callback(self.userdata, grid, screen);
++}
+diff --git a/src/termio/HostedRestore.zig b/src/termio/HostedRestore.zig
+new file mode 100644
+index 0000000..0e4089e
+--- /dev/null
++++ b/src/termio/HostedRestore.zig
+@@ -0,0 +1,46 @@
++//! Owns a bounded, in-memory snapshot and its incremental decoder.
++//! Heap allocation keeps Decoder.source stable. Termio owns the adopted
++//! Terminal by value at its final address; this object never owns a Stream.
++const HostedRestore = @This();
++const std = @import("std");
++pub const snapshot = @import("../terminal/snapshot/snapshot.zig");
++const global = @import("../global.zig");
++
++pub const continuation_limit = 64 * 1024;
++pub const snapshot_limit = 128 * 1024 * 1024;
++alloc: std.mem.Allocator,
++bytes: []u8,
++reader: std.Io.Reader,
++decoder: snapshot.Decoder,
++decoded: snapshot.Decoded,
++
++pub fn create(alloc: std.mem.Allocator, bytes: []const u8) !*HostedRestore {
++    if (bytes.len > snapshot_limit) return error.SnapshotTooLarge;
++    const self = try alloc.create(HostedRestore);
++    errdefer alloc.destroy(self);
++    const owned = try alloc.dupe(u8, bytes);
++    errdefer alloc.free(owned);
++    self.* = .{ .alloc = alloc, .bytes = owned, .reader = .fixed(owned), .decoder = undefined, .decoded = undefined };
++    self.decoder = .init(&self.reader);
++    self.decoded = try self.decoder.ready(alloc, global.io(), .{ .max_continuation_bytes = continuation_limit });
++    return self;
++}
++
++pub fn destroy(self: *HostedRestore) void {
++    const alloc = self.alloc;
++    self.decoded.deinit(alloc);
++    alloc.free(self.bytes);
++    alloc.destroy(self);
++}
++
++pub fn replay(self: *HostedRestore, stream: anytype) !void {
++    const bytes = switch (self.decoded.continuation) {
++        .ground => "",
++        .bytes => |value| value,
++    };
++    stream.nextSlice(bytes);
++    var exported: std.Io.Writer.Allocating = .init(self.alloc);
++    defer exported.deinit();
++    try stream.writeContinuation(&exported.writer);
++    if (!std.mem.eql(u8, bytes, exported.written())) return error.InvalidContinuation;
++}
+diff --git a/src/termio/hosted_tests.zig b/src/termio/hosted_tests.zig
+new file mode 100644
+index 0000000..88d1e58
+--- /dev/null
++++ b/src/termio/hosted_tests.zig
+@@ -0,0 +1,290 @@
++//! Headless tests of the native Termio owner, not the libghostty-vt wrapper.
++const std = @import("std");
++const testing = std.testing;
++const termio = @import("../termio.zig");
++const renderer = @import("../renderer.zig");
++const apprt = @import("../apprt.zig");
++const App = @import("../App.zig");
++const Surface = @import("../Surface.zig");
++const Config = @import("../config.zig").Config;
++const global = @import("../global.zig");
++
++const Fixture = struct {
++    io: termio.Termio = undefined,
++    mutex: std.Io.Mutex = .init,
++    state: renderer.State = undefined,
++    wakeup: global.xev.Async,
++    render_queue: *renderer.Thread.Mailbox,
++    app_queue: *App.Mailbox.Queue,
++    app: apprt.App = .{},
++    // Never dereferenced: the headless fixture only queues surface messages.
++    surface: Surface = undefined,
++    writes: std.Io.Writer.Allocating,
++
++    fn create(snapshot: ?[]const u8) !*Fixture {
++        const alloc = testing.allocator;
++        const self = try alloc.create(Fixture);
++        errdefer alloc.destroy(self);
++        var wakeup = try global.xev.Async.init();
++        errdefer wakeup.deinit();
++        const render_queue = try renderer.Thread.Mailbox.create(alloc);
++        errdefer render_queue.destroy(alloc);
++        const app_queue = try App.Mailbox.Queue.create(alloc);
++        errdefer app_queue.destroy(alloc);
++        self.* = .{
++            .wakeup = wakeup,
++            .render_queue = render_queue,
++            .app_queue = app_queue,
++            .writes = .init(alloc),
++        };
++        self.state = .{ .mutex = &self.mutex, .terminal = &self.io.terminal };
++        var config = try Config.default(alloc);
++        defer config.deinit();
++        var derived = try termio.DerivedConfig.init(alloc, &config);
++        errdefer derived.deinit();
++        var mailbox = try termio.Mailbox.initSPSC(alloc);
++        errdefer mailbox.deinit(alloc);
++        try self.io.init(alloc, .{
++            .size = .{ .screen = .{ .width = 800, .height = 400 }, .cell = .{ .width = 10, .height = 20 }, .padding = .{} },
++            .full_config = &config,
++            .config = derived,
++            .host_snapshot = snapshot,
++            .backend = .{ .host = .{ .userdata = self, .write = write, .instance_id = 17 } },
++            .mailbox = mailbox,
++            .renderer_state = &self.state,
++            .renderer_wakeup = wakeup,
++            .renderer_mailbox = render_queue,
++            .surface_mailbox = .{ .surface = &self.surface, .app = .{ .rt_app = &self.app, .mailbox = app_queue } },
++        });
++        return self;
++    }
++
++    fn output(self: *Fixture, bytes: []const u8) !void {
++        try self.io.processHostedOutput(17, self.io.backend.host.output_offset, bytes);
++    }
++
++    fn destroy(self: *Fixture) void {
++        self.io.deinit();
++        self.writes.deinit();
++        while (self.render_queue.pop(global.io())) |message| message.deinit();
++        self.render_queue.destroy(testing.allocator);
++        self.app_queue.destroy(testing.allocator);
++        self.wakeup.deinit();
++        testing.allocator.destroy(self);
++    }
++
++    fn write(ptr: ?*anyopaque, bytes: []const u8) void {
++        const self: *Fixture = @ptrCast(@alignCast(ptr.?));
++        self.writes.writer.writeAll(bytes) catch unreachable;
++    }
++};
++
++test "hosted: native Termio accepts host-owned input without a child" {
++    const f = try Fixture.create(null);
++    defer f.destroy();
++    var thread = try termio.Thread.init(testing.allocator);
++    defer thread.deinit();
++    var td: termio.Termio.ThreadData = undefined;
++    try f.io.threadEnter(&thread, &td);
++    defer f.io.threadExit(&td);
++    try f.io.queueWrite(&td, "hello\r", false);
++    try testing.expectEqualStrings("hello\r", f.writes.written());
++    try testing.expectEqual(&f.io.terminal, f.state.terminal);
++}
++
++test "hosted: READY adopts native state and history preserves live cursor" {
++    const source = try Fixture.create(null);
++    defer source.destroy();
++    for (0..2000) |_| try source.output("history\r\n");
++    try source.output("SCREEN");
++    var snapshot: std.Io.Writer.Allocating = .init(testing.allocator);
++    defer snapshot.deinit();
++    try source.io.writeHostedSnapshot(&snapshot.writer);
++    const restored = try Fixture.create(snapshot.written());
++    defer restored.destroy();
++    try testing.expectEqual(&restored.io.terminal, restored.state.terminal);
++    try testing.expectEqual(source.io.terminal.screens.active.cursor.x, restored.io.terminal.screens.active.cursor.x);
++    try restored.output("LIVE");
++    const cursor = restored.io.terminal.screens.active.cursor.x;
++    var pages: usize = 0;
++    var rows: usize = 0;
++    while (try restored.io.nextHostedHistory()) |progress| {
++        pages += 1;
++        rows += progress.rows;
++        try testing.expectEqual(cursor, restored.io.terminal.screens.active.cursor.x);
++    }
++    try testing.expect(pages > 1);
++    try testing.expect(rows > 0);
++    try testing.expectEqual(source.io.terminal.screens.active.pages.total_rows, restored.io.terminal.screens.active.pages.total_rows);
++    const text = try restored.io.terminal.screens.active.dumpStringAlloc(testing.allocator, .{ .active = .{} });
++    defer testing.allocator.free(text);
++    try testing.expect(std.mem.endsWith(u8, text, "SCREENLIVE"));
++}
++
++test "hosted: rejects stale, duplicate and gapped output before parsing" {
++    const f = try Fixture.create(null);
++    defer f.destroy();
++    try f.io.processHostedOutput(17, 0, "OK");
++    try testing.expectError(error.StaleInstance, f.io.processHostedOutput(16, 2, "BAD"));
++    try testing.expectError(error.OutputOffsetMismatch, f.io.processHostedOutput(17, 0, "BAD"));
++    try testing.expectError(error.OutputOffsetMismatch, f.io.processHostedOutput(17, 9, "BAD"));
++    const text = try f.io.terminal.screens.active.dumpStringAlloc(testing.allocator, .{ .screen = .{} });
++    defer testing.allocator.free(text);
++    try testing.expectEqualStrings("OK", text);
++}
++
++test "hosted: parser continuation survives two snapshot adoptions" {
++    const source = try Fixture.create(null);
++    defer source.destroy();
++    try source.output("before\xf0\x9f");
++    var bytes: std.Io.Writer.Allocating = .init(testing.allocator);
++    defer bytes.deinit();
++    try source.io.writeHostedSnapshot(&bytes.writer);
++    const restored = try Fixture.create(bytes.written());
++    defer restored.destroy();
++    try restored.output("\x98\x84");
++    while (try restored.io.nextHostedHistory()) |_| {}
++    var second: std.Io.Writer.Allocating = .init(testing.allocator);
++    defer second.deinit();
++    try restored.io.writeHostedSnapshot(&second.writer);
++    const reopened = try Fixture.create(second.written());
++    defer reopened.destroy();
++    try reopened.output(" again");
++    const text = try reopened.io.terminal.screens.active.dumpStringAlloc(testing.allocator, .{ .screen = .{} });
++    defer testing.allocator.free(text);
++    try testing.expectEqualStrings("before😄 again", text);
++}
++
++test "hosted: image state is live but unsupported checkpoint export fails closed" {
++    const source = try Fixture.create(null);
++    defer source.destroy();
++    try source.output("\x1b_Ga=T,f=24,s=1,v=1,i=7,q=2;////\x1b\\");
++    try testing.expectEqual(@as(usize, 1), source.io.terminal.screens.active.kitty_images.images.count());
++    var bytes: std.Io.Writer.Allocating = .init(testing.allocator);
++    defer bytes.deinit();
++    try testing.expectError(error.ImagesNotCheckpointed, source.io.writeHostedSnapshot(&bytes.writer));
++    try testing.expectEqual(@as(usize, 0), bytes.written().len);
++}
++
++test "hosted: resize consumes incompatible history without claiming recovery" {
++    const source = try Fixture.create(null);
++    defer source.destroy();
++    for (0..2000) |_| try source.output("history\r\n");
++    var bytes: std.Io.Writer.Allocating = .init(testing.allocator);
++    defer bytes.deinit();
++    try source.io.writeHostedSnapshot(&bytes.writer);
++    const restored = try Fixture.create(bytes.written());
++    defer restored.destroy();
++    var thread = try termio.Thread.init(testing.allocator);
++    defer thread.deinit();
++    var td: termio.Termio.ThreadData = undefined;
++    try restored.io.threadEnter(&thread, &td);
++    defer restored.io.threadExit(&td);
++    var size = restored.io.size;
++    size.screen.width = 400;
++    try restored.io.resize(&td, size);
++    var pages: usize = 0;
++    while (try restored.io.nextHostedHistory()) |progress| {
++        pages += 1;
++        try testing.expectEqual(@as(usize, 0), progress.rows);
++    }
++    try testing.expect(pages > 1);
++    try testing.expectError(error.HistoryIncomplete, restored.io.writeHostedSnapshot(&bytes.writer));
++    try restored.output("RESIZED");
++}
++
++test "hosted: cancelled or truncated history leaves live state usable" {
++    const source = try Fixture.create(null);
++    defer source.destroy();
++    for (0..2000) |_| try source.output("history\r\n");
++    var bytes: std.Io.Writer.Allocating = .init(testing.allocator);
++    defer bytes.deinit();
++    try source.io.writeHostedSnapshot(&bytes.writer);
++    const cancelled = try Fixture.create(bytes.written());
++    defer cancelled.destroy();
++    cancelled.io.cancelHostedHistory();
++    cancelled.io.cancelHostedHistory();
++    try testing.expectEqual(null, try cancelled.io.nextHostedHistory());
++    try cancelled.output("CANCELLED");
++    try testing.expectError(error.HistoryIncomplete, cancelled.io.writeHostedSnapshot(&bytes.writer));
++    const truncated = try Fixture.create(bytes.written()[0 .. bytes.written().len - 1]);
++    defer truncated.destroy();
++    var failed = false;
++    while (true) {
++        const progress = truncated.io.nextHostedHistory() catch {
++            failed = true;
++            break;
++        };
++        if (progress == null) break;
++    }
++    try testing.expect(failed);
++    try truncated.output("AFTER FAILURE");
++    try testing.expectError(error.HistoryIncomplete, truncated.io.writeHostedSnapshot(&bytes.writer));
++    try testing.expectError(error.EndOfStream, Fixture.create(""));
++}
++
++test "hosted: alternate screen remains active while primary history arrives" {
++    const source = try Fixture.create(null);
++    defer source.destroy();
++    for (0..2000) |_| try source.output("primary\r\n");
++    try source.output("\x1b[?1049h\x1b[HALT");
++    var bytes: std.Io.Writer.Allocating = .init(testing.allocator);
++    defer bytes.deinit();
++    try source.io.writeHostedSnapshot(&bytes.writer);
++    const restored = try Fixture.create(bytes.written());
++    defer restored.destroy();
++    try restored.output(" LIVE");
++    while (try restored.io.nextHostedHistory()) |_| {}
++    try testing.expectEqual(.alternate, restored.io.terminal.screens.active_key);
++    const text = try restored.io.terminal.screens.active.dumpStringAlloc(testing.allocator, .{ .screen = .{} });
++    defer testing.allocator.free(text);
++    try testing.expectEqualStrings("ALT LIVE", text);
++}
++
++test "hosted: a protocol query yields one native-owned reply" {
++    const f = try Fixture.create(null);
++    defer f.destroy();
++    var thread = try termio.Thread.init(testing.allocator);
++    defer thread.deinit();
++    var td: termio.Termio.ThreadData = undefined;
++    try f.io.threadEnter(&thread, &td);
++    defer f.io.threadExit(&td);
++    try f.output("\x1b[6n");
++    // Drain the actual native mailbox synchronously, without a GUI event loop.
++    while (f.io.mailbox.spsc.queue.pop(global.io())) |message| {
++        defer message.deinit();
++        switch (message) {
++            .write_small => |v| try f.io.queueWrite(&td, v.data[0..v.len], false),
++            .write_stable => |v| try f.io.queueWrite(&td, v, false),
++            .write_alloc => |v| try f.io.queueWrite(&td, v.data, false),
++            else => return error.UnexpectedMessage,
++        }
++    }
++    try testing.expectEqualStrings("\x1b[1;1R", f.writes.written());
++}
++
++test "hosted: native parser and incremental history share a locked owner" {
++    const source = try Fixture.create(null);
++    defer source.destroy();
++    for (0..2000) |_| try source.output("history\r\n");
++    var bytes: std.Io.Writer.Allocating = .init(testing.allocator);
++    defer bytes.deinit();
++    try source.io.writeHostedSnapshot(&bytes.writer);
++    const restored = try Fixture.create(bytes.written());
++    defer restored.destroy();
++    const Producer = struct {
++        fn run(f: *Fixture) void {
++            for (0..1000) |_| f.output("concurrent\r\n") catch unreachable;
++            f.output("FINAL") catch unreachable;
++        }
++    };
++    {
++        const producer = try std.Thread.spawn(.{}, Producer.run, .{restored});
++        defer producer.join();
++        while (try restored.io.nextHostedHistory()) |_| {}
++    }
++    const text = try restored.io.terminal.screens.active.dumpStringAlloc(testing.allocator, .{ .screen = .{} });
++    defer testing.allocator.free(text);
++    try testing.expect(std.mem.endsWith(u8, text, "FINAL"));
++    try testing.expectEqual(source.io.terminal.screens.active.pages.total_rows + 1000, restored.io.terminal.screens.active.pages.total_rows);
++}
