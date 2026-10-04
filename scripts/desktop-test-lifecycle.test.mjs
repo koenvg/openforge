@@ -203,6 +203,26 @@ describe('desktop test lifecycle', () => {
     expect(harness.operations).toEqual(['launcher-shutdown', 'daemon-cleanup', 'remove'])
   })
 
+  it('retains graceful-close fallback evidence after owned cleanup succeeds', async () => {
+    const harness = createHarness()
+    harness.launcher.shutdown.mockResolvedValueOnce({
+      processes: ['terminated', 'killed'], runtimeDirs: [], gracefulClose: 'timed-out',
+    })
+    await harness.lifecycle.start()
+    await expect(harness.lifecycle.shutdown()).resolves.toMatchObject({ gracefulClose: 'timed-out' })
+    expect(harness.writeFile).toHaveBeenCalledWith('/artifacts/run-1/children.log', 'captured child output')
+  })
+
+  it('keeps runtime evidence and finishes daemon cleanup when launcher cleanup fails', async () => {
+    const harness = createHarness({ isolatedSessionDaemon: true })
+    harness.launcher.shutdown.mockRejectedValueOnce(new Error('owned Electron process still running'))
+    await harness.lifecycle.start()
+    await expect(harness.lifecycle.shutdown()).rejects.toThrow('owned Electron process still running')
+    expect(harness.daemonOwnership.cleanup).toHaveBeenCalledOnce()
+    expect(harness.writeFile).toHaveBeenCalledWith('/artifacts/run-1/children.log', 'captured child output')
+    expect(harness.rm).not.toHaveBeenCalled()
+  })
+
   it('keeps session daemon settings out of default isolated launches', async () => {
     const harness = createHarness()
 

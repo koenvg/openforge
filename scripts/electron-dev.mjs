@@ -33,6 +33,7 @@ const VITE_HOST = '127.0.0.1'
 const VITE_PORT = DEFAULT_VITE_PORT
 export const ELECTRON_RENDERER_URL = rendererUrlForPort(VITE_PORT)
 const BACKEND_PORT_PROBE_LIMIT = 50
+const ELECTRON_CLOSE_TIMEOUT_MS = 5_000
 
 function logStep(message) {
   console.log(`[electron-dev] ${message}`)
@@ -579,6 +580,21 @@ export class DevScriptCleanupAdapter {
   }
 }
 
+async function closeElectronWithDeadline(handle) {
+  let timer
+  const deadline = new Promise(resolve => {
+    timer = setTimeout(() => resolve('timed-out'), ELECTRON_CLOSE_TIMEOUT_MS)
+  })
+  try {
+    return await Promise.race([
+      Promise.resolve().then(() => handle.close()).then(() => 'closed', () => 'failed'),
+      deadline,
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export function createPlaywrightElectronLaunchAdapter(electronApi) {
   if (!electronApi?.launch) throw new Error('Playwright Electron launch API is required')
   return {
@@ -661,11 +677,17 @@ export function createElectronDevLauncher(options = {}, deps = {}) {
   const shutdown = () => {
     shutdownRequested = true
     shutdownPromise ??= (async () => {
-      if (electronHandle?.close) await electronHandle.close().catch(() => {})
-      return cleanup(childrenState, {
+      const gracefulClose = electronHandle?.close ? await closeElectronWithDeadline(electronHandle) : null
+      if (gracefulClose === 'timed-out') {
+        log(`Graceful Electron close timed out after ${ELECTRON_CLOSE_TIMEOUT_MS} ms; stopping owned processes.`)
+      } else if (gracefulClose === 'failed') {
+        log('Graceful Electron close failed; stopping owned processes.')
+      }
+      const result = await cleanup(childrenState, {
         runtimeOptions,
         ...(options.cleanupOptions ?? {}),
       })
+      return gracefulClose ? { ...result, gracefulClose } : result
     })()
     return shutdownPromise
   }

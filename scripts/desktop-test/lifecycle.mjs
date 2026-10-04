@@ -319,22 +319,26 @@ export function createDesktopTestLifecycle(options = {}, deps = {}) {
   function shutdown() {
     shutdownPromise ??= (async () => {
       if (browser) await browser.close().catch(() => {})
-      if (launcher) await launcher.shutdown().catch(() => {})
+      const cleanupErrors = []
+      const launcherCleanup = launcher ? await launcher.shutdown().catch(error => { cleanupErrors.push(error) }) : null
       if (paths && launcher) {
         await write(paths.childLogPath, launcher.output()).catch(() => {})
       }
-      let daemonCleanupError = null
       if (daemonOwnership) {
         try {
           await daemonOwnership.cleanup()
         } catch (error) {
-          daemonCleanupError = error
+          cleanupErrors.push(error)
         }
       }
-      if (policy.ownsData && runRoot && !options.retainRuntime && !daemonCleanupError) {
+      if (policy.ownsData && runRoot && !options.retainRuntime && cleanupErrors.length === 0) {
         await remove(runRoot, { recursive: true, force: true }).catch(() => {})
       }
-      if (daemonCleanupError) throw daemonCleanupError
+      if (cleanupErrors.length === 1) throw cleanupErrors[0]
+      if (cleanupErrors.length > 1) {
+        throw new AggregateError(cleanupErrors, cleanupErrors.map(error => error.message ?? String(error)).join('; '))
+      }
+      return launcherCleanup
     })()
     return shutdownPromise
   }
