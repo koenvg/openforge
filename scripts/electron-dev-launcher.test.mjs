@@ -260,6 +260,64 @@ describe('importable Electron development launcher', () => {
     expect(order).toEqual(['electron-exit', 'electron-close', 'process-cleanup'])
     expect(cleanup).toHaveBeenCalledOnce()
     expect(launcher.output()).toBe('')
+    await expect(launcher.shutdown()).resolves.toMatchObject({ gracefulClose: 'closed' })
+  })
+
+  it.each(['rejected', 'synchronous'])('still cleans owned processes when graceful close fails as %s', async failure => {
+    vi.useFakeTimers()
+    try {
+      const close = vi.fn(() => {
+        if (failure === 'synchronous') throw new Error('close failed')
+        return Promise.reject(new Error('close failed'))
+      })
+      const cleanup = vi.fn(async () => ({ processes: ['terminated'], runtimeDirs: [] }))
+      const launcher = createElectronDevLauncher({
+        runtimeOptions: runtimeOptions(),
+        electronLaunchAdapter: {
+          launch: async () => ({ process: childProcessMock(), close, waitForExit: async () => {} }),
+        },
+      }, launcherDependencies({ spawnCommand: vi.fn(() => childProcessMock()), cleanupDevProcesses: cleanup }))
+      await launcher.start()
+      await expect(launcher.shutdown()).resolves.toMatchObject({ gracefulClose: 'failed' })
+      expect(cleanup).toHaveBeenCalledOnce()
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('falls back to owned-process cleanup when graceful Electron close never settles', async () => {
+    vi.useFakeTimers()
+    try {
+      const electronProcess = childProcessMock()
+      const close = vi.fn(() => new Promise(() => {}))
+      const cleanup = vi.fn(async () => ({ processes: ['terminated', 'killed'], runtimeDirs: [] }))
+      const dependencies = launcherDependencies({
+        spawnCommand: vi.fn(() => childProcessMock()),
+        cleanupDevProcesses: cleanup,
+      })
+      const launcher = createElectronDevLauncher({
+        runtimeOptions: runtimeOptions(),
+        electronLaunchAdapter: {
+          launch: async () => ({ process: electronProcess, close, waitForExit: async () => {} }),
+        },
+      }, dependencies)
+      await launcher.start()
+      const shuttingDown = launcher.shutdown()
+      expect(launcher.shutdown()).toBe(shuttingDown)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(close).toHaveBeenCalledOnce()
+      expect(cleanup).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(cleanup).toHaveBeenCalledExactlyOnceWith(launcher.children(), expect.objectContaining({ runtimeOptions: launcher.runtimeOptions }))
+      await expect(shuttingDown).resolves.toMatchObject({
+        processes: ['terminated', 'killed'], gracefulClose: 'timed-out',
+      })
+      expect(dependencies.logger).toHaveBeenCalledWith(expect.stringContaining('Graceful Electron close timed out'))
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('normalizes Playwright Electron application lifecycle and renderer access', async () => {

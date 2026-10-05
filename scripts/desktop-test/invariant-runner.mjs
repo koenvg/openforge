@@ -223,8 +223,9 @@ export async function finalizeInvariantRunReport(result, { options, context, lif
     cleanup: {
       status: cleanupFailed ? 'failed' : 'passed',
       processExitVerified: context?.policy?.ownsProcesses ? !cleanupFailed : false,
-      removedPaths: context?.policy?.ownsData && !options.retainRuntime ? [context.paths?.runRoot].filter(Boolean) : [],
+      removedPaths: context?.policy?.ownsData && !options.retainRuntime && !cleanupFailed ? [context.paths?.runRoot].filter(Boolean) : [],
       failures: result.errors.filter(error => error.phase === 'cleanup').map(error => error.message),
+      gracefulClose: result.cleanup?.gracefulClose ?? null,
     },
     artifacts: manifest,
   }
@@ -235,6 +236,7 @@ export async function finalizeInvariantRunReport(result, { options, context, lif
 
 export async function runInvariantSuite(options, dependencies = {}) {
   const createLifecycle = dependencies.createLifecycle ?? createDesktopTestLifecycle
+  const log = dependencies.log ?? console.log
   const scenarios = dependencies.scenarios ?? {}
   const createTraceController = dependencies.createTraceController ?? defaultTraceController
   const startEventRecording = dependencies.startEventRecording ?? defaultEventRecording
@@ -293,6 +295,7 @@ export async function runInvariantSuite(options, dependencies = {}) {
           dependencies,
         )
         scenarioResults.push({ name, status: 'passed', ...result })
+        log(`[invariants] Scenario ${name} passed`)
       } catch (error) {
         const details = errorDetails(error, `scenario:${name}`)
         errors.push(details)
@@ -319,16 +322,19 @@ export async function runInvariantSuite(options, dependencies = {}) {
       errors.push(errorDetails(abortController.signal.reason ?? new Error('Invariant run interrupted'), 'signal'))
     }
     try {
+      log('[invariants] Stopping event recorder')
       eventSummary = await eventRecording?.stop?.() ?? null
     } catch (error) {
       errors.push(errorDetails(error, 'event-recorder-cleanup'))
     }
     try {
+      log('[invariants] Stopping trace recording')
       await trace?.stop?.()
     } catch (error) {
       errors.push(errorDetails(error, 'trace-cleanup'))
     }
     try {
+      log('[invariants] Cleaning up owned app processes')
       cleanup = await shutdown()
     } catch (error) {
       errors.push(errorDetails(error, 'cleanup'))
@@ -348,6 +354,7 @@ export async function runInvariantSuite(options, dependencies = {}) {
     cleanup,
     context,
   }
+  log('[invariants] Saving final report')
   await finalizeReport(result, { options, context, lifecycle })
   return result
 }

@@ -261,11 +261,12 @@ describe('serial invariant orchestration', () => {
     expect(createLifecycle.mock.calls.map(([options]) => options.isolatedSessionDaemon)).toEqual([false, true])
   })
 
-  it('retains readable evidence for forced scenario and cleanup failures', async () => {
+  it('retains readable evidence for scenario failures and cleanup outcomes', async () => {
     const root = await mkdtemp(join(tmpdir(), 'openforge-invariant-failures-'))
     const runs = [
       { name: 'scenario-failure', scenarioFails: true, cleanupFails: false },
       { name: 'cleanup-failure', scenarioFails: false, cleanupFails: true },
+      { name: 'graceful-close-fallback', scenarioFails: false, cleanupFails: false, gracefulClose: 'timed-out' },
     ]
     try {
       for (const run of runs) {
@@ -292,7 +293,7 @@ describe('serial invariant orchestration', () => {
           start: vi.fn(async () => { await mkdir(artifactRoot, { recursive: true }); return context }),
           shutdown: vi.fn(async () => {
             if (run.cleanupFails) throw new Error('forced cleanup failure')
-            return { status: 'passed' }
+            return { status: 'passed', gracefulClose: run.gracefulClose ?? null }
           }),
           getPaths: () => context.paths,
         }
@@ -329,10 +330,12 @@ describe('serial invariant orchestration', () => {
           },
         })
 
-        expect(result.status).toBe('failed')
-        expect(result.errors.map(error => error.phase)).toContain(run.scenarioFails ? 'scenario:first-attachment' : 'cleanup')
+        expect(result.status).toBe(run.scenarioFails || run.cleanupFails ? 'failed' : 'passed')
+        if (run.scenarioFails || run.cleanupFails) {
+          expect(result.errors.map(error => error.phase)).toContain(run.scenarioFails ? 'scenario:first-attachment' : 'cleanup')
+        }
         const report = JSON.parse(await readFile(join(artifactRoot, 'report.json'), 'utf8'))
-        expect(report.status).toBe('failed')
+        expect(report.status).toBe(run.scenarioFails || run.cleanupFails ? 'failed' : 'passed')
         expect(report.artifacts.traces).toHaveLength(1)
         expect(report.artifacts.screenshots).toHaveLength(1)
         expect(report.artifacts.childLogs).toHaveLength(1)
@@ -342,6 +345,8 @@ describe('serial invariant orchestration', () => {
         expect(report.processIdentities.length).toBeGreaterThan(0)
         expect(report.cleanup.status).toBe(run.cleanupFails ? 'failed' : 'passed')
         expect(report.cleanup.failures).toEqual(run.cleanupFails ? ['forced cleanup failure'] : [])
+        expect(report.cleanup.gracefulClose).toBe(run.gracefulClose ?? null)
+        expect(report.cleanup.removedPaths).toEqual(run.cleanupFails ? [] : [`/tmp/${run.name}`])
       }
     } finally {
       await rm(root, { recursive: true, force: true })
