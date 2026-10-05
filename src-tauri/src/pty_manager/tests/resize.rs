@@ -123,9 +123,10 @@ async fn concurrent_desktop_and_attachment_resizes_keep_pty_and_model_dimensions
 
 #[tokio::test(flavor = "current_thread")]
 async fn queued_attachment_resize_stays_with_its_resolved_instance() {
-    let manager = PtyManager::new();
+    let mut manager = PtyManager::new();
+    let mut fixture = test_fixture::NativePtyFixtureCleanup::new(&mut manager);
     let key = "resize-instance";
-    let original = modeled_agent_session(key, 1);
+    let original = modeled_agent_session(&mut fixture, key, 1);
     let original_master = Arc::clone(&original.master);
     let original_model = Arc::clone(original.terminal_model.as_ref().expect("original model"));
     manager
@@ -159,7 +160,7 @@ async fn queued_attachment_resize_stays_with_its_resolved_instance() {
         .expect("gate observer")
         .expect("instance resolved before PTY I/O");
 
-    let replacement = modeled_agent_session(key, 2);
+    let replacement = modeled_agent_session(&mut fixture, key, 2);
     let replacement_master = Arc::clone(&replacement.master);
     let replacement_model = Arc::clone(
         replacement
@@ -213,6 +214,7 @@ async fn queued_attachment_resize_stays_with_its_resolved_instance() {
     assert_eq!(dimensions.1, vec![b"\x1b[40;120R".to_vec()]);
     assert_eq!((dimensions.2.cols, dimensions.2.rows), (80, 24));
     assert_eq!(dimensions.3, vec![b"\x1b[24;80R".to_vec()]);
+    fixture.finish().expect("fixture cleanup");
 }
 
 #[cfg(unix)]
@@ -220,9 +222,10 @@ async fn queued_attachment_resize_stays_with_its_resolved_instance() {
 async fn failed_pty_resizes_propagate_without_resizing_the_model() {
     use std::os::fd::AsRawFd;
 
-    let manager = PtyManager::new();
+    let mut manager = PtyManager::new();
+    let mut fixture = test_fixture::NativePtyFixtureCleanup::new(&mut manager);
     let key = "failed-resize";
-    let session = modeled_agent_session(key, 1);
+    let session = modeled_agent_session(&mut fixture, key, 1);
     let master = Arc::clone(&session.master);
     let model = Arc::clone(session.terminal_model.as_ref().expect("model"));
     let expected_error = tokio::task::spawn_blocking(move || {
@@ -276,10 +279,15 @@ async fn failed_pty_resizes_propagate_without_resizing_the_model() {
         Err(attachment::AgentTerminalAttachmentError::ResizeFailed)
     ));
     assert_eq!(dimensions, vec![b"\x1b[24;80R".to_vec()]);
+    fixture.finish().expect("fixture cleanup");
 }
 
-fn modeled_agent_session(key: &str, instance_id: u64) -> PtySession {
-    let mut session = test_agent_pty_session(key);
+fn modeled_agent_session(
+    fixture: &mut test_fixture::NativePtyFixtureCleanup,
+    key: &str,
+    instance_id: u64,
+) -> PtySession {
+    let mut session = test_agent_pty_session(fixture, key);
     session.instance_id = instance_id;
     let (model, _feeder) = crate::terminal_model::TerminalModelSession::start(
         key.to_string(),

@@ -166,15 +166,21 @@ impl PtyManager {
             .take_managed_recoveries(session_key)
             .await;
         let mut failures = Vec::new();
-        for mut recovery in recoveries {
+        for mut cleanup in recoveries {
+            let recovery = cleanup.recovery_mut();
+            let instance_id = recovery.session.instance_id;
             if let Err(error) = self
                 .terminate_session_process(&recovery.recovery_key, &mut recovery.session)
                 .await
             {
                 failures.push(error.to_string());
+                // Dropping the unfinished guard restores this entry. The other
+                // guards also restore their entries if this operation is cancelled.
+            } else {
                 self.terminal_sessions
-                    .restore_managed_recovery(session_key, recovery)
+                    .complete_cleaning(session_key, instance_id)
                     .await;
+                cleanup.complete();
             }
         }
         if failures.is_empty() {
@@ -220,22 +226,19 @@ impl PtyManager {
                 .then(|| sessions.remove(session_key))
                 .flatten()
         };
-        let Some(mut session) = session else {
+        let Some(session) = session else {
             return Ok(());
         };
+        let mut cleanup =
+            super::RetainedCleanup::current(&self.terminal_sessions, session_key, session);
 
         warn!(
             "[terminal-model] key={} instance={} terminating PTY after authoritative model failure",
             session_key, instance_id
         );
-        if let Err(error) = self
-            .terminate_current_session_process(session_key, &mut session, true)
-            .await
-        {
-            self.retain_failed_current_cleanup(session_key, session)
-                .await;
-            return Err(error);
-        }
+        self.terminate_current_session_process(session_key, cleanup.session_mut(), true)
+            .await?;
+        cleanup.complete();
         self.clear_session_tracking(session_key, true).await;
         Ok(())
     }
@@ -316,16 +319,13 @@ impl PtyManager {
             .lock()
             .await
             .remove(session_key);
-        if let Some(mut session) = session {
+        if let Some(session) = session {
+            let mut cleanup =
+                super::RetainedCleanup::current(&self.terminal_sessions, session_key, session);
             info!("Killing PTY for session {}", session_key);
-            if let Err(error) = self
-                .terminate_current_session_process(session_key, &mut session, true)
-                .await
-            {
-                self.retain_failed_current_cleanup(session_key, session)
-                    .await;
-                return Err(error);
-            }
+            self.terminate_current_session_process(session_key, cleanup.session_mut(), true)
+                .await?;
+            cleanup.complete();
             info!("PTY for session {} killed", session_key);
         }
         self.terminate_managed_recoveries(session_key).await?;
