@@ -1,6 +1,6 @@
 # Disabled updater checkpoint
 
-KVG-5206 is an implementation checkpoint, not an enabled session-preserving updater. The owner approved landing the groundwork with update entry points disabled. The local update menu, published updates, legacy first adoption and source installation remain disabled. Ordinary Restart and Quit retain their separate policies.
+KVG-5206 is an implementation checkpoint, not an enabled session-preserving updater. The owner approved landing the groundwork with update entry points disabled. The local update menu, published updates, the live updater's legacy first adoption and session-preserving source installation remain disabled. The separate [cold source installer](cold-source-install.md) requires quitting OpenForge and native approval; it does not preserve sessions. Ordinary Restart and Quit retain their separate policies.
 
 The intended first update path is explicit local approval between compatible, daemon-aware macOS arm64 installations. A source must report an armed parent-exit guard and supply its actual data roots and authenticated daemon controller. The guard capability is not proof of the original app or Sidecar's identity or exit. Other architectures and platforms are not update acceptance targets for this checkpoint.
 
@@ -8,7 +8,7 @@ The intended first update path is explicit local approval between compatible, da
 
 KVG-5296 completed original app/Sidecar birth and exit attestation without enabling any update path. The minimum eligible source is a daemon-aware, integrity-sealed macOS arm64 build with the `original-source-v1` native startup service. An armed parent-exit guard or a reported capability alone is insufficient. KVG-5206 sources do not provide this service and are ineligible.
 
-The helper handshake is now version 3 and requires `relaunch`, `launch-gate`, `atomic-replace` and `original-source-v1`. There is no version-2 fallback. Signed grant and journal envelopes remain version 1. Source installation, legacy adoption, local initiation and publication remain disabled.
+The helper handshake is now version 3 and requires `relaunch`, `launch-gate`, `atomic-replace` and `original-source-v1`. There is no version-2 fallback. Signed grant and journal envelopes remain version 1. Session-preserving source installation, live legacy adoption, local update initiation and publication remain disabled.
 
 ### Original-source evidence
 

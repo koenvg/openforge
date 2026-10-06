@@ -21,7 +21,7 @@ function run(command, args, env) {
   })
 }
 
-it('refuses source replacement without trusted handoff support and leaves installed resources untouched', async () => {
+it('uses cold-install preflight by default and leaves installed resources untouched on unsupported platforms', async () => {
   const root = await mkdtemp(join(tmpdir(), 'openforge-install-refusal-'))
   roots.push(root)
   const home = join(root, 'home')
@@ -36,6 +36,8 @@ it('refuses source replacement without trusted handoff support and leaves instal
   await writeFile(cli, 'current-cli')
   await writeFile(join(retained, 'daemon'), 'live-daemon-asset')
   await writeFile(commandLog, '')
+  const platformFixture = join(root, 'platform.mjs')
+  await writeFile(platformFixture, `Object.defineProperty(process, 'platform', { value: 'win32' })`)
   // No fake probe may fall through to a host-wide process or filesystem command.
   for (const command of ['pnpm', 'pgrep', 'pkill', 'osascript', 'cp', 'rm', 'xattr', 'open', 'sleep']) {
     const path = join(bin, command)
@@ -45,38 +47,48 @@ it('refuses source replacement without trusted handoff support and leaves instal
   const result = await run('/bin/bash', [join(import.meta.dirname, 'install-electron-mac.sh')], {
     ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH ?? ''}`,
     OPENFORGE_ELECTRON_INSTALL_DIR: installDir, INSTALL_TEST_LOG: commandLog,
+    NODE_OPTIONS: `--import=${pathToFileURL(platformFixture).href}`,
   })
   expect(result.status).not.toBe(0)
-  expect(result.stderr).toContain('trusted-release verification')
-  expect(result.stderr).toContain('No app, CLI, or session was changed')
+  expect(result.stderr).toContain('Cold installation supports macOS arm64 only')
   expect(await readFile(commandLog, 'utf8')).toBe('')
   expect(await readFile(join(installed, 'identity'), 'utf8')).toBe('current-app')
   expect(await readFile(cli, 'utf8')).toBe('current-cli')
   expect(await readFile(join(retained, 'daemon'), 'utf8')).toBe('live-daemon-asset')
 })
 
-it('exposes an explicit cold-install command without enabling ordinary replacement', async () => {
-  const result = await run('/bin/bash', [join(import.meta.dirname, 'install-electron-mac.sh'), '--cold', '--help'], process.env)
+it('offers cold-install help by default without enabling live updates', async () => {
+  const result = await run('/bin/bash', [join(import.meta.dirname, 'install-electron-mac.sh'), '--help'], process.env)
   expect(result.status).toBe(0)
   expect(result.stdout).toContain('--skip-build')
   expect(result.stdout).toContain('local build approval')
   expect(result.stdout).toContain('running OpenForge')
+  expect(result.stdout).toContain('Live updates remain disabled')
+  expect(result.stdout).toContain('does not preserve sessions')
 })
 
-it('rejects a caller-supplied approval switch before touching an installation', async () => {
-  const result = await run('/bin/bash', [join(import.meta.dirname, 'install-electron-mac.sh'), '--cold', '--approved'], process.env)
+it('keeps --cold as an alias for default cold installation', async () => {
+  const script = join(import.meta.dirname, 'install-electron-mac.sh')
+  const result = await run('/bin/bash', [script, '--cold', '--help'], process.env)
+  const defaultResult = await run('/bin/bash', [script, '--help'], process.env)
+  expect(result.status).toBe(0)
+  expect(result.stdout).toBe(defaultResult.stdout)
+})
+
+it.each([{ flags: [] }, { flags: ['--cold'] }])('rejects caller-supplied approval with flags $flags before touching an installation', async ({ flags }) => {
+  const result = await run('/bin/bash', [join(import.meta.dirname, 'install-electron-mac.sh'), ...flags, '--approved'], process.env)
   expect(result.status).not.toBe(0)
   expect(result.stderr).toContain('Unknown cold-install option')
 })
 
 it.runIf(process.platform !== 'darwin' || process.arch !== 'arm64')('refuses cold recovery on unsupported platforms', async () => {
-  const result = await run('/bin/bash', [join(import.meta.dirname, 'install-electron-mac.sh'), '--cold', '--recover'], process.env)
+  const result = await run('/bin/bash', [join(import.meta.dirname, 'install-electron-mac.sh'), '--recover'], process.env)
   expect(result.status).not.toBe(0)
   expect(result.stderr).toContain('Cold installation supports macOS arm64 only')
 })
 
 it('refuses forged recovery state before returning a retained helper', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'openforge-cold-recovery-'))
+  const root = await mkdtemp(join(tmpdir(), 'openforge cold recovery '))
   roots.push(root)
   const profile = join(root, 'profile')
   const native = join(profile, 'updates/native')
@@ -93,7 +105,7 @@ it('refuses forged recovery state before returning a retained helper', async () 
   await expect(coldRecoveryHelper(profile, join(root, 'Open Forge.app')))
     .rejects.toThrow('Invalid cold recovery authentication')
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OPENFORGE_')))
-  const result = await run('/bin/bash', [join(import.meta.dirname, 'install-electron-mac.sh'), '--cold', '--recover', '--profile', profile, '--install-dir', installDir], {
+  const result = await run('/bin/bash', [join(import.meta.dirname, 'install-electron-mac.sh'), '--recover', '--profile', profile, '--install-dir', installDir], {
     ...env, HOME: root, NODE_OPTIONS: `--import=${pathToFileURL(platformFixture).href}`,
   })
   expect(result.status).not.toBe(0)
