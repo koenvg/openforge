@@ -1,14 +1,16 @@
 # Cold source installation on macOS
 
-Use this when replacing an installed app with a local macOS arm64 build. Ordinary source installation and live updates remain disabled. This path interrupts sessions and does not start the app or its Sidecar.
+Use this when replacing an installed app with a local macOS arm64 build. Cold installation is the default for `pnpm electron:install`; session-preserving replacement and live updates remain disabled. This path interrupts sessions and does not start the app or its Sidecar.
 
 ```sh
-pnpm electron:install --cold
+pnpm electron:install
 # Reuse a build already packaged from this checkout:
-pnpm electron:install --cold --skip-build
+pnpm electron:install --skip-build
 # Inspect the two bundle identities without approving or installing:
-pnpm electron:install --cold --inspect
+pnpm electron:install --inspect
 ```
+
+`--cold` remains an alias for existing scripts.
 
 Quit OpenForge first, including its Terminal Runtime and session hosts. The installer refuses a running source image, active daemon owner, in-progress daemon launch or another installation owner. It does not kill processes by name. Readable paths outside the destination do not exclude renamed source images: every surviving actor is checked against kernel-loaded code-signature evidence. Only the installer itself is excepted after its bytes and loaded identity match the approved helper; observations that cannot exclude the source fail closed.
 
@@ -23,7 +25,7 @@ Publication is forward-only. Once a target might have been observed or migrated 
 If installation is interrupted after preparation, quit OpenForge and resume the recorded operation:
 
 ```sh
-pnpm electron:install --cold --recover
+pnpm electron:install --recover
 ```
 
 Recovery authenticates the journal, cold authority and retained installer bytes before executing that installer. Native recovery verifies the executing helper against the authorized target again. It rechecks the recorded artifacts and completes publication without requesting a different build or restoring the old app. It also retries CLI installation from the committed app if the CLI refresh failed. CLI refresh failure is reported separately by a nonzero installer exit; it does not roll back the app.
@@ -38,7 +40,7 @@ open "/Applications/Open Forge.app"
 
 ## Validation
 
-The public test entry points are the installer command and native replacement transaction. Native tests cover separate approval, changed roots/credentials, active process/daemon ownership, startup fencing, retained legacy symlinks, forbidden live replacement/rollback, and process loss before exchange, after exchange and after archive. Command tests cover the default refusal, help, approval-switch rejection, forged recovery state and unsealed target refusal. A packaged smoke test checks ordinary boot with isolated data; actual native confirmation remains an interactive check.
+The public test entry points are the installer command and native replacement transaction. Native tests cover separate approval, changed roots/credentials, active process/daemon ownership, startup fencing, retained legacy symlinks, forbidden live replacement/rollback, and process loss before exchange, after exchange and after archive. Command tests cover default cold preflight, help, the --cold alias, approval-switch rejection and forged recovery state with paths that contain spaces. A packaged smoke test checks ordinary boot with isolated data; actual native confirmation remains an interactive check.
 
 Run the update-helper suite with `--features test-fixtures` to include subprocess interruption probes. Test-only pause files are not included in the production helper build. For affected-system commands, see [the testing guide](../CONTRIBUTING.md#testing).
 
