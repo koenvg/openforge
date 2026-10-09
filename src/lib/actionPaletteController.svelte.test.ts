@@ -23,6 +23,7 @@ describe('useActionPaletteController', () => {
       handleRunAction: vi.fn(async () => undefined),
       runActionOrThrow: vi.fn(async () => undefined),
       deleteTaskAndReload: vi.fn(async () => undefined),
+      completeTaskAndReload: vi.fn(async () => undefined),
       mergeReadyPullRequest: vi.fn(async () => undefined),
       enqueueReadyPullRequest: vi.fn(async () => undefined),
       setTaskOutOfFocus: vi.fn(async () => undefined),
@@ -53,6 +54,7 @@ describe('useActionPaletteController', () => {
       handleRunAction: vi.fn(async () => undefined),
       runActionOrThrow: vi.fn(async () => undefined),
       deleteTaskAndReload: vi.fn(async () => undefined),
+      completeTaskAndReload: vi.fn(async () => undefined),
       mergeReadyPullRequest: vi.fn(async () => undefined),
       enqueueReadyPullRequest: vi.fn(async () => undefined),
       setTaskOutOfFocus: vi.fn(async () => undefined),
@@ -79,19 +81,22 @@ describe('useActionPaletteController', () => {
       actionId: 'complete-task',
       task: selectedTask,
       message: COMPLETE_TASK_CONFIRM_MESSAGE,
+      method: 'completeTaskAndReload' as const,
     },
     {
       action: 'Delete',
       actionId: 'delete-task',
       task: { ...selectedTask, status: 'backlog' as const },
       message: DELETE_BACKLOG_TASK_CONFIRM_MESSAGE,
+      method: 'deleteTaskAndReload' as const,
     },
-  ])('uses the $action confirmation copy before running the terminal Task action from the palette', async ({ actionId, task, message }) => {
+  ])('uses the $action confirmation copy before running the terminal Task action from the palette', async ({ actionId, task, message, method }) => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const taskActions = {
       handleRunAction: vi.fn(async () => undefined),
       runActionOrThrow: vi.fn(async () => undefined),
       deleteTaskAndReload: vi.fn(async () => undefined),
+      completeTaskAndReload: vi.fn(async () => undefined),
       mergeReadyPullRequest: vi.fn(async () => undefined),
       enqueueReadyPullRequest: vi.fn(async () => undefined),
       setTaskOutOfFocus: vi.fn(async () => undefined),
@@ -110,7 +115,8 @@ describe('useActionPaletteController', () => {
     await controller.executeAction(actionId)
 
     expect(confirmSpy).toHaveBeenCalledWith(message)
-    expect(taskActions.deleteTaskAndReload).toHaveBeenCalledWith(task.id)
+    expect(taskActions[method]).toHaveBeenCalledWith(task.id)
+    expect(taskActions[method === 'completeTaskAndReload' ? 'deleteTaskAndReload' : 'completeTaskAndReload']).not.toHaveBeenCalled()
     confirmSpy.mockRestore()
   })
 
@@ -120,6 +126,7 @@ describe('useActionPaletteController', () => {
       handleRunAction: vi.fn(async () => undefined),
       runActionOrThrow: vi.fn(async () => undefined),
       deleteTaskAndReload: vi.fn(async () => undefined),
+      completeTaskAndReload: vi.fn(async () => undefined),
       mergeReadyPullRequest: vi.fn(async () => undefined),
       enqueueReadyPullRequest: vi.fn(async () => undefined),
       setTaskOutOfFocus: vi.fn(async () => undefined),
@@ -139,6 +146,7 @@ describe('useActionPaletteController', () => {
 
     expect(confirmSpy).toHaveBeenCalled()
     expect(taskActions.deleteTaskAndReload).not.toHaveBeenCalled()
+    expect(taskActions.completeTaskAndReload).not.toHaveBeenCalled()
     confirmSpy.mockRestore()
   })
 
@@ -147,6 +155,7 @@ describe('useActionPaletteController', () => {
       handleRunAction: vi.fn(async () => undefined),
       runActionOrThrow: vi.fn(async () => undefined),
       deleteTaskAndReload: vi.fn(async () => undefined),
+      completeTaskAndReload: vi.fn(async () => undefined),
       mergeReadyPullRequest: vi.fn(async () => undefined),
       enqueueReadyPullRequest: vi.fn(async () => undefined),
       setTaskOutOfFocus: vi.fn(async () => undefined),
@@ -172,6 +181,7 @@ describe('useActionPaletteController', () => {
       handleRunAction: vi.fn(async () => undefined),
       runActionOrThrow: vi.fn(async () => undefined),
       deleteTaskAndReload: vi.fn(async () => undefined),
+      completeTaskAndReload: vi.fn(async () => undefined),
       mergeReadyPullRequest: vi.fn(async () => undefined),
       enqueueReadyPullRequest: vi.fn(async () => undefined),
       setTaskOutOfFocus: vi.fn(async () => undefined),
@@ -206,8 +216,9 @@ describe('useActionPaletteController', () => {
       getSelectedTask: () => currentSelectedTask,
       taskActions: {
         handleRunAction: vi.fn(async () => undefined),
-      runActionOrThrow: vi.fn(async () => undefined),
+        runActionOrThrow: vi.fn(async () => undefined),
         deleteTaskAndReload: vi.fn(async () => undefined),
+        completeTaskAndReload: vi.fn(async () => undefined),
         mergeReadyPullRequest: vi.fn(async () => undefined),
         enqueueReadyPullRequest: vi.fn(async () => undefined),
         setTaskOutOfFocus: vi.fn(async () => undefined),

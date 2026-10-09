@@ -3,6 +3,7 @@ import { getConfig, getProjectConfig } from './ipc/config'
 import {
   maybeOpenAttentionOverviewOnSend,
   notifySessionMessageSent,
+  notifyTaskCompleted,
   registerAttentionOverviewOpener,
 } from './openAttentionOnSessionSubmit'
 
@@ -86,6 +87,26 @@ describe('open attention overview on session send', () => {
     unregister()
     open.mockClear()
     notifySessionMessageSent()
+    await Promise.resolve()
+    expect(open).not.toHaveBeenCalled()
+  })
+
+  it('opens through the registered host opener after a confirmed task complete', async () => {
+    const open = vi.fn()
+    vi.mocked(getConfig).mockResolvedValue('true')
+    const unregister = registerAttentionOverviewOpener({
+      open,
+      getProjectId: () => 'P-1',
+    })
+
+    notifyTaskCompleted()
+    await vi.waitFor(() => {
+      expect(open).toHaveBeenCalledOnce()
+    })
+
+    unregister()
+    open.mockClear()
+    notifyTaskCompleted()
     await Promise.resolve()
     expect(open).not.toHaveBeenCalled()
   })
