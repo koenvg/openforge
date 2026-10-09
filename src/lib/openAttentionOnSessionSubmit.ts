@@ -20,10 +20,18 @@ export function registerAttentionOverviewOpener(options: {
   }
 }
 
-export function notifySessionMessageSent(): void {
+function requestAttentionOverview(): void {
   const open = attentionOverviewOpener
   if (!open) return
   void maybeOpenAttentionOverviewOnSend(open, readProjectId())
+}
+
+export function notifySessionMessageSent(): void {
+  requestAttentionOverview()
+}
+
+export function notifyTaskCompleted(): void {
+  requestAttentionOverview()
 }
 
 export async function maybeOpenAttentionOverviewOnSend(

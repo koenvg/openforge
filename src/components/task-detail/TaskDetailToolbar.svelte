@@ -5,7 +5,7 @@
   import TextField from '@openforge-app/plugin-sdk/ui/TextField.svelte'
   import { onMount } from 'svelte'
   import { activeProjectId, commandHeld, completingTasks, startingTasks } from '../../lib/stores'
-  import { confirmTerminalTaskAction, runCompleteTask } from '../../lib/completeTask'
+  import { completeConfirmedTask, confirmTerminalTaskAction } from '../../lib/completeTask'
   import { getTaskActionPresentation } from '../../lib/actionPalettePresentation'
   import { getTaskTitle } from '../../lib/taskTitle'
   import { hasVsCodeProtocolHandler, openInEditor } from '../../lib/ipc'
@@ -93,7 +93,7 @@
 
   async function handleComplete(): Promise<void> {
     if (isCompleting || !confirmTerminalTaskAction('Complete')) return
-    if (await runCompleteTask(task.id)) onBack()
+    if (await completeConfirmedTask(task.id)) onBack()
   }
 
   async function handleMoreAction(value: string): Promise<void> {

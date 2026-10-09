@@ -13,6 +13,10 @@ vi.mock('./ptySubmit', () => ({
   writePtyWithSubmit: vi.fn(),
 }))
 
+vi.mock('./openAttentionOnSessionSubmit', () => ({
+  notifyTaskCompleted: vi.fn(),
+}))
+
 vi.mock('./terminalSessionService', () => ({
   agentTerminalSessions: {
     acquire: vi.fn().mockResolvedValue({ shellSessionKey: 'T-42' }),
@@ -29,6 +33,7 @@ import { deleteTask, getSessionStatus, inspectExistingBranch, startImplementatio
 import { branchDivergenceRequest } from './branchDivergenceModalStore'
 import { agentTerminalSessions } from './terminalSessionService'
 import { writePtyWithSubmit } from './ptySubmit'
+import { notifyTaskCompleted } from './openAttentionOnSessionSubmit'
 import {
   activeSessions,
   completingTasks,
@@ -384,5 +389,28 @@ describe('createTaskSessionActions', () => {
 
     expect(deleteTask).not.toHaveBeenCalled()
     expect(loadTasks).not.toHaveBeenCalled()
+  })
+
+  it('reloads tasks and opens Needs your attention after a confirmed complete', async () => {
+    const loadTasks = vi.fn(async () => undefined)
+    vi.mocked(deleteTask).mockResolvedValue(undefined)
+    const actions = createActions(loadTasks)
+
+    await actions.completeTaskAndReload(task.id)
+
+    expect(deleteTask).toHaveBeenCalledWith(task.id)
+    expect(loadTasks).toHaveBeenCalledOnce()
+    expect(notifyTaskCompleted).toHaveBeenCalledOnce()
+  })
+
+  it('does not open Needs your attention when a backlog delete succeeds', async () => {
+    const loadTasks = vi.fn(async () => undefined)
+    vi.mocked(deleteTask).mockResolvedValue(undefined)
+    const actions = createActions(loadTasks)
+
+    await actions.deleteTaskAndReload(task.id)
+
+    expect(loadTasks).toHaveBeenCalledOnce()
+    expect(notifyTaskCompleted).not.toHaveBeenCalled()
   })
 })

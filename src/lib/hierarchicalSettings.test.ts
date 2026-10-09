@@ -15,6 +15,9 @@ describe('hierarchical settings registry', () => {
     expect(byKey['open_attention_overview_on_send'].levels).toEqual(['global', 'project'])
     expect(byKey['open_attention_overview_on_send'].control).toBe('toggle')
     expect(byKey['open_attention_overview_on_send'].default).toBe('false')
+    expect(byKey['open_attention_overview_on_send'].label).toBe('Open attention overview after Enter or complete')
+    expect(byKey['open_attention_overview_on_send'].description).toContain('press Enter')
+    expect(byKey['open_attention_overview_on_send'].description).toContain('complete a task')
   })
 
   it('project raw override wins over global, absence inherits global', () => {
