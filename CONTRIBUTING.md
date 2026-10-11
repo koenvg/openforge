@@ -19,6 +19,8 @@ cd openforge
 pnpm install
 ```
 
+New BB worktrees run `.bb-env-setup.sh` to install the root project and its workspace dependencies with the frozen pnpm lockfile. Use Node.js 22.13+ and the pnpm version in `package.json`; each worktree gets its own `node_modules`.
+
 ## Managing JavaScript dependency versions
 
 Shared dependency versions belong in the pnpm catalogs in `pnpm-workspace.yaml`. Use `catalog:` in package manifests for the normal shared range. Use a named catalog such as `catalog:pinned` when a package intentionally needs an exact version instead of the default caret range.
