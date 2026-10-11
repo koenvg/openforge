@@ -94,6 +94,80 @@ const timer = setInterval(async () => {
     assert!(String::from_utf8_lossy(&output.stdout).contains("openforge task create"));
 }
 
+#[cfg(unix)]
+fn write_executable(path: &Path, contents: &str) {
+    use std::os::unix::fs::PermissionsExt;
+    fs::write(path, contents).unwrap();
+    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+/// Node before 22.7 never guesses that a `.js` file is ESM. Turning detection
+/// off on a newer Node reproduces that, so the payload must say so itself.
+#[cfg(unix)]
+#[test]
+fn installed_cli_runs_on_a_node_without_module_detection() {
+    let temp = tempfile::tempdir().unwrap();
+    let home = temp.path().join("home");
+    let config = temp.path().join("config");
+    write_cli_files(&config.join("openforge/cli")).unwrap();
+    let launcher = install_cli_launcher(&home, &config).unwrap();
+    let node = temp.path().join("node-without-detection");
+    write_executable(
+        &node,
+        "#!/bin/sh\nif node --no-experimental-detect-module -e 0 >/dev/null 2>&1; then\n  exec node --no-experimental-detect-module \"$@\"\nfi\nexec node \"$@\"\n",
+    );
+
+    let output = Command::new(&launcher)
+        .arg("--help")
+        .env("HOME", &home)
+        .env("OPENFORGE_NODE", &node)
+        .env_remove("OPENFORGE_AGENT_CONFIG")
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("openforge task complete"));
+}
+
+#[test]
+fn installed_cli_refuses_an_old_node_with_a_readable_message() {
+    let temp = tempfile::tempdir().unwrap();
+    let home = temp.path().join("home");
+    let config = temp.path().join("config");
+    write_cli_files(&config.join("openforge/cli")).unwrap();
+    let launcher = install_cli_launcher(&home, &config).unwrap();
+    let old_node = temp.path().join("old-node.cjs");
+    fs::write(
+        &old_node,
+        "Object.defineProperty(process, 'versions', { value: { ...process.versions, node: '16.20.0' } });\nObject.defineProperty(process, 'version', { value: 'v16.20.0' });\n",
+    )
+    .unwrap();
+
+    let output = Command::new(&launcher)
+        .arg("--help")
+        .env("HOME", &home)
+        .env("NODE_OPTIONS", format!("--require {}", old_node.display()))
+        .env_remove("OPENFORGE_AGENT_CONFIG")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("openforge needs Node.js 18 or newer") && stderr.contains("v16.20.0"),
+        "{stderr}"
+    );
+    assert!(
+        !stderr.contains("    at "),
+        "no stack trace expected: {stderr}"
+    );
+}
+
 #[test]
 fn failed_refresh_keeps_the_previous_cli_usable() {
     let temp = tempfile::tempdir().unwrap();

@@ -7,6 +7,38 @@ const OPENFORGE_SKILL_TEMPLATE: &str = include_str!("../openforge-cli/openforge-
 const OPENFORGE_PLUGIN_DEV_SKILL_TEMPLATE: &str =
     include_str!("../openforge-cli/openforge-plugin-dev-skill.md");
 
+// Marks the payload as ESM explicitly. Node releases without module detection
+// (before 22.7) otherwise load its `import` statements as CommonJS and crash.
+const PAYLOAD_PACKAGE_JSON: (&str, &str) = ("package.json", "{ \"type\": \"module\" }\n");
+/// Oldest Node the payload runs on: it needs the global `fetch`.
+pub(super) const MIN_NODE_MAJOR: u32 = 18;
+
+fn payload_files() -> impl Iterator<Item = (&'static str, &'static str)> {
+    OPENFORGE_CLI_RUNTIME_FILES
+        .iter()
+        .copied()
+        .chain(std::iter::once(PAYLOAD_PACKAGE_JSON))
+}
+
+/// The stable entry point. It stays CommonJS-compatible so it can check the Node
+/// version and report a load failure on any Node before importing the payload.
+fn build_entry(version: &str) -> String {
+    format!(
+        r#"#!/usr/bin/env node
+const major = Number(process.versions.node.split('.')[0]);
+if (major < {MIN_NODE_MAJOR}) {{
+  console.error('openforge needs Node.js {MIN_NODE_MAJOR} or newer, but ' + process.execPath + ' is ' + process.version + '.\nPut a newer node first on PATH, or set OPENFORGE_NODE to the path of one.');
+  process.exitCode = 1;
+}} else {{
+  import('./payloads/{version}/cli.js').catch(error => {{
+    console.error('openforge could not load its CLI files with Node.js ' + process.version + ' (' + process.execPath + '): ' + (error && error.message ? error.message : String(error)) + '\nReopen OpenForge to reinstall the CLI, or set OPENFORGE_NODE to a newer node.');
+    process.exitCode = 1;
+  }});
+}}
+"#
+    )
+}
+
 pub(super) fn cli_install_dir() -> Option<PathBuf> {
     dirs::config_dir().map(|config| config.join("openforge").join("cli"))
 }
@@ -17,7 +49,7 @@ pub(super) fn write_cli_files(install_dir: &Path) -> Result<(), Box<dyn std::err
     let payloads = install_dir.join("payloads");
     fs::create_dir_all(&payloads)?;
     let mut digest = Sha256::new();
-    for (filename, contents) in OPENFORGE_CLI_RUNTIME_FILES {
+    for (filename, contents) in payload_files() {
         digest.update((filename.len() as u64).to_le_bytes());
         digest.update(filename.as_bytes());
         digest.update((contents.len() as u64).to_le_bytes());
@@ -29,7 +61,7 @@ pub(super) fn write_cli_files(install_dir: &Path) -> Result<(), Box<dyn std::err
         let staging = tempfile::Builder::new()
             .prefix(".staging-")
             .tempdir_in(&payloads)?;
-        for (filename, contents) in OPENFORGE_CLI_RUNTIME_FILES {
+        for (filename, contents) in payload_files() {
             fs::write(staging.path().join(filename), contents)?;
         }
         // Another installer may publish this same content while we stage it.
@@ -52,10 +84,11 @@ pub(super) fn write_cli_files(install_dir: &Path) -> Result<(), Box<dyn std::err
     )?;
     // Each entry point names one immutable directory, including for lazy imports.
     // Keep old payloads and legacy root modules: running processes may still need them.
-    let entry = format!(
-        "#!/usr/bin/env node\nimport('./payloads/{version}/cli.js').catch(error => {{ console.error(error); process.exitCode = 1; }});\n"
-    );
-    atomic_write(&install_dir.join("cli.js"), entry.as_bytes(), false)?;
+    atomic_write(
+        &install_dir.join("cli.js"),
+        build_entry(&version).as_bytes(),
+        false,
+    )?;
     info!("[cli_installer] OpenForge CLI payload published: {version}");
     Ok(())
 }
@@ -134,6 +167,9 @@ mod tests {
         assert!(!tmp_dir.path().join("index.js").exists());
         assert!(!tmp_dir.path().join("tools.js").exists());
         assert!(!tmp_dir.path().join("package.json").exists());
+        assert!(std::fs::read_to_string(runtime_dir.join("package.json"))
+            .unwrap()
+            .contains("\"type\": \"module\""));
 
         let runtime_content = OPENFORGE_CLI_RUNTIME_FILES
             .iter()
@@ -156,6 +192,7 @@ mod tests {
         assert!(skill_content.contains("openforge task start --task-id"));
         assert!(skill_content.contains("openforge task active"));
         assert!(skill_content.contains("openforge task completed"));
+        assert!(skill_content.contains("openforge task complete --task-id"));
         assert!(skill_content.contains("openforge task detail"));
         assert!(skill_content.contains("openforge project labels list"));
         assert!(skill_content.contains("openforge task labels add"));
