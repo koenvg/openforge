@@ -52,6 +52,26 @@ pub struct DeleteTaskResponse {
     pub status: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct CompleteTaskRequest {
+    pub task_id: String,
+    #[serde(default)]
+    pub stop_session: bool,
+    #[serde(default)]
+    pub force: bool,
+    #[serde(default)]
+    pub keep_worktree: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CompleteTaskResponse {
+    pub task_id: String,
+    pub previous_status: String,
+    pub status: String,
+    pub worktree_path: Option<String>,
+    pub worktree_removed: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SetTaskDependenciesRequest {
     pub task_id: String,

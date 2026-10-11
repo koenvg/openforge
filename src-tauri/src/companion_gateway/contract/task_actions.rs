@@ -127,7 +127,11 @@ fn lifecycle_error_response(error: TerminalTaskCompletionError, action: &str) ->
             CompanionErrorCode::OperationInProgress,
             "Task already has a lifecycle operation in progress",
         ),
-        TerminalTaskCompletionError::InvalidState { .. } => error_response(
+        // Companion actions never opt into the CLI refusals.
+        TerminalTaskCompletionError::InvalidState { .. }
+        | TerminalTaskCompletionError::ActiveSession
+        | TerminalTaskCompletionError::LocalChanges { .. }
+        | TerminalTaskCompletionError::WorktreeStatusUnavailable { .. } => error_response(
             StatusCode::CONFLICT,
             CompanionErrorCode::InvalidTaskState,
             &format!("{action} is not available for the current Task state"),

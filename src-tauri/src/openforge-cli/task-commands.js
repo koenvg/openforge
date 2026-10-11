@@ -51,6 +51,32 @@ async function deleteTask(flags) {
   }));
 }
 
+function describeCompletion(result) {
+  if (result.previous_status === result.status) {
+    return `${result.task_id} is already completed. Nothing changed.`;
+  }
+  const summary = `Completed ${result.task_id} (${result.previous_status} -> ${result.status}).`;
+  if (!result.worktree_path) return summary;
+  return `${summary} ${result.worktree_removed ? 'Removed' : 'Kept'} worktree ${result.worktree_path}.`;
+}
+
+async function completeTask(flags) {
+  const result = await requestJson('/complete_task', {
+    method: 'POST',
+    body: JSON.stringify({
+      task_id: requireFlag(flags, 'taskId'),
+      stop_session: flags.stopSession === true,
+      force: flags.force === true,
+      keep_worktree: flags.keepWorktree === true,
+    }),
+  });
+  if (flags.json === true) {
+    printJson(result);
+  } else {
+    console.log(describeCompletion(result));
+  }
+}
+
 async function setTaskDependencies(flags) {
   const dependsOn = dependencyIdsFromFlag(flags);
   if (dependsOn.length === 0) {
@@ -184,6 +210,12 @@ export const TASK_COMMAND_SPECS = [
     flags: ['taskId'],
     usage: 'openforge task start --task-id <id>',
     handler: startTask,
+  },
+  {
+    path: ['task', 'complete'],
+    flags: ['taskId', 'stopSession', 'force', 'keepWorktree', 'json'],
+    usage: 'openforge task complete --task-id <id> [--stop-session] [--force] [--keep-worktree] [--json]',
+    handler: completeTask,
   },
   {
     path: ['task', 'delete'],

@@ -20,6 +20,13 @@ Task starting:
   task start uses persisted task and project configuration to start the native configured implementation flow.
   Existing dependency, concurrent-start, active-session, workspace, provider, and PTY safeguards remain enforced.
 
+Task completion:
+  task complete marks one started task done, the same way Complete does in the app: it stops the task's agent and shell PTYs, removes its worktree, and deletes the task branch when it is safe to.
+  task completed only lists tasks that are already done; it changes nothing.
+  task complete refuses while the agent session is running (pass --stop-session) or while the worktree has uncommitted or untracked changes (pass --force).
+  --keep-worktree marks the task done and leaves the worktree folder and branch in place. --json prints task_id, previous_status, status, worktree_path, and worktree_removed.
+  Completing a task that is already done exits 0 and changes nothing. A never-started backlog task cannot be completed; use task delete.
+
 Task listing:
   task active requires --project-id and returns all bounded non-Completed TaskDetail records plus relationship references.
   task completed requires --project-id and returns a fixed page of at most 50 TaskSummary records plus nextCursor.
@@ -57,6 +64,7 @@ Examples:
   openforge task completed --project-id P-1 --label cleanup
   openforge task detail --project-id P-1 --task-id T-123
   openforge task start --task-id T-123
+  openforge task complete --task-id T-123 --json
   openforge task delete --task-id T-123
   openforge task create --initial-prompt "Correct task prompt" --project-id P-1 --depends-on T-122 --label cleanup
   openforge task dependencies set --task-id T-999 --depends-on T-456,T-122
@@ -76,12 +84,13 @@ Environment:
 export function printCommandHelp(spec) {
   const planJsonHelp = spec.path.join(' ') === 'task plan apply' ? `\nPlan JSON shape:\n  {\n    "projectId": "P-1",\n    "tasks": [\n      { "key": "api", "prompt": "Build API", "labels": ["backend"] },\n      { "key": "ui", "prompt": "Build UI", "dependsOn": ["api", "KVG-1957"] }\n    ]\n  }\n\nPlan JSON fields:\n  projectId is optional when the OpenForge bridge can infer the project; include it when known.\n  tasks[].key is a stable local name used by other tasks in dependsOn.\n  tasks[].prompt becomes the new task prompt; initialPrompt is also accepted.\n  tasks[].labels is optional.\n  dependsOn is where current or prerequisite task IDs go; values may be local keys or existing task IDs.\n` : '';
   const startHelp = spec.path.join(' ') === 'task start' ? `\nTask starting:\n  task start uses persisted task and project configuration and starts the native configured implementation flow.\n  Existing dependency and active-session safeguards remain enforced alongside concurrent-start, workspace, provider, and PTY checks.\n` : '';
+  const completeHelp = spec.path.join(' ') === 'task complete' ? `\nTask completion:\n  Marks one started task done through the same path as Complete in the app: stops its PTYs, removes its worktree, and deletes the task branch when it is safe to.\n  Refuses while the agent session is running unless --stop-session, and refuses a worktree with uncommitted or untracked changes unless --force.\n  --keep-worktree leaves the worktree folder and branch in place. --json prints task_id, previous_status, status, worktree_path, and worktree_removed.\n  An already completed task exits 0 and changes nothing. To list completed tasks, use task completed.\n` : '';
 
   console.log(`OpenForge CLI
 
 Usage:
   ${spec.usage}
-${planJsonHelp}${startHelp}
+${planJsonHelp}${startHelp}${completeHelp}
 Task prompt semantics:
   task create sets the task's initial_prompt from --initial-prompt.
   task update --initial-prompt updates initial_prompt and prompt together only while the task has never started.

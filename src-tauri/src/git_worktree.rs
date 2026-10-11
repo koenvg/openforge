@@ -616,7 +616,9 @@ async fn current_worktree_branch(worktree_path: &Path) -> Result<String, GitWork
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-async fn worktree_has_local_changes(worktree_path: &Path) -> Result<bool, GitWorktreeError> {
+pub(crate) async fn worktree_has_local_changes(
+    worktree_path: &Path,
+) -> Result<bool, GitWorktreeError> {
     let output = git_command()
         .arg("-C")
         .arg(worktree_path)

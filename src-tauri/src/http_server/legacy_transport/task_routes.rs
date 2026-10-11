@@ -267,6 +267,97 @@ pub async fn delete_task_handler(
     }))
 }
 
+/// Completes a started Task through the same terminal completion service as the
+/// desktop Complete action, waiting for worktree removal so the caller can report it.
+pub async fn complete_task_handler(
+    State(state): State<AppState>,
+    Json(request): Json<CompleteTaskRequest>,
+) -> Result<Json<CompleteTaskResponse>, (StatusCode, String)> {
+    use crate::terminal_task_completion::{
+        TerminalTaskCompletionError, TerminalTaskCompletionOptions, TerminalTaskCompletionRequest,
+        TerminalTaskCompletionService, WorktreeCleanup,
+    };
+
+    let task_id = request.task_id;
+    let service = TerminalTaskCompletionService::new(
+        std::sync::Arc::clone(&state.db),
+        crate::terminal_task_completion::PtyTerminalTaskRuntime::new(state.pty_manager.clone()),
+        state.task_claims.clone(),
+        state.app.clone(),
+        state.app_event_bus.clone(),
+        state.app_event_tx.clone(),
+    );
+    let options = TerminalTaskCompletionOptions {
+        refuse_active_session: !request.stop_session,
+        refuse_local_changes: !request.force,
+        worktree_cleanup: if request.keep_worktree {
+            WorktreeCleanup::Keep
+        } else {
+            WorktreeCleanup::Await
+        },
+    };
+    let report = match service
+        .complete_with(TerminalTaskCompletionRequest::complete(&task_id), options)
+        .await
+    {
+        Ok(report) => report,
+        // Scripts retry: a Task that is already completed is a successful no-op.
+        Err(TerminalTaskCompletionError::InvalidState { current_state, .. })
+            if current_state == "done" =>
+        {
+            return Ok(Json(CompleteTaskResponse {
+                task_id,
+                previous_status: current_state.clone(),
+                status: current_state,
+                worktree_path: None,
+                worktree_removed: false,
+            }));
+        }
+        Err(error) => return Err(complete_task_error(&task_id, error)),
+    };
+
+    Ok(Json(CompleteTaskResponse {
+        task_id,
+        previous_status: report.previous_status,
+        status: "done".to_string(),
+        worktree_path: report
+            .worktree_path
+            .map(|path| path.to_string_lossy().into_owned()),
+        worktree_removed: report.worktree_removed,
+    }))
+}
+
+fn complete_task_error(
+    task_id: &str,
+    error: crate::terminal_task_completion::TerminalTaskCompletionError,
+) -> (StatusCode, String) {
+    use crate::terminal_task_completion::TerminalTaskCompletionError;
+
+    let message = match &error {
+        TerminalTaskCompletionError::NotFound => format!("Task {task_id} not found"),
+        TerminalTaskCompletionError::InvalidState { current_state, .. }
+            if current_state == "backlog" =>
+        {
+            format!(
+                "Task {task_id} was never started, so there is nothing to complete. Use `openforge task delete --task-id {task_id}` to remove it."
+            )
+        }
+        TerminalTaskCompletionError::ActiveSession => format!(
+            "Task {task_id} has a running agent session. Pass --stop-session to stop it and complete the task."
+        ),
+        TerminalTaskCompletionError::LocalChanges { worktree_path } => format!(
+            "Task {task_id} has uncommitted or untracked changes in {}. Commit or discard them, pass --force to delete them with the worktree, or pass --keep-worktree.",
+            worktree_path.display()
+        ),
+        TerminalTaskCompletionError::WorktreeStatusUnavailable { .. } => format!(
+            "{error}. Pass --force to complete anyway, or --keep-worktree to leave the folder in place."
+        ),
+        _ => return crate::http_server::map_terminal_task_completion_error(error),
+    };
+    let (status, _) = crate::http_server::map_terminal_task_completion_error(error);
+    (status, message)
+}
+
 pub async fn hard_delete_task_handler(
     State(state): State<AppState>,
     Json(request): Json<DeleteTaskRequest>,

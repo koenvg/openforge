@@ -28,11 +28,12 @@ pub use models::{
     TaskLabelsResponse, UpdateTaskRequest, UpdateTaskResponse,
 };
 pub use task_routes::{
-    add_task_dependency_handler, add_task_label_handler, create_task_handler, delete_task_handler,
-    get_project_attention_handler, get_project_task_labels_handler, get_projects_handler,
-    hard_delete_task_handler, link_task_chain_handler, list_task_labels_handler,
-    remove_task_dependency_handler, remove_task_label_handler, set_task_dependencies_handler,
-    start_task_handler, update_task_handler,
+    add_task_dependency_handler, add_task_label_handler, complete_task_handler,
+    create_task_handler, delete_task_handler, get_project_attention_handler,
+    get_project_task_labels_handler, get_projects_handler, hard_delete_task_handler,
+    link_task_chain_handler, list_task_labels_handler, remove_task_dependency_handler,
+    remove_task_label_handler, set_task_dependencies_handler, start_task_handler,
+    update_task_handler,
 };
 
 #[cfg(test)]
@@ -52,6 +53,7 @@ pub(super) fn router() -> Router<AppState> {
         .route("/create_task", post(create_task_handler))
         .route("/start_task", post(start_task_handler))
         .route("/update_task", post(update_task_handler))
+        .route("/complete_task", post(complete_task_handler))
         .route("/delete_task", post(delete_task_handler))
         .route("/hard_delete_task", post(hard_delete_task_handler))
         .route(
