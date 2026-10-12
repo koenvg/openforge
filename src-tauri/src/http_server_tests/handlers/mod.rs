@@ -6,6 +6,7 @@ mod plugin_fixtures;
 mod plugin_management;
 mod projects;
 mod review_threads;
+mod task_complete;
 mod task_crud;
 mod task_dependencies;
 mod task_labels;

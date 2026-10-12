@@ -179,6 +179,7 @@ openforge task detail --project-id P-1 --task-id T-123
 openforge task active --project-id P-1
 openforge task completed --project-id P-1
 openforge task completed --project-id P-1 --cursor '<nextCursor>'
+openforge task complete --task-id T-123 --json
 openforge task update --task-id T-123 --initial-prompt "Corrected backlog prompt"
 openforge task create --initial-prompt "Correct task prompt" --worktree "$PWD" --depends-on T-122 --label cleanup
 ```
@@ -190,6 +191,7 @@ The CLI talks to the local Open Forge HTTP bridge and is used by the installed p
 - `task detail` returns one task's full authoring prompt and relationship context.
 - `task active` returns every non-Completed task in the project with bounded full details and immediate relationship references.
 - `task completed` returns at most 50 summaries per page and a `nextCursor`. Pass that opaque value unchanged to `--cursor` for the next page, repeating until no next cursor remains. Optional `--search <text>` and `--label <name>` filters narrow the results; keep the same project and filters on subsequent pages because cursors are bound to both. Use `task detail` when you need a completed task's full prompt or relationships.
+- `task complete --task-id <id>` is the write side and does not take `--project-id`. It marks one started task done through the same Rust completion service as Complete in the app. That stops the task's PTYs, removes its worktree, and deletes the task branch when that is safe. It refuses while the agent session is running (`--stop-session` overrides) and refuses a worktree with uncommitted or untracked changes (`--force` overrides). `--keep-worktree` leaves the folder and branch in place, and `--json` prints `task_id`, `previous_status`, `status`, `worktree_path`, and `worktree_removed`. A repeat on a task that is already done exits 0 and changes nothing.
 
 ### Task prompts
 

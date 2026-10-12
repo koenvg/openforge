@@ -6,7 +6,7 @@ use crate::task_claims::{TaskClaim, TaskClaims, TaskOperation};
 use log::error;
 use std::fmt;
 use std::future::Future;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -111,6 +111,47 @@ pub enum TerminalTaskCompletionOutcome {
     },
 }
 
+/// What happens to the Task's worktree after the terminal write.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorktreeCleanup {
+    /// Remove the worktree and owned branch in the background (desktop behavior).
+    Background,
+    /// Remove the worktree and owned branch before returning.
+    Await,
+    /// Leave the worktree folder and its branch in place.
+    Keep,
+}
+
+/// Caller choices layered on the shared terminal action. The default is the
+/// desktop behavior: no refusals and background worktree cleanup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TerminalTaskCompletionOptions {
+    /// Refuse while the latest Agent Session is running or paused.
+    pub refuse_active_session: bool,
+    /// Refuse when worktree removal would discard uncommitted or untracked files.
+    pub refuse_local_changes: bool,
+    pub worktree_cleanup: WorktreeCleanup,
+}
+
+impl Default for TerminalTaskCompletionOptions {
+    fn default() -> Self {
+        Self {
+            refuse_active_session: false,
+            refuse_local_changes: false,
+            worktree_cleanup: WorktreeCleanup::Background,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TerminalTaskCompletionReport {
+    pub outcome: TerminalTaskCompletionOutcome,
+    pub previous_status: String,
+    pub worktree_path: Option<PathBuf>,
+    /// Whether the worktree folder is gone. Only known for `WorktreeCleanup::Await`.
+    pub worktree_removed: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TerminalTaskCompletionError {
     NotFound,
@@ -118,6 +159,14 @@ pub enum TerminalTaskCompletionError {
     InvalidState {
         requested_action: Option<TerminalTaskAction>,
         current_state: String,
+    },
+    ActiveSession,
+    LocalChanges {
+        worktree_path: PathBuf,
+    },
+    WorktreeStatusUnavailable {
+        worktree_path: PathBuf,
+        message: String,
     },
     RuntimeShutdown(String),
     Persistence(String),
@@ -143,6 +192,20 @@ impl fmt::Display for TerminalTaskCompletionError {
                     "Task state {current_state} cannot be completed from the desktop"
                 ),
             },
+            Self::ActiveSession => formatter.write_str("Task has a running agent session"),
+            Self::LocalChanges { worktree_path } => write!(
+                formatter,
+                "Task worktree {} has uncommitted or untracked changes",
+                worktree_path.display()
+            ),
+            Self::WorktreeStatusUnavailable {
+                worktree_path,
+                message,
+            } => write!(
+                formatter,
+                "Could not check Task worktree {} for local changes: {message}",
+                worktree_path.display()
+            ),
             Self::RuntimeShutdown(message) => {
                 write!(formatter, "Failed to clean up Task runtime: {message}")
             }
@@ -202,19 +265,43 @@ impl<R: TerminalTaskRuntime> TerminalTaskCompletionService<R> {
         &self,
         request: TerminalTaskCompletionRequest,
     ) -> Result<TerminalTaskCompletionOutcome, TerminalTaskCompletionError> {
+        self.complete_with(request, TerminalTaskCompletionOptions::default())
+            .await
+            .map(|report| report.outcome)
+    }
+
+    pub async fn complete_with(
+        &self,
+        request: TerminalTaskCompletionRequest,
+        options: TerminalTaskCompletionOptions,
+    ) -> Result<TerminalTaskCompletionReport, TerminalTaskCompletionError> {
         let task_id = request.task_id().to_string();
         let claim = self
             .claims
             .try_claim(&task_id, TaskOperation::TerminalCompletion)
             .ok_or(TerminalTaskCompletionError::AlreadyClaimed)?;
         let context = self.load_context(&request)?;
+        if options.refuse_active_session && self.has_active_session(&task_id)? {
+            return Err(TerminalTaskCompletionError::ActiveSession);
+        }
+        if options.refuse_local_changes && options.worktree_cleanup != WorktreeCleanup::Keep {
+            if let Some(cleanup) = &context.cleanup {
+                ensure_no_local_changes(&cleanup.worktree_path).await?;
+            }
+        }
 
         self.stop_runtime(&task_id).await?;
         self.persist_terminal_action(&task_id, &context.expected_status, context.action)?;
         self.publish_terminal_action_event(&task_id, context.project_id.as_deref());
 
-        let cleanup_scheduled = self.schedule_cleanup(&task_id, context.cleanup, claim);
-        Ok(match context.action {
+        let worktree_path = context
+            .cleanup
+            .as_ref()
+            .map(|cleanup| cleanup.worktree_path.clone());
+        let (cleanup_scheduled, worktree_removed) = self
+            .finish_cleanup(&task_id, context.cleanup, claim, options.worktree_cleanup)
+            .await;
+        let outcome = match context.action {
             TerminalTaskAction::Delete => TerminalTaskCompletionOutcome::Deleted {
                 task_id,
                 cleanup_scheduled,
@@ -223,6 +310,12 @@ impl<R: TerminalTaskRuntime> TerminalTaskCompletionService<R> {
                 task_id,
                 cleanup_scheduled,
             },
+        };
+        Ok(TerminalTaskCompletionReport {
+            outcome,
+            previous_status: context.expected_status,
+            worktree_path,
+            worktree_removed,
         })
     }
 
@@ -259,6 +352,13 @@ impl<R: TerminalTaskRuntime> TerminalTaskCompletionService<R> {
             expected_status: task.status,
             cleanup,
         })
+    }
+
+    fn has_active_session(&self, task_id: &str) -> Result<bool, TerminalTaskCompletionError> {
+        Ok(crate::db::acquire_db(&self.db)
+            .get_latest_session_for_ticket(task_id)
+            .map_err(|error| TerminalTaskCompletionError::Persistence(error.to_string()))?
+            .is_some_and(|session| matches!(session.status.as_str(), "running" | "paused")))
     }
 
     async fn stop_runtime(&self, task_id: &str) -> Result<(), TerminalTaskCompletionError> {
@@ -329,22 +429,54 @@ impl<R: TerminalTaskRuntime> TerminalTaskCompletionService<R> {
         );
     }
 
-    fn schedule_cleanup(
+    /// Returns whether cleanup was scheduled and whether the worktree folder is gone.
+    async fn finish_cleanup(
         &self,
         task_id: &str,
         cleanup: Option<TaskRuntimeCleanup>,
         claim: TaskClaim,
-    ) -> bool {
+        mode: WorktreeCleanup,
+    ) -> (bool, bool) {
         let Some(cleanup) = cleanup else {
             drop(claim);
-            return false;
+            return (false, false);
         };
-        let task_id = task_id.to_string();
-        tokio::spawn(async move {
-            let _claim = claim;
-            run_task_runtime_cleanup(&task_id, cleanup).await;
-        });
-        true
+        match mode {
+            WorktreeCleanup::Keep => {
+                drop(claim);
+                (false, false)
+            }
+            WorktreeCleanup::Await => {
+                let worktree_path = cleanup.worktree_path.clone();
+                run_task_runtime_cleanup(task_id, cleanup).await;
+                drop(claim);
+                (true, !worktree_path.exists())
+            }
+            WorktreeCleanup::Background => {
+                let task_id = task_id.to_string();
+                tokio::spawn(async move {
+                    let _claim = claim;
+                    run_task_runtime_cleanup(&task_id, cleanup).await;
+                });
+                (true, false)
+            }
+        }
+    }
+}
+
+async fn ensure_no_local_changes(worktree_path: &Path) -> Result<(), TerminalTaskCompletionError> {
+    if !worktree_path.exists() {
+        return Ok(());
+    }
+    match crate::git_worktree::worktree_has_local_changes(worktree_path).await {
+        Ok(false) => Ok(()),
+        Ok(true) => Err(TerminalTaskCompletionError::LocalChanges {
+            worktree_path: worktree_path.to_path_buf(),
+        }),
+        Err(error) => Err(TerminalTaskCompletionError::WorktreeStatusUnavailable {
+            worktree_path: worktree_path.to_path_buf(),
+            message: error.to_string(),
+        }),
     }
 }
 

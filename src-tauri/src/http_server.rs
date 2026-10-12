@@ -80,9 +80,12 @@ pub(crate) fn map_terminal_task_completion_error(
             StatusCode::NOT_FOUND
         }
         crate::terminal_task_completion::TerminalTaskCompletionError::AlreadyClaimed
-        | crate::terminal_task_completion::TerminalTaskCompletionError::InvalidState { .. } => {
-            StatusCode::CONFLICT
-        }
+        | crate::terminal_task_completion::TerminalTaskCompletionError::InvalidState { .. }
+        | crate::terminal_task_completion::TerminalTaskCompletionError::ActiveSession
+        | crate::terminal_task_completion::TerminalTaskCompletionError::LocalChanges { .. }
+        | crate::terminal_task_completion::TerminalTaskCompletionError::WorktreeStatusUnavailable {
+            ..
+        } => StatusCode::CONFLICT,
         crate::terminal_task_completion::TerminalTaskCompletionError::RuntimeShutdown(_)
         | crate::terminal_task_completion::TerminalTaskCompletionError::Persistence(_) => {
             StatusCode::INTERNAL_SERVER_ERROR

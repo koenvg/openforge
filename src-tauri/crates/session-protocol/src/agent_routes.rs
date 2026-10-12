@@ -17,6 +17,7 @@ pub fn agent_route_allowed(method: &str, path: &str) -> bool {
             "/create_task"
                 | "/start_task"
                 | "/update_task"
+                | "/complete_task"
                 | "/delete_task"
                 | "/hard_delete_task"
                 | "/set_task_dependencies"
@@ -86,6 +87,13 @@ mod tests {
         ] {
             assert!(!agent_route_allowed(method, path), "{method} {path}");
         }
+    }
+
+    #[test]
+    fn task_agents_can_complete_a_task_only_through_the_named_post_route() {
+        assert!(agent_route_allowed("POST", "/complete_task"));
+        assert!(!scoped_agent_route_allowed("POST", "/complete_task"));
+        assert!(!agent_route_allowed("GET", "/complete_task"));
     }
 
     #[test]

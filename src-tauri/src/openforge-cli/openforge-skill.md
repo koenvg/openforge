@@ -54,6 +54,7 @@ openforge task update --task-id T-124 --initial-prompt "Corrected backlog prompt
 openforge task active --project-id P-1
 openforge task completed --project-id P-1 --label cleanup
 openforge task completed --project-id P-1 --cursor '<nextCursor>'
+openforge task complete --task-id T-123 --json
 openforge task detail --project-id P-1 --task-id T-123
 openforge task start --task-id T-123
 openforge project labels list --project-id P-1
@@ -85,6 +86,8 @@ Plan JSON shape:
 ```
 
 Use dependsOn for current or prerequisite task IDs or for local task keys from the same plan. `projectId` is optional when the OpenForge bridge can infer the project; include it when known. Do not include `worktree` in task plan JSON.
+
+`task complete` and `task completed` differ by one letter and do opposite things. `openforge task complete --task-id <id>` marks one started task done, the same way Complete does in the app: it stops the task's PTYs, removes its worktree, and deletes the task branch when that is safe. `task completed` only lists tasks that are already done. `task complete` refuses while the agent session is running unless you pass `--stop-session`, and refuses a worktree with uncommitted or untracked changes unless you pass `--force`. `--keep-worktree` marks the task done and leaves the folder in place. Completing a task that is already done exits 0 and changes nothing, so a script can retry it. A never-started backlog task cannot be completed; use `task delete`. Without `--json` it prints one line; with `--json` it prints `task_id`, `previous_status`, `status`, `worktree_path`, and `worktree_removed`.
 
 Use `task active --project-id <id>` for every non-Completed Task in a project. It returns bounded full details and immediate relationship references. Use `task completed --project-id <id>` for Completed work. It returns at most 50 summaries and a `nextCursor`; pass that opaque value back with `--cursor` to continue. Use `task detail --project-id <id> --task-id <id>` for one full authoring prompt and its relationship context. The version 1 `task list` and `task get` commands have been removed. Use `--worktree "$PWD"` with `task create` when the project can be inferred from the current worktree and no project id is known.
 
@@ -124,4 +127,5 @@ openforge review thread status --thread-id RT-7 --status resolved
 - Use `task delete` only when the user explicitly wants an OpenForge task removed; it returns JSON status output from the backend deletion bridge.
 - Use dependencies to record prerequisite ordering. `task start` enforces that every dependency is done before launching the configured implementation flow.
 - Use labels to record task categories or triage context when useful. Run `project labels list` before creating follow-up tasks when a project id is available; reuse useful existing labels and avoid noisy one-off labels.
-- The CLI prints JSON so you can pass results back into your reasoning without scraping UI text.
+- Use `task complete` only when the user wants a started task finished, for example after its PR merges.
+- The CLI prints JSON so you can pass results back into your reasoning without scraping UI text. `task complete` prints JSON only with `--json`.

@@ -10,10 +10,20 @@ pub(super) fn openforge_bin_dir(home_dir: &Path) -> PathBuf {
     home_dir.join(".openforge").join("bin")
 }
 
+/// Runs the CLI with `OPENFORGE_NODE` when set, else the first `node` on PATH.
+/// The entry script itself rejects a Node that is too old.
 fn build_cli_launcher(cli_path: &Path) -> String {
     format!(
-        "#!/bin/sh\nexec node '{}' \"$@\"\n",
-        cli_path.to_string_lossy().replace('\'', "'\"'\"'")
+        r#"#!/bin/sh
+node="${{OPENFORGE_NODE:-node}}"
+if ! command -v "$node" >/dev/null 2>&1; then
+  printf 'openforge needs Node.js %s or newer, but %s was not found.\nInstall Node.js, or set OPENFORGE_NODE to the path of a node binary.\n' {min} "$node" >&2
+  exit 127
+fi
+exec "$node" '{path}' "$@"
+"#,
+        min = super::payload::MIN_NODE_MAJOR,
+        path = cli_path.to_string_lossy().replace('\'', "'\"'\"'")
     )
 }
 
@@ -79,7 +89,61 @@ mod tests {
         assert!(content.contains("openforge/cli/cli.js"));
         let obsolete_segment = ["mcp", "server"].join("-");
         assert!(!content.contains(&obsolete_segment));
-        assert!(content.contains("exec node"));
+        assert!(content.contains("exec \"$node\""));
+        assert!(content.contains("${OPENFORGE_NODE:-node}"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn launcher_explains_a_missing_node_instead_of_a_shell_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let launcher =
+            install_cli_launcher(&tmp.path().join("home"), &tmp.path().join("config")).unwrap();
+
+        let output = std::process::Command::new(&launcher)
+            .arg("--help")
+            .env_clear()
+            .env("PATH", tmp.path())
+            .output()
+            .unwrap();
+
+        assert_eq!(output.status.code(), Some(127));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("openforge needs Node.js 18 or newer"),
+            "{stderr}"
+        );
+        assert!(stderr.contains("OPENFORGE_NODE"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn launcher_prefers_openforge_node_over_path() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let config = tmp.path().join("config");
+        let payload = openforge_cli_path(&config);
+        fs::create_dir_all(payload.parent().unwrap()).unwrap();
+        fs::write(&payload, "echo pinned\n").unwrap();
+        let pinned = tmp.path().join("pinned node");
+        fs::write(&pinned, "#!/bin/sh\nexec /bin/sh \"$@\"\n").unwrap();
+        fs::set_permissions(&pinned, fs::Permissions::from_mode(0o755)).unwrap();
+        let launcher = install_cli_launcher(&tmp.path().join("home"), &config).unwrap();
+
+        let output = std::process::Command::new(&launcher)
+            .env_clear()
+            .env("PATH", "/nonexistent")
+            .env("OPENFORGE_NODE", &pinned)
+            .output()
+            .unwrap();
+
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "pinned\n");
     }
 
     #[cfg(unix)]
