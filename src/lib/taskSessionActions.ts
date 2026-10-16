@@ -1,5 +1,5 @@
 import { get } from 'svelte/store'
-import { runCompleteTask } from './completeTask'
+import { completeConfirmedTask, runCompleteTask } from './completeTask'
 import { getSessionStatus, startImplementation } from './ipc'
 import { writePtyWithSubmit } from './ptySubmit'
 import {
@@ -148,5 +148,9 @@ export function createTaskSessionActions(options: TaskSessionActionOptions) {
     if (await runCompleteTask(taskId)) await options.loadTasks()
   }
 
-  return { handleRunAction, runActionOrThrow, deleteTaskAndReload }
+  async function completeTaskAndReload(taskId: string): Promise<void> {
+    if (await completeConfirmedTask(taskId)) await options.loadTasks()
+  }
+
+  return { handleRunAction, runActionOrThrow, deleteTaskAndReload, completeTaskAndReload }
 }

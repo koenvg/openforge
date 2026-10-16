@@ -1,5 +1,6 @@
 import { get } from 'svelte/store'
 import { deleteTask } from './ipc'
+import { notifyTaskCompleted } from './openAttentionOnSessionSubmit'
 import { completingTasks, error } from './stores'
 
 // Started Tasks use "Complete" and retain a Completed Task reference, while backlog
@@ -56,4 +57,15 @@ export async function runCompleteTask(taskId: string): Promise<boolean> {
   } finally {
     setTaskCompleting(taskId, false)
   }
+}
+
+/**
+ * Complete a task the user already confirmed. A successful complete asks to open
+ * Needs your attention, using the same setting as sending a session message.
+ * Delete keeps using `runCompleteTask` and does not open that dialogue.
+ */
+export async function completeConfirmedTask(taskId: string): Promise<boolean> {
+  const completed = await runCompleteTask(taskId)
+  if (completed) notifyTaskCompleted()
+  return completed
 }

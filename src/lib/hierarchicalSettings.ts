@@ -75,8 +75,8 @@ export const HIERARCHICAL_SETTINGS: HierarchicalSettingDef[] = [
   },
   {
     key: 'open_attention_overview_on_send',
-    label: 'Open attention overview after send',
-    description: 'When you press Enter to send a message in an agent session, open the attention overview so you can move to other work.',
+    label: 'Open attention overview after Enter or complete',
+    description: 'When you press Enter in an agent session, or when you complete a task, open the attention overview so you can move to other work.',
     control: 'toggle',
     levels: ['global', 'project'],
     default: 'false',

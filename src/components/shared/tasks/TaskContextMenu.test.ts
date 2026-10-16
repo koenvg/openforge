@@ -7,6 +7,11 @@ import type { TaskDetail, BoardStatus } from '../../../lib/types'
 import { completingTasks, error } from '../../../lib/stores'
 import { activeTasks } from '../../../lib/tasksState'
 import { DELETE_BACKLOG_TASK_CONFIRM_MESSAGE } from '../../../lib/completeTask'
+import { notifyTaskCompleted } from '../../../lib/openAttentionOnSessionSubmit'
+
+vi.mock('../../../lib/openAttentionOnSessionSubmit', () => ({
+  notifyTaskCompleted: vi.fn(),
+}))
 
 vi.mock('../../../lib/ipc', () => ({
   updateTaskStatus: vi.fn().mockResolvedValue(undefined),
@@ -292,6 +297,7 @@ describe('TaskContextMenu', () => {
     expect(deleteTask).toHaveBeenCalledWith('T-1')
     expect(onDelete).toHaveBeenCalledWith('T-1')
     expect(onClose).toHaveBeenCalled()
+    expect(notifyTaskCompleted).toHaveBeenCalledOnce()
     confirmSpy.mockRestore()
   })
 
@@ -303,6 +309,21 @@ describe('TaskContextMenu', () => {
     await fireEvent.click(screen.getByText(/Complete/))
     expect(confirmSpy).toHaveBeenCalled()
     expect(deleteTask).not.toHaveBeenCalled()
+    expect(notifyTaskCompleted).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
+  })
+
+  it('does not open Needs your attention when a backlog delete is confirmed', async () => {
+    const { deleteTask } = await import('../../../lib/ipc')
+    vi.mocked(deleteTask).mockResolvedValue(undefined)
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    tasks.set([makeTask('T-1', 'backlog')])
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), onDelete: vi.fn() } })
+
+    await fireEvent.click(screen.getByText('Delete'))
+
+    expect(deleteTask).toHaveBeenCalledWith('T-1')
+    expect(notifyTaskCompleted).not.toHaveBeenCalled()
     confirmSpy.mockRestore()
   })
 

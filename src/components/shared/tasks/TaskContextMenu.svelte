@@ -3,7 +3,7 @@
   import type { BoardStatus } from '../../../lib/types'
   import { activeProjectId, completingTasks } from '../../../lib/stores'
   import { activeTasks } from '../../../lib/tasksState'
-  import { confirmTerminalTaskAction, runCompleteTask } from '../../../lib/completeTask'
+  import { completeConfirmedTask, confirmTerminalTaskAction, runCompleteTask } from '../../../lib/completeTask'
   import { enabledPluginIds } from '../../../lib/plugin/pluginStore'
   import {
     listTaskStartPrefixProvidersAcrossPlugins,
@@ -86,11 +86,15 @@
 
   async function handleComplete() {
     const id = taskId
-    if (isCompleting || !confirmTerminalTaskAction(taskStatus === 'backlog' ? 'Delete' : 'Complete')) {
+    const action = taskStatus === 'backlog' ? 'Delete' : 'Complete'
+    if (isCompleting || !confirmTerminalTaskAction(action)) {
       return
     }
     onClose()
-    if (await runCompleteTask(id)) {
+    const completed = action === 'Complete'
+      ? await completeConfirmedTask(id)
+      : await runCompleteTask(id)
+    if (completed) {
       onDelete?.(id)
     }
   }

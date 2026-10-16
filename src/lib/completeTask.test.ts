@@ -5,12 +5,18 @@ vi.mock('./ipc', () => ({
   deleteTask: vi.fn(),
 }))
 
+vi.mock('./openAttentionOnSessionSubmit', () => ({
+  notifyTaskCompleted: vi.fn(),
+}))
+
 import {
   COMPLETE_TASK_CONFIRM_MESSAGE,
   DELETE_BACKLOG_TASK_CONFIRM_MESSAGE,
+  completeConfirmedTask,
   confirmTerminalTaskAction,
   runCompleteTask,
 } from './completeTask'
+import { notifyTaskCompleted } from './openAttentionOnSessionSubmit'
 import { completingTasks, error } from './stores'
 import { deleteTask } from './ipc'
 
@@ -99,5 +105,41 @@ describe('runCompleteTask', () => {
 
     expect(get(error)).toContain('cleanup exploded')
     expect(get(completingTasks).has('T-1')).toBe(false)
+  })
+})
+
+describe('completeConfirmedTask', () => {
+  it('opens Needs your attention after a successful complete', async () => {
+    vi.mocked(deleteTask).mockResolvedValue(undefined)
+
+    await expect(completeConfirmedTask('T-1')).resolves.toBe(true)
+
+    expect(notifyTaskCompleted).toHaveBeenCalledOnce()
+  })
+
+  it('does not open Needs your attention when completion fails', async () => {
+    vi.mocked(deleteTask).mockRejectedValue(new Error('cleanup exploded'))
+
+    await expect(completeConfirmedTask('T-1')).resolves.toBe(false)
+
+    expect(notifyTaskCompleted).not.toHaveBeenCalled()
+    expect(get(error)).toContain('cleanup exploded')
+  })
+
+  it('does not open Needs your attention for a duplicate complete', async () => {
+    let resolveDelete!: () => void
+    vi.mocked(deleteTask).mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveDelete = resolve
+      })
+    )
+
+    const first = completeConfirmedTask('T-1')
+    await expect(completeConfirmedTask('T-1')).resolves.toBe(false)
+    expect(notifyTaskCompleted).not.toHaveBeenCalled()
+
+    resolveDelete()
+    await expect(first).resolves.toBe(true)
+    expect(notifyTaskCompleted).toHaveBeenCalledOnce()
   })
 })

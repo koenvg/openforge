@@ -7,6 +7,11 @@ import {
 } from './TaskDetailView.testUtils'
 import { INITIAL_TASK_RUN_APP_STATE } from './taskRunAppController'
 import type { TaskDetail } from '../../lib/types'
+import { notifyTaskCompleted } from '../../lib/openAttentionOnSessionSubmit'
+
+vi.mock('../../lib/openAttentionOnSessionSubmit', () => ({
+  notifyTaskCompleted: vi.fn(),
+}))
 
 const OUT_OF_FOCUS_CONFIG_KEY = 'low_fire_task_ids'
 
@@ -43,6 +48,7 @@ describe('TaskDetailToolbar — more actions menu', () => {
     const { getProjectConfig, setProjectConfig } = await import('../../lib/ipc')
     vi.mocked(getProjectConfig).mockResolvedValue(null)
     vi.mocked(setProjectConfig).mockClear()
+    vi.mocked(notifyTaskCompleted).mockClear()
   })
 
   it('pairs Complete with a disclosure trigger for a doing task', async () => {
@@ -129,6 +135,7 @@ describe('TaskDetailToolbar — more actions menu', () => {
     await waitFor(() => {
       expect(deleteTask).toHaveBeenCalledWith('T-42')
     })
+    expect(notifyTaskCompleted).toHaveBeenCalledOnce()
     expect(screen.queryByRole('menu')).toBeNull()
     confirmSpy.mockRestore()
   })
@@ -141,6 +148,7 @@ describe('TaskDetailToolbar — more actions menu', () => {
       await renderToolbar(doingTask)
       await fireEvent.click(screen.getByRole('button', { name: 'Complete' }))
       expect(deleteTask).not.toHaveBeenCalled()
+      expect(notifyTaskCompleted).not.toHaveBeenCalled()
     } finally {
       confirmSpy.mockRestore()
     }

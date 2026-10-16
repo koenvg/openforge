@@ -65,7 +65,7 @@ export function useActionPaletteController(options: ActionPaletteControllerOptio
         break
       case 'complete-task':
         if (task && !isTaskCompleting(task.id) && confirmTerminalTaskAction('Complete')) {
-          await options.taskActions.deleteTaskAndReload(task.id)
+          await options.taskActions.completeTaskAndReload(task.id)
         }
         break
       case 'enqueue-pr':
