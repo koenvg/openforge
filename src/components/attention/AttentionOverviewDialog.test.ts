@@ -541,6 +541,16 @@ describe('AttentionOverviewDialog — T / R toggles', () => {
     expect(screen.getByText('Unread agent output')).toBeTruthy()
     expect(screen.getByText(/No agent running\. Start when ready\./)).toBeTruthy()
   })
+  it('shows each task row its OpenForge ID so look-alike titles can be told apart', async () => {
+    const dialog = await renderLoaded()
+
+    expect(screen.getByText('t1')).toBeTruthy()
+
+    await press(dialog, 't')
+    expect(screen.getByText('t4')).toBeTruthy()
+    expect(screen.getByText('t3')).toBeTruthy()
+  })
+
   it('ages the in-flight rows off their last state change, and only those rows', async () => {
     const dialog = await renderLoaded()
 
