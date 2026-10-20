@@ -3,20 +3,27 @@
   import { activeProjectId } from '../../lib/stores'
   import { pendingComposeRequest, settleTaskCompose } from '../../lib/taskCompose'
   import type { AppTaskCreationController } from '../../lib/appTaskCreationController.svelte'
+  import type { Project } from '../../lib/types'
 
   interface Props {
     controller: AppTaskCreationController
+    projects?: readonly Pick<Project, 'id' | 'name' | 'path'>[]
     projectPath: string | null
     projectName: string | null
   }
 
-  let { controller, projectPath, projectName }: Props = $props()
+  let { controller, projects = [], projectPath, projectName }: Props = $props()
+
+  // New Task opens from anywhere, so it falls back to the first project when none is active.
+  const newTaskProjectId = $derived($activeProjectId ?? projects[0]?.id ?? null)
 </script>
 
-{#if controller.dialog && $activeProjectId}
+{#if controller.dialog && newTaskProjectId}
   <AddTaskDialog
     mode={controller.dialog.mode}
     task={controller.dialog.task}
+    {projects}
+    initialProjectId={newTaskProjectId}
     {projectPath}
     {projectName}
     onClose={controller.closeTaskDialog}
@@ -30,6 +37,8 @@
   {#key request}
     <AddTaskDialog
       mode="create"
+      {projects}
+      initialProjectId={request.request.projectId}
       {projectPath}
       {projectName}
       promptSeed={request.request.initialPrompt}

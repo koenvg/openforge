@@ -10,8 +10,7 @@ function setup() {
     getTasks: () => [backlogTask],
     loadTasks: vi.fn(async () => {}),
     publishTask: vi.fn(),
-    resetToBoard: vi.fn(),
-    navigateToTask: vi.fn(),
+    showTask: vi.fn<(task: typeof backlogTask) => void | Promise<void>>(),
     runAction: vi.fn(async () => {}),
     reportError: vi.fn(),
   }
@@ -33,8 +32,7 @@ describe('App task creation controller', () => {
     const { options, controller } = setup()
     const location = { page, selectedTask: page === 'task' ? 'existing-task' : null, filter: 'my-label' }
     const before = { ...location }
-    options.resetToBoard.mockImplementation(() => { location.page = 'board'; location.selectedTask = null; location.filter = '' })
-    options.navigateToTask.mockImplementation(() => { location.page = 'task'; location.selectedTask = 'T-1' })
+    options.showTask.mockImplementation(() => { location.page = 'task'; location.selectedTask = 'T-1'; location.filter = '' })
     controller.openNewTask()
     controller.taskCreated(backlogTask, 'backlog')
     await Promise.resolve()
@@ -42,8 +40,7 @@ describe('App task creation controller', () => {
     expect(location).toEqual(before)
     expect(options.publishTask).toHaveBeenCalledWith(backlogTask)
     expect(options.runAction).not.toHaveBeenCalled()
-    expect(options.resetToBoard).not.toHaveBeenCalled()
-    expect(options.navigateToTask).not.toHaveBeenCalled()
+    expect(options.showTask).not.toHaveBeenCalled()
   })
 
   it('keeps saved detail available when a real cache refresh omits the new task', async () => {
@@ -71,7 +68,7 @@ describe('App task creation controller', () => {
     await vi.waitFor(() => expect(options.reportError).toHaveBeenCalled())
     expect(controller.dialog).toBeNull()
     expect(options.publishTask).toHaveBeenCalledWith(backlogTask)
-    expect(options.navigateToTask).toHaveBeenCalledExactlyOnceWith('T-1')
+    expect(options.showTask).toHaveBeenCalledExactlyOnceWith(backlogTask)
     expect(options.runAction).toHaveBeenCalledTimes(1)
   })
 
@@ -81,17 +78,31 @@ describe('App task creation controller', () => {
     let finishStart!: () => void
     options.loadTasks.mockImplementation(() => new Promise(resolve => { finishRefresh = resolve }))
     options.runAction.mockImplementation(() => new Promise(resolve => { finishStart = resolve }))
-    options.navigateToTask.mockImplementation(() => {
+    options.showTask.mockImplementation(() => {
       expect(options.publishTask).toHaveBeenCalledWith(backlogTask)
       expect(controller.dialog).toBeNull()
     })
     controller.openNewTask()
     controller.taskCreated(backlogTask, 'start')
-    expect(options.navigateToTask).toHaveBeenCalledExactlyOnceWith('T-1')
+    expect(options.showTask).toHaveBeenCalledExactlyOnceWith(backlogTask)
     expect(options.runAction).toHaveBeenCalledExactlyOnceWith({ taskId: 'T-1', actionPrompt: '' })
     finishRefresh()
     finishStart()
     await Promise.resolve()
     expect(controller.dialog).toBeNull()
+  })
+  it('starts a task created in another project only after switching to it', async () => {
+    const { options, controller } = setup()
+    const otherProjectTask = createTask({ id: 'T-9', projectId: 'other-project', status: 'backlog' })
+    let finishSwitch!: () => void
+    options.showTask.mockImplementation(() => new Promise<void>(resolve => { finishSwitch = resolve }))
+    controller.openNewTask()
+
+    controller.taskCreated(otherProjectTask, 'start')
+
+    expect(options.showTask).toHaveBeenCalledExactlyOnceWith(otherProjectTask)
+    expect(options.runAction).not.toHaveBeenCalled()
+    finishSwitch()
+    await vi.waitFor(() => expect(options.runAction).toHaveBeenCalledExactlyOnceWith({ taskId: 'T-9', actionPrompt: '' }))
   })
 })

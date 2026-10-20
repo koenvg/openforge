@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { clearAllCreateTaskDrafts, readCreateTaskDraft } from '../../lib/createTaskDraftStore'
+import { clearAllCreateTaskDrafts, readCreateTaskDraft, writeCreateTaskDraft } from '../../lib/createTaskDraftStore'
 import { createTaskCreationWorkflow } from './taskCreationWorkflow.svelte'
 import { LocalTaskCreationAdapter } from './testing/localTaskCreationAdapter'
 
@@ -471,7 +471,7 @@ describe('retained prompt drafts', () => {
     expect(readCreateTaskDraft('project')).toBeNull()
   })
 
-  it('does not carry a typed prompt into another project', async () => {
+  it('carries a typed prompt into the project picked mid-session', async () => {
     const adapter = new LocalTaskCreationAdapter()
     const workflow = createTaskCreationWorkflow(adapter)
     workflow.configure({ projectId: 'project' })
@@ -480,8 +480,21 @@ describe('retained prompt drafts', () => {
 
     workflow.configure({ projectId: 'other-project' })
 
-    expect(workflow.state.promptDraft).toBe('')
-    expect(readCreateTaskDraft('project')?.prompt).toBe('Work for the first project')
+    expect(workflow.state.promptDraft).toBe('Work for the first project')
+    expect(readCreateTaskDraft('other-project')?.prompt).toBe('Work for the first project')
+    expect(readCreateTaskDraft('project')).toBeNull()
+  })
+
+  it('opens the picked project\'s retained draft when nothing was typed yet', async () => {
+    const adapter = new LocalTaskCreationAdapter()
+    writeCreateTaskDraft('other-project', { prompt: 'Earlier draft', images: [] })
+    const workflow = createTaskCreationWorkflow(adapter)
+    workflow.configure({ projectId: 'project' })
+    await workflow.initialize()
+
+    workflow.configure({ projectId: 'other-project' })
+
+    expect(workflow.state.promptDraft).toBe('Earlier draft')
   })
 
   it('stops retaining when the session turns into an edit', async () => {

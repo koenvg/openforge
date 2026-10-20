@@ -247,6 +247,8 @@ describe('App startup data loading', { timeout: 15_000 }, () => {
       mockCurrentViewStore.set(initialView)
 
       render(App)
+      const stores = await import('./lib/stores')
+      await vi.waitFor(() => expect(get(stores.activeProjectId)).toBe('proj-1'))
 
       if (initialView === 'board') {
         const focusBoardModule = await import('./components/focus-board/FocusBoard.svelte')

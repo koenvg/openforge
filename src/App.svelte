@@ -125,8 +125,15 @@
   const taskCreation = useAppTaskCreationController({
     getTasks: () => $tasks,
     loadTasks: appData.loadTasks,
-    resetToBoard: () => { router.resetToBoard() },
-    navigateToTask: (taskId) => { router.navigateToTask(taskId) },
+    showTask: (task) => {
+      router.resetToBoard()
+      if (task.projectId === get(activeProjectId)) {
+        router.navigateToTask(task.id)
+        return
+      }
+      // Created through the dialog's project picker: move to that project first.
+      return navigation.openTaskInProject(task.id, task.projectId)
+    },
     publishTask: (task) => { cacheTaskRead(task.projectId, { task, related: [] }) },
     runAction: taskActions.handleRunAction,
     reportError: (value) => { console.error('[task creation] Follow-up failed:', value) },
@@ -421,6 +428,7 @@
   {#snippet dialogs()}
     <AppTaskCreationDialogs
       controller={taskCreation}
+      projects={$projects}
       projectPath={activeProject?.path ?? null}
       projectName={activeProject?.name ?? null}
     />

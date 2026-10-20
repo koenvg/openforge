@@ -5,8 +5,8 @@ interface AppTaskCreationControllerOptions {
   getTasks(): TaskDetail[]
   loadTasks(): Promise<void>
   publishTask(task: TaskDetail): void
-  resetToBoard(): void
-  navigateToTask(taskId: string): void
+  /** Opens the task, switching to its project first when it lives in another one. */
+  showTask(task: TaskDetail): void | Promise<void>
   runAction(data: RunActionData): Promise<void>
   reportError(error: unknown): void
 }
@@ -32,9 +32,11 @@ export function useAppTaskCreationController(options: AppTaskCreationControllerO
     options.publishTask(task)
     closeTaskDialog()
     if (intent === 'start') {
-      options.resetToBoard()
-      options.navigateToTask(task.id)
-      void options.runAction({ taskId: task.id, actionPrompt: '' }).catch(options.reportError)
+      const start = () => options.runAction({ taskId: task.id, actionPrompt: '' }).catch(options.reportError)
+      const shown = options.showTask(task)
+      // Same-project tasks open synchronously; another project's must finish switching first.
+      if (shown instanceof Promise) void shown.then(start, options.reportError)
+      else void start()
     }
     void options.loadTasks().catch(options.reportError)
   }

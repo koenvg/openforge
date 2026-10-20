@@ -285,7 +285,9 @@
     {"tag":"div","context":"class=\"max-h-[calc(90vh-4rem)] overflow-y-auto p-6\"","tokens":["max-h-[calc(90vh-4rem)]"],"count":1,"reason":"Feature pane, header, divider or content viewport geometry; not shared control sizing."},
     {"tag":"div","context":"class=\"flex min-w-0 items-center gap-3\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
     {"tag":"Button","context":"class=\"min-w-36\"","tokens":["min-w-36"],"count":1,"reason":"Feature-specific control/content width within this row; height and corners remain token-owned."},
-    {"tag":"style","context":".create-task-main","tokens":["min-width: 0"],"count":1,"reason":"Let the two-column create-task layout's prompt column shrink instead of overflowing the dialog."}
+    {"tag":"style","context":".create-task-main","tokens":["min-width: 0"],"count":1,"reason":"Let the two-column create-task layout's prompt column shrink instead of overflowing the dialog."},
+    {"tag":"div","context":"class=\"flex min-w-0 items-center gap-2\"","tokens":["min-w-0"],"count":1,"reason":"Let this flex/grid child shrink and scroll rather than overflow its feature pane."},
+    {"tag":"div","context":"class=\"w-56 min-w-0\"","tokens":["w-56","min-w-0"],"count":1,"reason":"Reserve the header's project picker column without sizing the shared control."}
   ],
   "src/components/attention/AttentionOverviewDialog.svelte": [
     {"tag":"Modal","context":"boxClass=\"h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)]!\"","tokens":["h-[calc(100vh-2rem)]","max-h-[calc(100vh-2rem)]!"],"count":1,"reason":"Feature-owned overlay/list viewport bounds; the SDK owns control and overlay corners."},

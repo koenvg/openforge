@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron'
 import type { WebContents } from 'electron'
+import { forwardTaskBrowserAppShortcuts } from './taskBrowserAppShortcuts.js'
 import { configureTaskBrowserDevToolsInteractions } from './taskBrowserDevTools.js'
 import {
   DENY_TASK_BROWSER_PERMISSIONS,
@@ -60,6 +61,7 @@ export class TaskBrowserSecurityPolicy {
       getOwnerWindow: () => ownerWindow ?? this.callbacks.getAttachedWindow(),
       cancelVisibleRegionSelection: this.callbacks.cancelVisibleRegionSelection,
     })
+    forwardTaskBrowserAppShortcuts(contents, () => this.callbacks.getAttachedWindow())
     contents.on('will-navigate', (event, url) => {
       if (!allowedTopLevelUrl(url)) {
         event.preventDefault()

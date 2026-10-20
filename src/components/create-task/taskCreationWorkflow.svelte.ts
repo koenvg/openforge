@@ -54,8 +54,10 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
   let initializationRun = 0
   let savedCreation: TaskDetail | null = null
   let retentionProjectId: string | null = null
+  let initialized = false
 
   function configure(input: TaskCreationContext) {
+    const previousProjectId = context.projectId
     context = { ...input, mode: input.mode ?? 'create' }
     const editTask = context.mode === 'edit' ? context.task : null
     // Raw task prompts include image definitions: replacing only an image is a reseed too.
@@ -69,6 +71,9 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
       state.promptRevision++
     }
     syncRetentionTarget()
+    // Switching projects mid-session keeps what the user typed and reloads the
+    // project-owned parts: provider and worktree defaults, and the branch list.
+    if (initialized && context.projectId !== previousProjectId) void initializeDialog({ keepUserFields: true })
     if (context.titleSeed === lastTitleSeed && context.sourceTicketUrlSeed === lastSourceTicketSeed
       && context.worktreeSourceSeed === lastWorktreeSourceSeed && context.worktreeBranchSeed === lastWorktreeBranchSeed) return
     applySeedsToDraft()
@@ -84,9 +89,17 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
   function syncRetentionTarget() {
     const target = retentionTarget()
     if (target === retentionProjectId) return
+    const previousTarget = retentionProjectId
     retentionProjectId = target
     // A null target means the reseed branch above already owns the prompt.
-    if (target !== null) applyPrompt(readCreateTaskDraft(target))
+    if (target === null) return
+    if (previousTarget !== null && state.promptDraft.trim().length > 0) {
+      // The draft follows the project picker instead of being swapped for the target's.
+      clearCreateTaskDraft(previousTarget)
+      writeCreateTaskDraft(target, { prompt: state.promptDraft, images: attachments.getImages() })
+      return
+    }
+    applyPrompt(readCreateTaskDraft(target))
   }
 
   function applyPrompt(retained: RetainedCreateTaskDraft | null) {
@@ -127,11 +140,17 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
     state.draft.existingBranch = matchExistingBranchSeed(seed, options) ?? seed
   }
 
-  async function initializeDialog() {
+  async function initializeDialog(options: { keepUserFields?: boolean } = {}) {
+    initialized = true
     const run = ++initializationRun
     const { projectId, projectPath } = context
+    const { title, sourceTicketUrl, permissionMode, taskDisplayTitleUpdatesEnabled } = state.draft
     state.draft = createTaskDraft()
-    applySeedsToDraft()
+    if (options.keepUserFields) {
+      Object.assign(state.draft, { title, sourceTicketUrl, permissionMode })
+    } else {
+      applySeedsToDraft()
+    }
     state.taskDefaultsLoading = context.mode === 'create'
     state.worktreeAllowed = true
     state.taskDefaultsError = null
@@ -149,7 +168,7 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
       const defaults = await adapter.loadTaskLevelDefaults(projectId)
       if (run !== initializationRun) return
       Object.assign(state.draft, {
-        taskDisplayTitleUpdatesEnabled: defaults.taskDisplayTitleUpdatesEnabled,
+        taskDisplayTitleUpdatesEnabled: options.keepUserFields ? taskDisplayTitleUpdatesEnabled : defaults.taskDisplayTitleUpdatesEnabled,
         aiProvider: defaults.aiProvider,
         useWorktree: defaults.useWorktrees,
       })
@@ -279,7 +298,7 @@ export function createTaskCreationWorkflow(adapter: TaskCreationAdapter) {
   }
 
   return {
-    state, attachments: attachments.controls, configure, initialize: initializeDialog, submit, setPrompt, discardDraft,
+    state, attachments: attachments.controls, configure, initialize: () => initializeDialog(), submit, setPrompt, discardDraft,
     dispose() { initializationRun++; branchLoadRun++; attachments.dispose() },
   }
 }

@@ -102,6 +102,10 @@ export const electronFakes = (() => {
     emitDevToolsEvents = true
     inspectElementCalls: Array<{ x: number; y: number }> = []
     devToolsInputEvents: unknown[] = []
+    inputEvents: unknown[] = []
+    focusCalls = 0
+    sendInputEvent(input: unknown): void { this.inputEvents.push(input) }
+    focus(): void { this.focusCalls += 1 }
     readonly devToolsWebContents = {
       sendInputEvent: (input: unknown) => { this.devToolsInputEvents.push(input) },
     }

@@ -6,6 +6,7 @@ import AppTaskCreationDialogs from './shell/AppTaskCreationDialogs.svelte'
 import { useAppTaskCreationController } from '../lib/appTaskCreationController.svelte'
 import { requestTaskCompose, settleTaskCompose } from '../lib/taskCompose'
 import { clearAllCreateTaskDrafts, readCreateTaskDraft, writeCreateTaskDraft } from '../lib/createTaskDraftStore'
+import { activeProjectId } from '../lib/stores'
 
 vi.mock('./plugin/InjectionPointSlot.svelte', () => ({
   default: vi.fn(() => ({ update() {}, destroy() {} })),
@@ -64,11 +65,11 @@ describe('AddTaskDialog handoff', () => {
   it.each(['start', 'backlog'] as const)('settles a composed %s before pending work and preserves newer requests', async (intent) => {
     let finish!: () => void
     const runAction = vi.fn(() => new Promise<void>(resolve => { finish = resolve }))
-    const navigateToTask = vi.fn()
+    const navigateToTask = vi.fn<(taskId: string) => void>()
     const controller = useAppTaskCreationController({
       getTasks: () => [], loadTasks: () => new Promise(() => {}),
       publishTask: vi.fn(), reportError: vi.fn(),
-      resetToBoard: vi.fn(), navigateToTask, runAction,
+      showTask: (task) => navigateToTask(task.id), runAction,
     })
     const pending = requestTaskCompose({ projectId: 'test-project-id', initialPrompt: SEED })
     const settled = vi.fn()
@@ -102,7 +103,7 @@ describe('AddTaskDialog compose over a retained draft', () => {
     const controller = useAppTaskCreationController({
       getTasks: () => [], loadTasks: async () => {},
       publishTask: vi.fn(), reportError: vi.fn(),
-      resetToBoard: vi.fn(), navigateToTask: vi.fn(), runAction: async () => {},
+      showTask: vi.fn(), runAction: async () => {},
     })
     const pending = requestTaskCompose({ projectId: 'test-project-id', initialPrompt: SEED })
     void pending.catch(() => {})
@@ -230,5 +231,47 @@ describe('AddTaskDialog seeding', () => {
       worktreeSource: 'existingBranch',
       worktreeBranch: 'origin/fix/auth',
     })
+  })
+})
+
+describe('App task creation dialogs project choice', () => {
+  const projects = [
+    { id: 'test-project-id', name: 'OpenForge', path: '/repo/openforge' },
+    { id: 'project-docs', name: 'Docs site', path: '/repo/docs' },
+  ]
+
+  function createController() {
+    return useAppTaskCreationController({
+      getTasks: () => [], loadTasks: async () => {},
+      publishTask: vi.fn(), reportError: vi.fn(),
+      showTask: vi.fn(), runAction: async () => {},
+    })
+  }
+
+  it('opens a composed request on the project it names', async () => {
+    const controller = createController()
+    const pending = requestTaskCompose({ projectId: 'project-docs', initialPrompt: SEED })
+    void pending.catch(() => {})
+    const { unmount } = render(AppTaskCreationDialogs, { props: { controller, projects, projectPath: null, projectName: null } })
+    try {
+      await waitFor(() => expect(screen.getByRole('combobox', { name: 'Project' }).textContent).toContain('Docs site'))
+      await waitFor(() => expect(listGitBranches).toHaveBeenCalledWith('/repo/docs'))
+    } finally {
+      unmount()
+      settleTaskCompose(null)
+    }
+  })
+
+  it('opens New Task on the first project when none is active', async () => {
+    activeProjectId.set(null)
+    const controller = createController()
+    const { unmount } = render(AppTaskCreationDialogs, { props: { controller, projects, projectPath: null, projectName: null } })
+    try {
+      controller.openNewTask()
+      await waitFor(() => expect(screen.getByRole('combobox', { name: 'Project' }).textContent).toContain('OpenForge'))
+    } finally {
+      unmount()
+      activeProjectId.set('test-project-id')
+    }
   })
 })
