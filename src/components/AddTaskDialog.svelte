@@ -5,25 +5,48 @@
   import { activeProjectId } from '../lib/stores'
   import Modal from '@openforge-app/plugin-sdk/ui/Modal.svelte'
   import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
+  import SearchableSelect from '@openforge-app/plugin-sdk/ui/SearchableSelect.svelte'
   import PromptInput from './prompt/PromptInput.svelte'
   import InjectionPointSlot from './plugin/InjectionPointSlot.svelte'
   import CreateTaskProperties from './create-task/CreateTaskProperties.svelte'
   import CreateTaskPromptAttachments from './create-task/CreateTaskPromptAttachments.svelte'
   import type { InjectionPointLocation } from '@openforge-app/plugin-sdk'
+  import type { Project } from '../lib/types'
 
   import { createTaskCreationWorkflow, type TaskCreationContext } from './create-task/taskCreationWorkflow.svelte'
   import { productionTaskCreationAdapter } from './create-task/productionTaskCreationAdapter'
 
   interface Props extends Omit<TaskCreationContext, 'projectId'> {
     projectName?: string | null
+    /** Projects the user can create in. When given, create mode shows a project picker. */
+    projects?: readonly Pick<Project, 'id' | 'name' | 'path'>[]
+    /** Project the picker starts on. Defaults to the active project. */
+    initialProjectId?: string | null
   }
 
   // Provider choices come from the shared settings registry so the task-level
   // control never drifts from the global/project provider options.
   const aiProviderOptions = HIERARCHICAL_SETTINGS.find((setting) => setting.key === 'ai_provider')?.options ?? []
 
-  let { mode = 'create', task = null, projectPath = null, projectName = null, promptSeed = '', sourceTicketUrlSeed = null, titleSeed = null, worktreeSourceSeed = null, worktreeBranchSeed = null, onClose, onTaskSaved, onTaskCreated }: Props = $props()
+  let { mode = 'create', task = null, projectPath = null, projectName = null, projects = [], initialProjectId = null, promptSeed = '', sourceTicketUrlSeed = null, titleSeed = null, worktreeSourceSeed = null, worktreeBranchSeed = null, onClose, onTaskSaved, onTaskCreated }: Props = $props()
   const dialogTitle = $derived(mode === 'create' ? 'Create task' : 'Edit task')
+
+  let selectedProjectId = $state<string | null>(untrack(() => initialProjectId ?? $activeProjectId))
+  const selectedProject = $derived(projects.find((project) => project.id === selectedProjectId) ?? null)
+  const showProjectPicker = $derived(mode === 'create' && projects.length > 0)
+  const projectOptions = $derived(projects.map((project) => ({ value: project.id, label: project.name })))
+  let projectPickerElement = $state<HTMLElement | null>(null)
+
+  /** ⌘⌥P, or ⌘⌃⌥P. Matched by physical key because ⌥ turns P into π on macOS. */
+  function isProjectPickerShortcut(event: KeyboardEvent): boolean {
+    return event.code === 'KeyP' && event.metaKey && event.altKey && !event.shiftKey
+  }
+
+  function handleDialogKeydown(event: KeyboardEvent): boolean {
+    if (!showProjectPicker || !isProjectPickerShortcut(event)) return false
+    projectPickerElement?.querySelector<HTMLElement>('[role="combobox"]')?.click()
+    return true
+  }
 
   const workflow = createTaskCreationWorkflow(productionTaskCreationAdapter)
   const view = workflow.state
@@ -35,7 +58,7 @@
   const injectionProvider = $derived(mode === 'create' ? view.draft.aiProvider : (task?.agent ?? null))
 
   function workflowInput() {
-    return { projectId: $activeProjectId, mode, task, projectPath, promptSeed, sourceTicketUrlSeed, titleSeed,
+    return { projectId: selectedProjectId, mode, task, projectPath: selectedProject?.path ?? projectPath, promptSeed, sourceTicketUrlSeed, titleSeed,
       worktreeSourceSeed, worktreeBranchSeed, onClose, onTaskSaved, onTaskCreated }
   }
   untrack(() => workflow.configure(workflowInput()))
@@ -80,11 +103,26 @@
   dismissOnBackdrop={mode !== 'create' || !view.promptReady}
   initialFocus="textarea"
   ariaLabel={dialogTitle}
+  onKeydown={handleDialogKeydown}
 >
   {#snippet header()}
     <div class="flex min-w-0 flex-1 items-center justify-between gap-4 pr-3">
       <h2 class="m-0 text-2xl font-semibold tracking-[-0.02em] text-[var(--of-text)]">{dialogTitle}</h2>
-      {#if mode === 'create'}
+      {#if showProjectPicker}
+        <div class="flex min-w-0 items-center gap-2" bind:this={projectPickerElement}>
+          <div class="w-56 min-w-0">
+            <SearchableSelect
+              ariaLabel="Project"
+              size="sm"
+              placeholder="Choose a project"
+              options={projectOptions}
+              value={selectedProjectId ?? ''}
+              onSelect={(projectId) => { selectedProjectId = projectId }}
+            />
+          </div>
+          <kbd class="of-key-hint of-key-hint-xs shrink-0 border-[var(--of-border)] bg-[var(--of-surface)]" title="Choose project">⌘⌥P</kbd>
+        </div>
+      {:else if mode === 'create'}
         <div class="min-w-0 text-right">
           <span class="block max-w-56 truncate text-sm font-medium text-[var(--of-text)]">{projectName ?? 'Current project'}</span>
         </div>
@@ -111,7 +149,7 @@
             {#key view.promptRevision}
               <PromptInput
                 bind:this={promptEditor}
-                projectId={$activeProjectId || ''}
+                projectId={selectedProjectId || ''}
                 value={view.initialPrompt}
                 textareaId="create-task-prompt"
                 ariaLabel="What should the agent do?"
@@ -142,7 +180,7 @@
             {#snippet leading()}
               <InjectionPointSlot
                 location={injectionLocation}
-                projectId={$activeProjectId}
+                projectId={selectedProjectId}
                 taskId={mode === 'edit' && task ? task.id : null}
                 provider={injectionProvider}
                 promptText={view.promptDraft}

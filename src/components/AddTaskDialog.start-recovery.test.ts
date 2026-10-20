@@ -65,7 +65,7 @@ describe('production task creation start recovery', () => {
     const actions = createTaskActionRunner({ getActiveProject: () => project, loadTasks, logError: vi.fn() })
     const controller = useAppTaskCreationController({
       getTasks: () => [], loadTasks,
-      resetToBoard: () => {}, navigateToTask: () => {},
+      showTask: () => {},
       runAction: actions.handleRunAction,
       publishTask: task => cacheTaskRead(task.projectId, { task, related: [] }),
       reportError: vi.fn(),
@@ -94,7 +94,7 @@ describe('production task creation start recovery', () => {
     const actions = createTaskActionRunner({ getActiveProject: () => project, loadTasks, logError: vi.fn() })
     const controller = useAppTaskCreationController({
       getTasks: () => [], loadTasks,
-      resetToBoard: () => {}, navigateToTask: () => {},
+      showTask: () => {},
       runAction: actions.handleRunAction,
       publishTask: task => cacheTaskRead(task.projectId, { task, related: [] }),
       reportError: vi.fn(),
