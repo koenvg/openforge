@@ -366,7 +366,8 @@
                           {/if}
                         </span>
                         <span class="text-[11px] text-of-text/45 truncate">
-                          {TASK_STATE_COMPACT_LABELS[state] ?? state} · {it.row.item.reason}
+                          <span class="font-mono text-of-text/35">{it.row.item.task.id}</span>
+                          · {TASK_STATE_COMPACT_LABELS[state] ?? state} · {it.row.item.reason}
                         </span>
                       </div>
                       <!-- In Flight only: how long the task has been flying, in its own column
