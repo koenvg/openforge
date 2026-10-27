@@ -98,14 +98,14 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Prepare Ghostty build dependencies
-        uses: ./.github/actions/prepare-ghostty
-
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
           key: packaged-session-runtime-${{ matrix.arch }}
           cache-bin: false
+
+      - name: Prepare Ghostty build dependencies
+        uses: ./.github/actions/prepare-ghostty
 
       - run: pnpm install --frozen-lockfile
 

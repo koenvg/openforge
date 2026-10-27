@@ -404,13 +404,14 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Prepare Ghostty build dependencies
-        uses: ./.github/actions/prepare-ghostty
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: ${{ steps.backend-layout.outputs.backend-crate-root }} -> target
           cache-bin: false
+
+      - name: Prepare Ghostty build dependencies
+        uses: ./.github/actions/prepare-ghostty
 
       - name: Check Rust formatting
         id: format
@@ -566,14 +567,14 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Prepare Ghostty build dependencies
-        uses: ./.github/actions/prepare-ghostty
-
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: ${{ steps.backend-layout.outputs.backend-crate-root }} -> target
           cache-bin: false
+
+      - name: Prepare Ghostty build dependencies
+        uses: ./.github/actions/prepare-ghostty
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
