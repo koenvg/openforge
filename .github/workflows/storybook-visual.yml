@@ -41,10 +41,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
+      - uses: ./.github/actions/ca-certificates
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 22.23.4
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Build both catalogs
@@ -64,10 +65,11 @@ jobs:
         shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v6
+      - uses: ./.github/actions/ca-certificates
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 22.23.4
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Capture assigned visual cases
@@ -93,10 +95,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
+      - uses: ./.github/actions/ca-certificates
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 22.23.4
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Install Chromium for visual unit tests
@@ -128,9 +131,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
+      - uses: ./.github/actions/ca-certificates
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 22.23.4
       - uses: actions/download-artifact@v6
         continue-on-error: true
         with:

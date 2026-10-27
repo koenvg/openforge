@@ -5,7 +5,7 @@ This document covers the repository's developer workflows. Open Forge is source-
 ## Prerequisites
 
 - [Rust](https://rustup.rs/) 1.77 or newer
-- [Node.js](https://nodejs.org/) 22.13 or newer (the root `package.json` `engines.node` constraint is authoritative; PDF.js requires 22.13+)
+- [Node.js](https://nodejs.org/) 22.23.4 or newer (the root `package.json` `engines.node` constraint is authoritative). Earlier releases bundle a certificate authority list that still trusts the compromised eMudhra intermediate certificates.
 - [pnpm](https://pnpm.io/) 10 or newer
 - [Bun](https://bun.sh/) 1.3 or newer, used by the Plugin SDK release-contract test
 - macOS with Xcode Command Line Tools for Electron packaging and Metal/Whisper support
@@ -19,7 +19,7 @@ cd openforge
 pnpm install
 ```
 
-New BB worktrees run `.bb-env-setup.sh` to install the root project and its workspace dependencies with the frozen pnpm lockfile. Use Node.js 22.13+ and the pnpm version in `package.json`; each worktree gets its own `node_modules`.
+New BB worktrees run `.bb-env-setup.sh` to install the root project and its workspace dependencies with the frozen pnpm lockfile. Use Node.js 22.23.4+ and the pnpm version in `package.json`; each worktree gets its own `node_modules`.
 
 ## Managing JavaScript dependency versions
 
