@@ -54,9 +54,15 @@ catalogs:
     dompurify:
       specifier: ^3.4.15
       version: 3.4.15
+    github-slugger:
+      specifier: ^2.0.0
+      version: 2.0.0
     marked:
       specifier: ^18.0.13
       version: 18.0.13
+    mermaid:
+      specifier: ^11.17.2
+      version: 11.17.2
     semver:
       specifier: ^7.8.5
       version: 7.8.5
@@ -72,6 +78,17 @@ catalogs:
     vitest:
       specifier: ^4.1.11
       version: 4.1.11
+  pinned:
+    '@types/node':
+      specifier: 26.4.1
+      version: 26.4.1
+    svelte:
+      specifier: 5.57.0
+      version: 5.57.0
+  typescript6:
+    typescript:
+      specifier: ^6.0.3
+      version: 6.0.3
 
 patchedDependencies:
   '@git-diff-view/svelte@0.1.7':
@@ -207,8 +224,8 @@ importers:
         specifier: ^1.5.6
         version: 1.5.6
       electron:
-        specifier: ^43.7.1
-        version: 43.7.1
+        specifier: ^43.8.3
+        version: 43.8.3
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1
@@ -2800,8 +2817,8 @@ packages:
     resolution: {integrity: sha512-2QF/g9/zTaPDc3BjNcVTGoBbXBgYfMTTceLaYcFJ/W9kggFUkhxD/hMEeuLKbugyef9SqAx8cpgwlIP/jinUTA==}
     engines: {node: '>=4'}
 
-  electron@43.7.1:
-    resolution: {integrity: sha512-+637qklMfTs0gF6/W2HX9rLT/c9G9aFDeAgMeMbMEPkrIXclYqTAAWBE7owERECvcf0vwUu3Sn2e/Xdy+14vEg==}
+  electron@43.8.3:
+    resolution: {integrity: sha512-KgvSm3bHXz96hSXzqxyRjLeli80rIdszbDQFKlRSfckmGazTPCH/CxUN31Dp9c5rFKTQSNf9gPJRWl1yWNB3pA==}
     engines: {node: '>= 22.12.0'}
     hasBin: true
 
@@ -6381,7 +6398,7 @@ snapshots:
 
   dset@3.1.4: {}
 
-  electron@43.7.1:
+  electron@43.8.3:
     dependencies:
       '@electron-internal/extract-zip': 1.0.5
       '@electron/get': 5.1.0

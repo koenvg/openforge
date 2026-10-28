@@ -21,10 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: ./.github/actions/ca-certificates
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 22.23.4
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -83,10 +84,11 @@ jobs:
         shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v6
+      - uses: ./.github/actions/ca-certificates
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 22.23.4
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -126,9 +128,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: ./.github/actions/ca-certificates
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 22.23.4
       - uses: actions/download-artifact@v6
         continue-on-error: true
         with:
@@ -176,13 +179,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: ./.github/actions/ca-certificates
+
       - name: Install pnpm
         uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 22.23.4
 
       - name: Run terminal and Markdown visual conformance
         run: pnpm terminal:visual:check
@@ -212,6 +217,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: ./.github/actions/ca-certificates
+
       - name: Install pnpm
         uses: pnpm/action-setup@v6
 
@@ -221,7 +228,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 22.23.4
           cache: pnpm
 
       - name: Install dependencies
@@ -308,6 +315,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: ./.github/actions/ca-certificates
+
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -327,6 +336,15 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
+      - uses: ./.github/actions/ca-certificates
+
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 17
+          check-latest: true
 
       - name: Install Flutter
         uses: subosito/flutter-action@v2
@@ -353,10 +371,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: ./.github/actions/ca-certificates
+
       - name: Install Node
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: 24.22.1
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -384,13 +404,14 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Prepare Ghostty build dependencies
-        uses: ./.github/actions/prepare-ghostty
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: ${{ steps.backend-layout.outputs.backend-crate-root }} -> target
           cache-bin: false
+
+      - name: Prepare Ghostty build dependencies
+        uses: ./.github/actions/prepare-ghostty
 
       - name: Check Rust formatting
         id: format
@@ -479,7 +500,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 22.23.4
           cache: pnpm
 
       - name: Prepare Ghostty build dependencies
@@ -546,14 +567,14 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Prepare Ghostty build dependencies
-        uses: ./.github/actions/prepare-ghostty
-
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: ${{ steps.backend-layout.outputs.backend-crate-root }} -> target
           cache-bin: false
+
+      - name: Prepare Ghostty build dependencies
+        uses: ./.github/actions/prepare-ghostty
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
@@ -564,7 +585,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 22.23.4
           cache: pnpm
 
       - name: Install frontend dependencies

@@ -61,7 +61,7 @@ jobs:
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: 24.22.1
           cache: pnpm
 
       - name: Require native architecture and record runner evidence
@@ -98,14 +98,14 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Prepare Ghostty build dependencies
-        uses: ./.github/actions/prepare-ghostty
-
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
           key: packaged-session-runtime-${{ matrix.arch }}
           cache-bin: false
+
+      - name: Prepare Ghostty build dependencies
+        uses: ./.github/actions/prepare-ghostty
 
       - run: pnpm install --frozen-lockfile
 

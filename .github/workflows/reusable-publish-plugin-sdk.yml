@@ -34,6 +34,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: ./.github/actions/ca-certificates
+
       - name: Install pnpm
         uses: pnpm/action-setup@v6
 
@@ -43,7 +45,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: 24.22.1
           cache: pnpm
           registry-url: https://registry.npmjs.org
 

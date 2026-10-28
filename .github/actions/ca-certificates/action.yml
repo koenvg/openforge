@@ -1,0 +1,29 @@
+name: Update CA certificates
+description: Upgrade the Linux runner's ca-certificates package to a release that distrusts the compromised eMudhra intermediate certificates
+
+runs:
+  using: composite
+  steps:
+    - name: Upgrade ca-certificates
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Ubuntu 24.04 release from USN-8944-1. Other Ubuntu releases are upgraded without a version check.
+        fixed_noble='20260816ubuntu0.24.04.1'
+        codename="$(. /etc/os-release && echo "$VERSION_CODENAME")"
+        installed() { dpkg-query -W -f='${Version}' ca-certificates; }
+
+        if [[ "$codename" == noble ]] && dpkg --compare-versions "$(installed)" ge "$fixed_noble"; then
+          echo "ca-certificates $(installed) is already patched"
+          exit 0
+        fi
+
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq --only-upgrade ca-certificates
+        echo "ca-certificates is now $(installed)"
+
+        if [[ "$codename" == noble ]] && dpkg --compare-versions "$(installed)" lt "$fixed_noble"; then
+          echo "::error::ca-certificates $(installed) is older than $fixed_noble"
+          exit 1
+        fi
