@@ -1,5 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { requestTerminalTaskConfirmation } from '../../lib/terminalTaskConfirmation'
+
+vi.mock('../../lib/terminalTaskConfirmation', () => ({
+  requestTerminalTaskConfirmation: vi.fn(),
+}))
 import {
   baseTask,
   getTaskDetailViewTestDependencies,
@@ -15,7 +20,10 @@ const {
 } = getTaskDetailViewTestDependencies()
 
 describe('TaskDetailView — completion', () => {
-  beforeEach(resetTaskDetailViewTestState)
+  beforeEach(() => {
+    resetTaskDetailViewTestState()
+    vi.mocked(requestTerminalTaskConfirmation).mockReset()
+  })
 
   it('shows Start Task button for backlog tasks', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
@@ -49,7 +57,7 @@ describe('TaskDetailView — completion', () => {
   it('completes a doing Task by confirming, requesting completion, and navigating to the board', async () => {
     const { deleteTask } = await import('../../lib/ipc')
     vi.mocked(deleteTask).mockClear()
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(requestTerminalTaskConfirmation).mockResolvedValue(true)
     mockResetToBoard.mockClear()
     const doingTask: Task = { ...baseTask, status: 'doing' }
     render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
@@ -58,13 +66,12 @@ describe('TaskDetailView — completion', () => {
       expect(deleteTask).toHaveBeenCalledWith('T-42')
     })
     expect(mockResetToBoard).toHaveBeenCalled()
-    confirmSpy.mockRestore()
   })
 
   it('disables the Complete button and shows pending feedback while the task is completing', async () => {
     const { deleteTask } = await import('../../lib/ipc')
     vi.mocked(deleteTask).mockClear()
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(requestTerminalTaskConfirmation).mockResolvedValue(true)
     completingTasks.set(new Set(['T-42']))
     const doingTask: Task = { ...baseTask, status: 'doing' }
     render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
@@ -73,15 +80,14 @@ describe('TaskDetailView — completion', () => {
     expect(button.disabled).toBe(true)
 
     await fireEvent.click(button)
-    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(requestTerminalTaskConfirmation).not.toHaveBeenCalled()
     expect(deleteTask).not.toHaveBeenCalled()
-    confirmSpy.mockRestore()
   })
 
   it('does not start a second completion while the first is still pending', async () => {
     const { deleteTask } = await import('../../lib/ipc')
     vi.mocked(deleteTask).mockClear()
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(requestTerminalTaskConfirmation).mockResolvedValue(true)
     let resolveDelete!: () => void
     vi.mocked(deleteTask).mockReturnValue(
       new Promise<void>((resolve) => {
@@ -93,28 +99,27 @@ describe('TaskDetailView — completion', () => {
     render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
 
     await fireEvent.click(screen.getByRole('button', { name: /Complet/ }))
+    await vi.waitFor(() => expect(deleteTask).toHaveBeenCalledTimes(1))
     await fireEvent.click(screen.getByRole('button', { name: /Complet/ }))
 
     expect(deleteTask).toHaveBeenCalledTimes(1)
-    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    expect(requestTerminalTaskConfirmation).toHaveBeenCalledTimes(1)
     resolveDelete()
     await vi.waitFor(() => {
       expect(mockResetToBoard).toHaveBeenCalled()
     })
     vi.mocked(deleteTask).mockResolvedValue(undefined)
-    confirmSpy.mockRestore()
   })
 
   it('does not complete the task when the confirmation is cancelled', async () => {
     const { deleteTask } = await import('../../lib/ipc')
     vi.mocked(deleteTask).mockClear()
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    vi.mocked(requestTerminalTaskConfirmation).mockResolvedValue(false)
     mockResetToBoard.mockClear()
     const doingTask: Task = { ...baseTask, status: 'doing' }
     render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
     await fireEvent.click(screen.getByRole('button', { name: /Complete/ }))
     expect(deleteTask).not.toHaveBeenCalled()
     expect(mockResetToBoard).not.toHaveBeenCalled()
-    confirmSpy.mockRestore()
   })
 })

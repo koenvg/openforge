@@ -88,10 +88,13 @@
   async function handleComplete() {
     const id = taskId
     const action = taskStatus === 'backlog' ? 'Delete' : 'Complete'
-    if (isCompleting || !confirmTerminalTaskAction(action)) {
+    if (isCompleting) {
       return
     }
     onClose()
+    if (!(await confirmTerminalTaskAction(action, id))) {
+      return
+    }
     const completed = action === 'Complete'
       ? await completeConfirmedTask(id)
       : await runCompleteTask(id)

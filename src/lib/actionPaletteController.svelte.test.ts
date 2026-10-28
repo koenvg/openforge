@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { requestTerminalTaskConfirmation } from './terminalTaskConfirmation'
+
+vi.mock('./terminalTaskConfirmation', () => ({
+  requestTerminalTaskConfirmation: vi.fn(),
+}))
 import { createTask } from '../App.test-fixtures/tasks'
 
 import { useActionPaletteController } from './actionPaletteController.svelte'
-import { COMPLETE_TASK_CONFIRM_MESSAGE, DELETE_BACKLOG_TASK_CONFIRM_MESSAGE } from './completeTask'
 import { activeProjectId } from './stores'
 
 const selectedTask = createTask({ id: 'T-1', projectId: 'proj-1', status: 'doing' })
@@ -80,18 +84,16 @@ describe('useActionPaletteController', () => {
       action: 'Complete',
       actionId: 'complete-task',
       task: selectedTask,
-      message: COMPLETE_TASK_CONFIRM_MESSAGE,
       method: 'completeTaskAndReload' as const,
     },
     {
       action: 'Delete',
       actionId: 'delete-task',
       task: { ...selectedTask, status: 'backlog' as const },
-      message: DELETE_BACKLOG_TASK_CONFIRM_MESSAGE,
       method: 'deleteTaskAndReload' as const,
     },
-  ])('uses the $action confirmation copy before running the terminal Task action from the palette', async ({ actionId, task, message, method }) => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+  ])('asks to confirm $action before running the terminal Task action from the palette', async ({ action, actionId, task, method }) => {
+    vi.mocked(requestTerminalTaskConfirmation).mockResolvedValue(true)
     const taskActions = {
       handleRunAction: vi.fn(async () => undefined),
       runActionOrThrow: vi.fn(async () => undefined),
@@ -114,14 +116,13 @@ describe('useActionPaletteController', () => {
     controller.openActionPalette()
     await controller.executeAction(actionId)
 
-    expect(confirmSpy).toHaveBeenCalledWith(message)
+    expect(requestTerminalTaskConfirmation).toHaveBeenCalledWith(action, task.id)
     expect(taskActions[method]).toHaveBeenCalledWith(task.id)
     expect(taskActions[method === 'completeTaskAndReload' ? 'deleteTaskAndReload' : 'completeTaskAndReload']).not.toHaveBeenCalled()
-    confirmSpy.mockRestore()
   })
 
   it('does not complete the task when the confirmation is cancelled', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    vi.mocked(requestTerminalTaskConfirmation).mockResolvedValue(false)
     const taskActions = {
       handleRunAction: vi.fn(async () => undefined),
       runActionOrThrow: vi.fn(async () => undefined),
@@ -144,10 +145,9 @@ describe('useActionPaletteController', () => {
     controller.openActionPalette()
     await controller.executeAction('complete-task')
 
-    expect(confirmSpy).toHaveBeenCalled()
+    expect(requestTerminalTaskConfirmation).toHaveBeenCalled()
     expect(taskActions.deleteTaskAndReload).not.toHaveBeenCalled()
     expect(taskActions.completeTaskAndReload).not.toHaveBeenCalled()
-    confirmSpy.mockRestore()
   })
 
   it('delegates enqueue-pr to the task action runner with the captured task', async () => {

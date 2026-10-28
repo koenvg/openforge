@@ -92,7 +92,7 @@
   }
 
   async function handleComplete(): Promise<void> {
-    if (isCompleting || !confirmTerminalTaskAction('Complete')) return
+    if (isCompleting || !(await confirmTerminalTaskAction('Complete', task.id))) return
     if (await completeConfirmedTask(task.id)) onBack()
   }
 

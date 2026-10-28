@@ -6,11 +6,15 @@ import TaskContextMenu from './TaskContextMenu.svelte'
 import type { TaskDetail, BoardStatus } from '../../../lib/types'
 import { completingTasks, error } from '../../../lib/stores'
 import { activeTasks } from '../../../lib/tasksState'
-import { DELETE_BACKLOG_TASK_CONFIRM_MESSAGE } from '../../../lib/completeTask'
+import { requestTerminalTaskConfirmation } from '../../../lib/terminalTaskConfirmation'
 import { notifyTaskCompleted } from '../../../lib/openAttentionOnSessionSubmit'
 
 vi.mock('../../../lib/openAttentionOnSessionSubmit', () => ({
   notifyTaskCompleted: vi.fn(),
+}))
+
+vi.mock('../../../lib/terminalTaskConfirmation', () => ({
+  requestTerminalTaskConfirmation: vi.fn(),
 }))
 
 vi.mock('../../../lib/ipc', () => ({
@@ -275,15 +279,16 @@ describe('TaskContextMenu', () => {
     expect(screen.queryByText(/Complete/)).toBeNull()
   })
 
-  it('uses the Delete confirmation copy for backlog Tasks', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+  it('closes itself, then asks to confirm Delete for backlog Tasks', async () => {
+    vi.mocked(requestTerminalTaskConfirmation).mockResolvedValue(false)
+    const onClose = vi.fn()
     tasks.set([makeTask('T-1', 'backlog')])
-    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose } })
 
     await fireEvent.click(screen.getByText('Delete'))
 
-    expect(confirmSpy).toHaveBeenCalledWith(DELETE_BACKLOG_TASK_CONFIRM_MESSAGE)
-    confirmSpy.mockRestore()
+    expect(onClose).toHaveBeenCalled()
+    expect(requestTerminalTaskConfirmation).toHaveBeenCalledWith('Delete', 'T-1')
   })
 
   it.each(['doing', 'done'] as BoardStatus[])('shows Complete instead of Delete for %s tasks', status => {
@@ -296,49 +301,46 @@ describe('TaskContextMenu', () => {
 
   it('confirms, then completes the Task and calls onDelete', async () => {
     const { deleteTask } = await import('../../../lib/ipc')
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(requestTerminalTaskConfirmation).mockResolvedValue(true)
     const onDelete = vi.fn()
     const onClose = vi.fn()
     tasks.set([makeTask('T-1', 'doing')])
     render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose, onDelete } })
     await fireEvent.click(screen.getByText(/Complete/))
-    expect(confirmSpy).toHaveBeenCalled()
-    expect(deleteTask).toHaveBeenCalledWith('T-1')
+    expect(requestTerminalTaskConfirmation).toHaveBeenCalledWith('Complete', 'T-1')
+    await waitFor(() => expect(deleteTask).toHaveBeenCalledWith('T-1'))
     expect(onDelete).toHaveBeenCalledWith('T-1')
     expect(onClose).toHaveBeenCalled()
     expect(notifyTaskCompleted).toHaveBeenCalledOnce()
-    confirmSpy.mockRestore()
   })
 
   it('does not complete when Complete confirmation is cancelled', async () => {
     const { deleteTask } = await import('../../../lib/ipc')
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    vi.mocked(requestTerminalTaskConfirmation).mockResolvedValue(false)
     tasks.set([makeTask('T-1', 'doing')])
     render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
     await fireEvent.click(screen.getByText(/Complete/))
-    expect(confirmSpy).toHaveBeenCalled()
+    expect(requestTerminalTaskConfirmation).toHaveBeenCalled()
     expect(deleteTask).not.toHaveBeenCalled()
     expect(notifyTaskCompleted).not.toHaveBeenCalled()
-    confirmSpy.mockRestore()
   })
 
   it('does not open Needs your attention when a backlog delete is confirmed', async () => {
     const { deleteTask } = await import('../../../lib/ipc')
     vi.mocked(deleteTask).mockResolvedValue(undefined)
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(requestTerminalTaskConfirmation).mockResolvedValue(true)
     tasks.set([makeTask('T-1', 'backlog')])
     render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), onDelete: vi.fn() } })
 
     await fireEvent.click(screen.getByText('Delete'))
 
-    expect(deleteTask).toHaveBeenCalledWith('T-1')
+    await waitFor(() => expect(deleteTask).toHaveBeenCalledWith('T-1'))
     expect(notifyTaskCompleted).not.toHaveBeenCalled()
-    confirmSpy.mockRestore()
   })
 
   it('shows a disabled Completing state while the task is being completed', async () => {
     const { deleteTask } = await import('../../../lib/ipc')
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(requestTerminalTaskConfirmation).mockResolvedValue(true)
     tasks.set([makeTask('T-1', 'doing')])
     completingTasks.set(new Set(['T-1']))
     render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
@@ -347,14 +349,13 @@ describe('TaskContextMenu', () => {
     expect(item.disabled).toBe(true)
 
     await fireEvent.click(item)
-    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(requestTerminalTaskConfirmation).not.toHaveBeenCalled()
     expect(deleteTask).not.toHaveBeenCalled()
-    confirmSpy.mockRestore()
   })
 
   it('does not start a second completion while the first is still pending', async () => {
     const { deleteTask } = await import('../../../lib/ipc')
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(requestTerminalTaskConfirmation).mockResolvedValue(true)
     let resolveDelete!: () => void
     vi.mocked(deleteTask).mockReturnValue(
       new Promise<void>((resolve) => {
@@ -365,12 +366,12 @@ describe('TaskContextMenu', () => {
     render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
 
     await fireEvent.click(screen.getByRole('menuitem', { name: /Complet/ }))
+    await waitFor(() => expect(deleteTask).toHaveBeenCalledTimes(1))
     await fireEvent.click(screen.getByRole('menuitem', { name: /Complet/ }))
 
     expect(deleteTask).toHaveBeenCalledTimes(1)
-    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    expect(requestTerminalTaskConfirmation).toHaveBeenCalledTimes(1)
     resolveDelete()
-    confirmSpy.mockRestore()
   })
 
   it('closes menu on outside click', async () => {

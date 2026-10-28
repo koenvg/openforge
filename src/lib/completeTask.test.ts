@@ -10,8 +10,6 @@ vi.mock('./openAttentionOnSessionSubmit', () => ({
 }))
 
 import {
-  COMPLETE_TASK_CONFIRM_MESSAGE,
-  DELETE_BACKLOG_TASK_CONFIRM_MESSAGE,
   completeConfirmedTask,
   confirmTerminalTaskAction,
   runCompleteTask,
@@ -19,6 +17,7 @@ import {
 import { notifyTaskCompleted } from './openAttentionOnSessionSubmit'
 import { completingTasks, error } from './stores'
 import { deleteTask } from './ipc'
+import { resolveTerminalTaskConfirmation, terminalTaskConfirmationRequest } from './terminalTaskConfirmation'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -27,28 +26,12 @@ beforeEach(() => {
 })
 
 describe('confirmTerminalTaskAction', () => {
-  it('confirms Complete while explaining retained reference data', () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+  it.each(['Complete', 'Delete'] as const)('asks the confirmation dialog about %s for the Task', async (action) => {
+    const answer = confirmTerminalTaskAction(action, 'T-1')
 
-    expect(confirmTerminalTaskAction('Complete')).toBe(true)
-    expect(confirmSpy).toHaveBeenCalledWith(COMPLETE_TASK_CONFIRM_MESSAGE)
-    expect(COMPLETE_TASK_CONFIRM_MESSAGE).toContain('Complete this task?')
-    expect(COMPLETE_TASK_CONFIRM_MESSAGE).toContain('runtime workspace state will be removed')
-    expect(COMPLETE_TASK_CONFIRM_MESSAGE).toContain('Completed Task will remain available for reference')
-
-    confirmSpy.mockRestore()
-  })
-
-  it('confirms Delete while explaining permanent removal', () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
-
-    expect(confirmTerminalTaskAction('Delete')).toBe(true)
-    expect(confirmSpy).toHaveBeenCalledWith(DELETE_BACKLOG_TASK_CONFIRM_MESSAGE)
-    expect(DELETE_BACKLOG_TASK_CONFIRM_MESSAGE).toContain('Delete this task from the backlog?')
-    expect(DELETE_BACKLOG_TASK_CONFIRM_MESSAGE).toContain('permanently deleted')
-    expect(DELETE_BACKLOG_TASK_CONFIRM_MESSAGE).toContain('will not remain available for reference')
-
-    confirmSpy.mockRestore()
+    expect(get(terminalTaskConfirmationRequest)).toMatchObject({ action, taskId: 'T-1' })
+    resolveTerminalTaskConfirmation(true)
+    await expect(answer).resolves.toBe(true)
   })
 })
 

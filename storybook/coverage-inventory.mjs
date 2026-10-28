@@ -444,6 +444,11 @@ const inventory = {
     { source: 'src/components/shared/tasks/TaskDependencyActions.svelte', stories: ['components-task-dependency-actions--confirming'] },
     { source: 'src/components/shared/adapters/VoiceInput.svelte', stories: ['components-voice-input--model-required'] },
     { source: 'src/components/shared/tasks/TaskContextMenu.svelte', stories: ['components-task-context-menu--backlog'] },
+    { source: 'src/components/shared/tasks/TerminalTaskConfirmationDialog.svelte', stories: [
+      'components-task-completion-confirmation--nothing-lost', 'components-task-completion-confirmation--unsaved-work',
+      'components-task-completion-confirmation--uncommitted-files-and-running-agent', 'components-task-completion-confirmation--checking',
+      'components-task-completion-confirmation--check-failed', 'components-task-completion-confirmation--delete-backlog-task',
+    ] },
     { source: 'src/components/plugin/GlobalPluginDiagnostics.svelte', stories: ['components-installed-plugin-inventory--installed'] },
     { source: 'src/components/plugin/GlobalPluginLifecycleControls.svelte', stories: ['components-installed-plugin-inventory--installed'] },
     { source: 'src/components/plugin/InjectionPointSlot.svelte', stories: ['components-task-workspace-toolbar--active'] },
