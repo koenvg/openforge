@@ -40,11 +40,12 @@
   let hasStartAction = $derived(taskStatus === 'backlog' && Boolean(onStart))
   let hasEditAction = $derived(taskStatus === 'backlog' && Boolean(onEdit))
   let hasReturnToBoardAction = $derived(taskStatus === 'doing' && isOutOfFocusTask && Boolean(onReturnToBoard))
+  let hasSetAsideAction = $derived(taskStatus === 'doing' && !isOutOfFocusTask && Boolean(onMoveToOutOfFocus))
   let prefixProviders = $derived(
     hasStartAction ? listTaskStartPrefixProvidersAcrossPlugins($enabledPluginIds) : [],
   )
   let hasActionsBeforeComplete = $derived(
-    hasStartAction || hasEditAction || hasReturnToBoardAction || prefixProviders.length > 0,
+    hasStartAction || hasEditAction || hasReturnToBoardAction || hasSetAsideAction || prefixProviders.length > 0,
   )
 
   function handleStart() {
@@ -113,14 +114,14 @@
   {#if hasEditAction}
     <ContextMenuItem label="Edit Task" onclick={handleEdit} />
   {/if}
+  {#if hasSetAsideAction}
+    <ContextMenuItem label={setAsidePresentation.label} onclick={handleSetAside} />
+  {/if}
   {#if hasReturnToBoardAction}
     <ContextMenuItem label={returnPresentation.label} onclick={handleReturnToBoard} />
   {/if}
   {#if hasActionsBeforeComplete}
     <div class="my-1 border-t border-[var(--of-border)]"></div>
   {/if}
-  <ContextMenuItem label={isCompleting ? 'Completing…' : taskStatus === 'backlog' ? deletePresentation.label : completePresentation.label} disabled={isCompleting} onclick={handleComplete} />
-  {#if taskStatus === 'doing' && !isOutOfFocusTask && onMoveToOutOfFocus}
-    <ContextMenuItem label={setAsidePresentation.label} onclick={handleSetAside} />
-  {/if}
+  <ContextMenuItem label={isCompleting ? 'Completing…' : taskStatus === 'backlog' ? deletePresentation.label : completePresentation.label} variant="danger" disabled={isCompleting} onclick={handleComplete} />
 </ContextMenu>

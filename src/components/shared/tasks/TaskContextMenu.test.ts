@@ -170,28 +170,6 @@ describe('TaskContextMenu', () => {
     expect(screen.queryByText('Move to Out of Focus')).toBeNull()
   })
 
-  it('orders Set aside behind Complete for doing tasks outside Out of Focus', () => {
-    tasks.set([makeTask('T-1', 'doing')])
-    render(TaskContextMenu, {
-      props: {
-        visible: true,
-        x: 0,
-        y: 0,
-        taskId: 'T-1',
-        onClose: vi.fn(),
-        outOfFocusTaskIds: new Set(),
-        onMoveToOutOfFocus: vi.fn(),
-      },
-    })
-
-    const labels = screen.getAllByRole('menuitem').map(item => item.textContent ?? '')
-    const completeIndex = labels.findIndex(label => label.includes('Complete'))
-    const setAsideIndex = labels.findIndex(label => label.includes('Set aside'))
-
-    expect(completeIndex).toBeGreaterThanOrEqual(0)
-    expect(setAsideIndex).toBeGreaterThan(completeIndex)
-  })
-
   it('shows Return to Board for doing tasks already in Out of Focus', () => {
     tasks.set([makeTask('T-1', 'doing')])
     render(TaskContextMenu, {
@@ -208,6 +186,37 @@ describe('TaskContextMenu', () => {
     expect(screen.getByText('Return to Board')).toBeTruthy()
     expect(screen.queryByText('Move to Focus')).toBeNull()
     expect(screen.queryByText('Move to Out of Focus')).toBeNull()
+  })
+
+  it('puts Complete last for doing tasks whether or not they are in Out of Focus', () => {
+    tasks.set([makeTask('T-1', 'doing')])
+    const menuLabels = (outOfFocusTaskIds: Set<string>) => {
+      const { unmount } = render(TaskContextMenu, {
+        props: {
+          visible: true,
+          x: 0,
+          y: 0,
+          taskId: 'T-1',
+          onClose: vi.fn(),
+          outOfFocusTaskIds,
+          onMoveToOutOfFocus: vi.fn(),
+          onReturnToBoard: vi.fn(),
+        },
+      })
+      const labels = screen.getAllByRole('menuitem').map(item => item.textContent ?? '')
+      unmount()
+      return labels
+    }
+
+    const focusLabels = menuLabels(new Set())
+    const outOfFocusLabels = menuLabels(new Set(['T-1']))
+
+    expect(focusLabels).toHaveLength(2)
+    expect(focusLabels[0]).toContain('Set aside')
+    expect(focusLabels[1]).toContain('Complete')
+    expect(outOfFocusLabels).toHaveLength(2)
+    expect(outOfFocusLabels[0]).toContain('Return to Board')
+    expect(outOfFocusLabels[1]).toContain('Complete')
   })
 
   it('calls the set-aside handler and closes when Set aside is clicked', async () => {
