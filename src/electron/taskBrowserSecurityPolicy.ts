@@ -99,15 +99,16 @@ export class TaskBrowserSecurityPolicy {
       window.destroy()
       return
     }
+    const contents = window.webContents
     this.childWindows.add(window)
-    this.permissionRouter.register(window.webContents, {
+    this.permissionRouter.register(contents, {
       windowId: this.options.windowId,
       handler: this.options.permissionHandler ?? DENY_TASK_BROWSER_PERMISSIONS,
     })
     window.on('closed', () => {
       this.childWindows.delete(window)
-      this.permissionRouter.unregister(window.webContents)
+      this.permissionRouter.unregister(contents)
     })
-    this.configure(window.webContents, window)
+    this.configure(contents, window)
   }
 }

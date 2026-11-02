@@ -25,6 +25,7 @@ describe('Electron boot Task Browser Surface event forwarding', () => {
 
   it('does not forward events after the owning window is destroyed', () => {
     const window = electronFakes.registerWindow(10)
+    const contents = window.webContents
     window.destroy()
 
     forwardTaskBrowserSurfaceRendererEvent('task-browser-visual-feedback-action', {
@@ -34,6 +35,6 @@ describe('Electron boot Task Browser Surface event forwarding', () => {
       action: { type: 'delete-annotation', annotationNumber: 3 },
     })
 
-    expect(window.webContents.sentMessages).toEqual([])
+    expect(contents.sentMessages).toEqual([])
   })
 })

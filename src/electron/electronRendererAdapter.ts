@@ -70,15 +70,16 @@ export class ElectronRendererAdapter {
     await this.browser.prepareWindow()
     const window = new BrowserWindow(createMainWindowOptions(createPreloadPath(this.options.currentDir)))
     this.mainWindow = window
-    const rendererId = window.webContents.id
+    const renderer = window.webContents
+    const rendererId = renderer.id
     this.renderers.add(rendererId)
     const unregisterRestartWindow = (await this.restart.controlledWorkspace())?.register(rendererId, stableWindowId, operationId => {
-      window.webContents.send('openforge:event', { eventName: 'restart-workspace-capture', payload: { operationId } })
+      renderer.send('openforge:event', { eventName: 'restart-workspace-capture', payload: { operationId } })
     })
     const unregisterBrowserWindow = this.browser.registerWindow(window)
     window.on('closed', () => {
       this.renderers.delete(rendererId)
-      this.permissionRenderers.delete(window.webContents)
+      this.permissionRenderers.delete(renderer)
       this.restart.forget(rendererId)
       unregisterRestartWindow?.()
       unregisterBrowserWindow()
@@ -90,16 +91,16 @@ export class ElectronRendererAdapter {
     const rendererUrl = this.trust.trustedRendererUrlFromEnv(this.options.env)
     const trustedOrigins = this.trust.trustedRendererOrigins(rendererUrl)
     window.on('focus', () => this.restart.focus(rendererId))
-    window.webContents.on('did-frame-navigate', (_event, _url, _status, _statusText, isMainFrame) => {
+    renderer.on('did-frame-navigate', (_event, _url, _status, _statusText, isMainFrame) => {
       if (!isMainFrame) return
       this.restart.forget(rendererId)
       if (window.isFocused()) this.restart.focus(rendererId)
     })
-    window.webContents.on('render-process-gone', () => {
+    renderer.on('render-process-gone', () => {
       this.subscriptions.clear(rendererId)
       void this.relay.rendererLost(rendererId)
     })
-    this.registerRendererPermissions(window.webContents, trustedOrigins)
+    this.registerRendererPermissions(renderer, trustedOrigins)
 
     developerLogSink.info(`[electron] Loading renderer from ${rendererUrl ?? 'packaged dist/index.html'}`)
     await loadAndRevealMainWindow(window, rendererUrl
