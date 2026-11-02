@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/svelte'
+import { fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { listenCallbacks, resetAgentIpcMocks } from './agentIpcMocks.testUtils'
 import { resetActiveSessions, setActiveSession } from './activeAgentSessions.testUtils'
 import {
+  emitShellLifecycle,
   mockAttachment,
   mockPoolEntry,
   mockShellLifecycleState,
@@ -402,6 +403,92 @@ describe('AgentTerminalShell', () => {
     })
     await vi.waitFor(() => {
       expect(mockPoolEntry.view.fit).toHaveBeenCalled()
+    })
+  })
+
+  describe('when the agent process has ended', () => {
+    const exitedSession = createAgentSession({ provider: 'claude-code', status: 'completed' })
+
+    async function renderAttached(props: Record<string, unknown> = {}) {
+      const { agentTerminalSessions } = await import('../../lib/terminalSessionService')
+      render(AgentTerminalShell, {
+        props: { taskId: 'T-1', sessionIdKey: 'claude_session_id', ...props },
+      })
+      await vi.waitFor(() => {
+        expect(agentTerminalSessions.attach).toHaveBeenCalled()
+      })
+    }
+
+    it('offers to resume the session', async () => {
+      setActiveSession(exitedSession)
+
+      await renderAttached()
+
+      expect(await screen.findByRole('button', { name: 'Resume session' })).toBeTruthy()
+    })
+
+    it('does not offer to resume while the agent is running', async () => {
+      setActiveSession(exitedSession)
+      mockShellLifecycleState.ptyActive = true
+
+      await renderAttached()
+
+      expect(screen.queryByRole('button', { name: 'Resume session' })).toBeNull()
+    })
+
+    it('offers to resume as soon as a running agent exits', async () => {
+      setActiveSession(exitedSession)
+      mockShellLifecycleState.ptyActive = true
+      await renderAttached()
+
+      emitShellLifecycle({ ptyActive: false, shellExited: true })
+
+      expect(await screen.findByRole('button', { name: 'Resume session' })).toBeTruthy()
+    })
+
+    it('resumes the conversation for this task and attaches its new terminal', async () => {
+      setActiveSession(exitedSession)
+      const { resumeAgentSession } = await import('../../lib/ipc')
+      vi.mocked(resumeAgentSession).mockResolvedValue({ taskId: 'T-1', sessionId: 'ses-1', ptyInstanceId: 77 })
+      const { agentTerminalSessions } = await import('../../lib/terminalSessionService')
+      await renderAttached()
+
+      await fireEvent.click(await screen.findByRole('button', { name: 'Resume session' }))
+
+      expect(resumeAgentSession).toHaveBeenCalledWith('T-1')
+      await vi.waitFor(() => {
+        expect(agentTerminalSessions.restorePtyInstance).toHaveBeenCalledWith('T-1', 77)
+        expect(screen.queryByRole('button', { name: 'Resume session' })).toBeNull()
+      })
+    })
+
+    it('reports a resume that fails and lets the user try again', async () => {
+      setActiveSession(exitedSession)
+      const { resumeAgentSession } = await import('../../lib/ipc')
+      vi.mocked(resumeAgentSession).mockRejectedValue(new Error('AGENT_FOLLOW_UP_DELIVERY_FAILED: Task workspace is unavailable'))
+      await renderAttached()
+
+      await fireEvent.click(await screen.findByRole('button', { name: 'Resume session' }))
+
+      expect(await screen.findByText(/Task workspace is unavailable/)).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Resume session' })).toBeTruthy()
+    })
+
+    it('starts a new session from the task prompt when the user asks for one instead', async () => {
+      setActiveSession(exitedSession)
+      const { resumeAgentSession, startNewAgentSession } = await import('../../lib/ipc')
+      vi.mocked(startNewAgentSession).mockResolvedValue({ taskId: 'T-1', sessionId: 'ses-2', ptyInstanceId: 78 })
+      const { agentTerminalSessions } = await import('../../lib/terminalSessionService')
+      await renderAttached()
+
+      await fireEvent.click(await screen.findByRole('button', { name: 'Start a new session' }))
+
+      expect(startNewAgentSession).toHaveBeenCalledWith('T-1')
+      expect(resumeAgentSession).not.toHaveBeenCalled()
+      await vi.waitFor(() => {
+        expect(agentTerminalSessions.restorePtyInstance).toHaveBeenCalledWith('T-1', 78)
+        expect(screen.queryByRole('button', { name: 'Start a new session' })).toBeNull()
+      })
     })
   })
 })

@@ -7,6 +7,8 @@ export const desktopCommandContracts = [
   {"functionName":"listAgentSessions","moduleName":"agentSessions","ipcCommand":"get_agent_sessions","payloadKeys":["taskId","provider","createdAtOrAfter"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"listAgentSessionSummaries","moduleName":"agentSessions","ipcCommand":"list_agent_sessions","payloadKeys":["provider","overlaps","taskId","cursor","pageSize"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"sendAgentFollowUp","moduleName":"agentSessions","ipcCommand":"send_agent_follow_up","payloadKeys":["taskId","message"],"owner":"rust-sidecar","domain":"agent-session-pty"},
+  {"functionName":"resumeAgentSession","moduleName":"agentSessions","ipcCommand":"resume_agent_session","payloadKeys":["taskId"],"owner":"rust-sidecar","domain":"agent-session-pty"},
+  {"functionName":"startNewAgentSession","moduleName":"agentSessions","ipcCommand":"start_new_agent_session","payloadKeys":["taskId"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"getLatestSessions","moduleName":"agentSessions","ipcCommand":"get_latest_sessions","payloadKeys":["taskIds"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"listOpenCodeCommands","moduleName":"agentSessions","ipcCommand":"list_opencode_commands","payloadKeys":["projectId"],"owner":"rust-sidecar","domain":"agent-session-pty"},
   {"functionName":"listOpenCodeAgents","moduleName":"agentSessions","ipcCommand":"list_opencode_agents","payloadKeys":["projectId"],"owner":"rust-sidecar","domain":"agent-session-pty"},

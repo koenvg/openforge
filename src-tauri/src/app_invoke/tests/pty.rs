@@ -925,3 +925,39 @@ async fn task_follow_up_failures_are_specific_and_task_isolated() {
         .1
         .contains("AGENT_FOLLOW_UP_DELIVERY_FAILED"));
 }
+
+#[tokio::test]
+async fn resume_agent_session_refuses_tasks_it_cannot_restart() {
+    let (state, _temp_dir) = test_state("app_invoke_resume_agent_session_refusals");
+    let (task_id, _) = seed_follow_up_session(&state, "completed");
+
+    let no_session = invoke(
+        &state,
+        "resume_agent_session",
+        json!({ "taskId": "T-other" }),
+    )
+    .await
+    .expect_err("a Task without an Agent Session cannot resume");
+    assert_eq!(no_session.0, StatusCode::CONFLICT);
+    assert!(no_session.1.contains("AGENT_FOLLOW_UP_NO_SESSION"));
+
+    let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
+    let pty_manager = state.pty_manager.as_ref().expect("pty manager");
+    pty_manager
+        .spawn_companion_test_agent_pty(&task_id, temp_dir.path(), "printf ready; exec cat")
+        .await
+        .expect("spawn test Agent PTY");
+
+    with_pty_cleanup(
+        async {
+            wait_for_pty_output(pty_manager, &task_id, "ready").await;
+            let live = invoke(&state, "resume_agent_session", json!({ "taskId": task_id }))
+                .await
+                .expect_err("a live agent must not be started twice");
+            assert_eq!(live.0, StatusCode::CONFLICT);
+            assert!(live.1.contains("AGENT_RESUME_ALREADY_RUNNING"));
+        },
+        async { pty_manager.kill_pty(&task_id).await },
+    )
+    .await;
+}

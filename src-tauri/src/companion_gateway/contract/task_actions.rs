@@ -238,6 +238,7 @@ fn task_start_error_response(error: crate::task_start::TaskStartError) -> Respon
             "Task Start is already in progress",
         ),
         TaskStartError::InvalidState { .. }
+        | TaskStartError::NotStarted
         | TaskStartError::StaleState
         | TaskStartError::ActiveSession
         | TaskStartError::DependencyBlocked { .. } => error_response(

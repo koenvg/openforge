@@ -1,8 +1,11 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
+  import Button from '@openforge-app/plugin-sdk/ui/Button.svelte'
   import LoadingIndicator from '@openforge-app/plugin-sdk/ui/LoadingIndicator.svelte'
   import type { DesktopUnlistenFn } from '../../lib/desktopIpc'
   import { activeSessions } from '../../lib/stores'
+  import { getLatestSession, resumeAgentSession, startNewAgentSession } from '../../lib/ipc'
+  import type { AgentSessionLaunchReceipt } from '../../lib/ipc'
   import '@openforge-app/terminal-runtime/xterm.css'
   import { listenToAgentStatusChanged } from '../../lib/agentPanelSessionSync'
   import type { TerminalSession, TerminalViewAttachment } from '@openforge-app/terminal-runtime'
@@ -36,6 +39,8 @@
   let viewAttachment: TerminalViewAttachment | null = null
   let poolEntryAttached = $state(false)
   let terminalActive = $state(false)
+  let launching = $state<'resume' | 'new' | null>(null)
+  let launchError = $state<string | null>(null)
   let destroyed = false
 
   let session = $derived($activeSessions.get(taskId) || null)
@@ -45,8 +50,27 @@
       : null
   )
 
+  let agentExited = $derived(session !== null && poolEntryAttached && !terminalActive && !isStarting)
+
   function syncTerminalActiveFromLifecycle() {
     terminalActive = agentTerminalSessions.getShellLifecycleState(taskId).ptyActive
+  }
+
+  async function relaunchAgent(kind: 'resume' | 'new', launch: (taskId: string) => Promise<AgentSessionLaunchReceipt>) {
+    launching = kind
+    launchError = null
+    try {
+      const receipt = await launch(taskId)
+      if (destroyed) return
+      hydrateAgentTerminalPtyInstance(taskId, receipt.ptyInstanceId)
+      terminalActive = true
+      const latest = await getLatestSession(taskId)
+      if (latest && !destroyed) $activeSessions = new Map($activeSessions).set(taskId, latest)
+    } catch (error) {
+      launchError = error instanceof Error ? error.message : String(error)
+    } finally {
+      launching = null
+    }
   }
 
   $effect(() => {
@@ -112,6 +136,9 @@
 
     syncTerminalActiveFromLifecycle()
 
+    unlisteners.push(agentTerminalSessions.subscribeShellLifecycle(taskId, (state) => {
+      terminalActive = state.ptyActive
+    }))
     unlisteners.push(await listenToAgentStatusChanged({
       taskId,
       onRunning: syncTerminalActiveFromLifecycle,
@@ -143,7 +170,7 @@
   {/if}
 
   <div class="agent-terminal-surface relative min-h-0 flex-1 overflow-hidden rounded-[var(--of-radius-container)] border" style="background: var(--of-agent-terminal-bg); border-color: var(--of-agent-terminal-border)">
-    <div class="shell-terminal-wrapper w-full h-full p-3" bind:this={terminalEl}></div>
+    <div class="shell-terminal-wrapper isolate w-full h-full p-3" bind:this={terminalEl}></div>
     {#if !session && !terminalActive}
       <div class="absolute inset-0 z-[1] flex flex-col items-center justify-center gap-4 p-16 pointer-events-none" style="background: var(--of-agent-terminal-bg); color: var(--of-agent-terminal-text)">
         {#if isStarting}
@@ -159,6 +186,18 @@
           <div class="text-base font-semibold">No active agent session</div>
           <div class="max-w-[320px] text-center text-sm leading-relaxed" style="color: var(--of-agent-terminal-muted)">Use the action buttons in the header to get started</div>
         {/if}
+      </div>
+    {:else if agentExited}
+      <div class="absolute inset-x-0 bottom-0 z-[1] flex flex-col items-center gap-3 border-t px-6 py-5" style="background: var(--of-agent-terminal-bg); border-color: var(--of-agent-terminal-border); color: var(--of-agent-terminal-text)">
+        <div class="text-base font-semibold">The agent has stopped</div>
+        <div class="text-center text-sm leading-relaxed" style="color: var(--of-agent-terminal-muted)">Its process ended. Resuming reopens the same conversation, so the agent keeps its context.</div>
+        {#if launchError}
+          <div class="text-center text-sm text-of-danger" role="alert">Couldn't restart the agent: {launchError}</div>
+        {/if}
+        <div class="flex items-center gap-2">
+          <Button size="sm" variant="primary" loading={launching === 'resume'} loadingLabel="Resuming..." disabled={launching !== null} onclick={() => relaunchAgent('resume', resumeAgentSession)}>Resume session</Button>
+          <Button size="sm" variant="ghost" loading={launching === 'new'} loadingLabel="Starting..." disabled={launching !== null} onclick={() => relaunchAgent('new', startNewAgentSession)}>Start a new session</Button>
+        </div>
       </div>
     {/if}
   </div>

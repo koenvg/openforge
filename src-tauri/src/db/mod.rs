@@ -87,7 +87,7 @@ pub use task_creation::TaskWorktreeOptions;
 pub use task_creation::{NewTaskOptions, TaskCreationError};
 pub use task_labels::{TaskLabelPersistenceError, TaskLabelRow};
 pub use task_lifecycle::{CompleteTaskWriteOutcome, TaskStatusUpdateError};
-pub(crate) use task_start::{FinalizeTaskStartError, TaskStartFinalization};
+pub(crate) use task_start::{FinalizeTaskStartError, NewAgentSession, TaskStartFinalization};
 pub use task_workspaces::TaskWorkspaceRow;
 // This is part of the Database API even though production callers currently only format it.
 #[allow(unused_imports)]

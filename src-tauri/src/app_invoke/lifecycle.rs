@@ -34,6 +34,7 @@ fn map_task_start_error(error: crate::task_start::TaskStartError) -> (StatusCode
         TaskStartError::NotFound | TaskStartError::ProjectNotFound { .. } => StatusCode::NOT_FOUND,
         TaskStartError::ProjectRequired => StatusCode::UNPROCESSABLE_ENTITY,
         TaskStartError::InvalidState { .. }
+        | TaskStartError::NotStarted
         | TaskStartError::StaleState
         | TaskStartError::AlreadyInProgress
         | TaskStartError::ActiveSession
@@ -120,6 +121,18 @@ pub(super) async fn handle_app_start_implementation_command(
     state: &AppState,
     request: &AppInvokeRequest,
 ) -> Result<Option<serde_json::Value>, (StatusCode, String)> {
+    if request.command == "start_new_agent_session" {
+        let task_id = payload_string(&request.payload, "taskId")?;
+        let receipt = task_start_service(state)
+            .start_new_session(&task_id)
+            .await
+            .map_err(map_task_start_error)?;
+        return Ok(Some(serde_json::json!({
+            "taskId": receipt.task_id,
+            "sessionId": receipt.session_id,
+            "ptyInstanceId": receipt.pty_instance_id,
+        })));
+    }
     if request.command != "start_implementation" {
         return Ok(None);
     }
