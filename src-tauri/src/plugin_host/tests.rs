@@ -8,7 +8,7 @@ mod lifecycle;
 mod project_callbacks;
 mod review_thread_callbacks;
 mod shell_callbacks;
-mod stdio_test_support;
+pub(crate) mod stdio_test_support;
 mod storage_config_callbacks;
 mod task_callbacks;
 mod transport;
