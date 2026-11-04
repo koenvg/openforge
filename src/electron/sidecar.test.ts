@@ -249,6 +249,21 @@ describe('Electron Rust sidecar supervision', () => {
     expect(child.killCalls).toEqual(['SIGTERM', 'SIGKILL'])
   })
 
+  it('does not report a failed kill for a sidecar that already exited', async () => {
+    const child = new FakeChild()
+    Object.assign(child, { exitCode: 1, signalCode: null, kill: vi.fn(() => false) })
+    const sleep = vi.fn(async () => undefined)
+
+    await expect(stopSidecar(child, { graceMs: 1, sleep })).resolves.toEqual({
+      status: 'already-exited',
+      signal: null,
+      timedOut: false,
+      error: null,
+    })
+
+    expect(child.kill).not.toHaveBeenCalled()
+  })
+
   it('deepens readiness by waiting for authenticated readiness and the app event stream', async () => {
     const child = new FakeChild()
     const eventStream = new ScriptedEventStream()

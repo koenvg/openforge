@@ -20,6 +20,8 @@ export interface ChildProcessLike {
   readonly stdout?: SidecarOutputStreamLike | null
   readonly stderr?: SidecarOutputStreamLike | null
   readonly pid?: number
+  readonly exitCode?: number | null
+  readonly signalCode?: NodeJS.Signals | null
   kill(signal?: NodeJS.Signals): boolean
   once(event: 'exit', listener: (code?: number | null, signal?: NodeJS.Signals | null) => void): this
   off?(event: 'exit', listener: (code?: number | null, signal?: NodeJS.Signals | null) => void): this
@@ -197,7 +199,7 @@ export interface StopSidecarOptions {
   sleep: Sleep
 }
 
-export type SidecarStopStatus = 'already-signaled' | 'terminated' | 'killed' | 'kill-failed'
+export type SidecarStopStatus = 'already-signaled' | 'already-exited' | 'terminated' | 'killed' | 'kill-failed'
 
 export interface SidecarStopReport {
   status: SidecarStopStatus
@@ -489,6 +491,10 @@ export async function stopSidecar(
 ): Promise<SidecarStopReport> {
   if (child.killed) {
     return { status: 'already-signaled', signal: null, timedOut: false, error: null }
+  }
+
+  if (child.exitCode != null || child.signalCode != null) {
+    return { status: 'already-exited', signal: null, timedOut: false, error: null }
   }
 
   if (!child.kill('SIGTERM')) {
