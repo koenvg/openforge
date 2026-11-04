@@ -3,7 +3,9 @@
 //! Callers hold the transport's connection lock for every method. The operation
 //! mutex protects storage only; it does not replace command admission or controller
 //! fencing under that connection lock.
-use super::super::daemon_restart::{Intent, Operation, Phase, ReconnectContext};
+use super::super::daemon_restart::{
+    terminate_live_sessions, Intent, Operation, Phase, ReconnectContext,
+};
 use openforge_session_client::Client;
 use openforge_session_protocol::Error;
 use std::path::Path;
@@ -106,7 +108,7 @@ impl Restart {
         if slot.as_ref().is_some_and(Operation::preserves_sessions) {
             return Ok(());
         }
-        let inventory = client.inventory()?;
+        client.inventory()?;
         let operation = Operation::new(
             uuid::Uuid::new_v4().to_string(),
             client.controller().clone(),
@@ -114,11 +116,7 @@ impl Restart {
         )?;
         *slot = Some(operation.clone());
         operation.persist(root)?;
-        for session in inventory.sessions {
-            if session.exit_code.is_none() {
-                client.terminate_ordered(&session.pty)?;
-            }
-        }
+        terminate_live_sessions(client)?;
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
         loop {
             match client.shutdown_empty() {

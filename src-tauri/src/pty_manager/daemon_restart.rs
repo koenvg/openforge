@@ -149,7 +149,11 @@ impl Operation {
             return Ok(None);
         }
         if operation.intent == Intent::Quit {
-            return Err(Error::Host("previous Quit cleanup is incomplete".into()));
+            // The user already asked every session to stop. Finish that on the same daemon.
+            terminate_live_sessions(client)?;
+            operation.phase = Phase::Committed;
+            operation.persist(root)?;
+            return Ok(Some(operation));
         }
         if operation.phase == Phase::Prepared && requested.is_none() {
             operation.phase = Phase::Cancelled;
@@ -168,6 +172,15 @@ impl Operation {
         operation.persist(root)?;
         Ok(Some(operation))
     }
+}
+
+pub(super) fn terminate_live_sessions(client: &Client) -> Result<(), Error> {
+    for session in client.inventory()?.sessions {
+        if session.exit_code.is_none() {
+            client.terminate_ordered(&session.pty)?;
+        }
+    }
+    Ok(())
 }
 
 fn host_error(error: impl std::fmt::Display) -> Error {
