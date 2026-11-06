@@ -1,5 +1,7 @@
 # Contributing to Open Forge
 
+> Open Forge is no longer actively maintained. Do not expect issue responses, pull request reviews, or merges. See the [maintenance notice](README.md#maintenance-status). The workflows below remain for reference.
+
 This document covers the repository's developer workflows. Open Forge is source-available software; review [`LICENSE`](LICENSE) before contributing or redistributing changes. This guide documents how to work on the project but does not promise that external pull requests will be accepted.
 
 ## Prerequisites

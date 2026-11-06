@@ -1,5 +1,13 @@
 <h1 align="center">Open Forge</h1>
 
+## Maintenance status
+
+I am no longer actively maintaining Open Forge. Do not expect new features, bug fixes, security updates, or support.
+
+The source code and [existing releases](https://github.com/koenvg/openforge/releases) remain available under their existing licenses. If you continue to use the app, treat it as unmaintained software. The documentation below remains for reference.
+
+Thank you to everyone who tried Open Forge, shared feedback, or contributed. I appreciate the time you spent with the project.
+
 <p align="center">
   A calm desktop command center for AI-assisted development. Turn a task into an isolated agent run, watch the terminal, review the diff, and decide what ships — without losing the thread.
 </p>
