@@ -11,7 +11,7 @@ use std::os::unix::fs::PermissionsExt;
 
 const BUN_SHIM: &str = "#!/bin/sh\nif [ \"$1\" = \"run\" ]; then shift; fi\nexec node \"$@\"\n";
 
-pub(super) struct StdioTestHarness {
+pub(crate) struct StdioTestHarness {
     _bun_env: EnvVarRestore,
     _entrypoint_env: EnvVarRestore,
     _env_lock: tokio::sync::MutexGuard<'static, ()>,
@@ -19,7 +19,7 @@ pub(super) struct StdioTestHarness {
 }
 
 impl StdioTestHarness {
-    pub(super) async fn new(sidecar_source: &str) -> Self {
+    pub(crate) async fn new(sidecar_source: &str) -> Self {
         let temp = tempdir().expect("tempdir should create");
         let sidecar_path = temp.path().join("sidecar.cjs");
         let bun_shim_path = temp.path().join("bun-shim");
@@ -40,8 +40,12 @@ impl StdioTestHarness {
         }
     }
 
+    pub(crate) fn path(&self, filename: &str) -> PathBuf {
+        self.temp.path().join(filename)
+    }
+
     pub(super) fn write_file(&self, filename: &str, contents: &str) -> PathBuf {
-        let path = self.temp.path().join(filename);
+        let path = self.path(filename);
         fs::write(&path, contents).expect("test file should write");
         path
     }

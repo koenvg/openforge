@@ -196,3 +196,81 @@ async fn hung_companion_restore_cannot_consume_pty_shutdown_budget() {
     );
     drop(release_restore);
 }
+
+const SIGTERM_IGNORING_PLUGIN_SIDECAR: &str = r#"process.on('SIGTERM', () => {});
+require('node:fs').writeFileSync('ignoring-sigterm', '');
+setInterval(() => {}, 1000);"#;
+
+#[tokio::test]
+#[ignore = "build the Session Daemon first; run with OPENFORGE_TEST_DAEMON"]
+async fn plugin_sidecar_ignoring_sigterm_cannot_starve_the_daemon_quit() {
+    use openforge_session_protocol::{PreparedCommand, ShellCommand, TerminalOwner};
+    let daemon = crate::test_support::daemon::DaemonFixture::new();
+    let (state, _temp_dir) = crate::test_support::test_state(
+        "sidecar_runtime_shutdown_daemon_before_plugin_sidecar",
+        |manager, _| {
+            manager.enable_daemon_shell(
+                daemon.root.path().into(),
+                daemon.executable.clone(),
+                "*".into(),
+            )
+        },
+    );
+    let plugin_sidecar = crate::plugin_host::tests::stdio_test_support::StdioTestHarness::new(
+        SIGTERM_IGNORING_PLUGIN_SIDECAR,
+    )
+    .await;
+    let plugin_host = state.plugin_host.as_ref().expect("plugin host");
+    plugin_host
+        .start_sidecar()
+        .await
+        .expect("plugin sidecar should start");
+    let ignoring_sigterm = plugin_sidecar.path("ignoring-sigterm");
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !ignoring_sigterm.exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("plugin sidecar should install its SIGTERM handler");
+    openforge_session_client::Client::connect(daemon.root.path())
+        .unwrap()
+        .spawn(
+            "left-running-at-quit",
+            &ShellCommand {
+                owner: TerminalOwner::Shell {
+                    task_id: "quit-order".into(),
+                    index: Some(0),
+                },
+                command: PreparedCommand {
+                    program: "/bin/sh".into(),
+                    args: vec!["-c".into(), "sleep 600".into()],
+                    cwd: daemon.root.path().into(),
+                    env: Default::default(),
+                },
+                columns: 80,
+                rows: 24,
+                image_protocol: None,
+            },
+        )
+        .unwrap();
+
+    let _ = tokio::time::timeout(
+        SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT,
+        shutdown_sidecar_runtime(&state, None),
+    )
+    .await;
+
+    let socket =
+        openforge_session_client::runtime::RuntimeDirectory::open_existing(daemon.root.path())
+            .unwrap()
+            .socket_path();
+    assert!(
+        !socket.exists(),
+        "the daemon must finish Quit before a slow plugin sidecar stop"
+    );
+    plugin_host
+        .stop_sidecar()
+        .await
+        .expect("plugin sidecar should be force killed");
+}

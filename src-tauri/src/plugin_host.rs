@@ -15,7 +15,7 @@ mod storage_config_callbacks;
 mod task_callbacks;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use crate::{app_events::AppEventSender, backend_runtime::AppHandle, http_server::TaskClaims};
 use serde::{Deserialize, Serialize};

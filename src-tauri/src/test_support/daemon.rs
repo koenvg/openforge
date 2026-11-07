@@ -38,6 +38,13 @@ impl DaemonFixture {
 impl Drop for DaemonFixture {
     fn drop(&mut self) {
         let cleanup = (|| -> Result<(), String> {
+            let stopped = openforge_session_client::runtime::RuntimeDirectory::open_existing(
+                self.root.path(),
+            )
+            .is_ok_and(|runtime| !runtime.socket_path().exists());
+            if stopped {
+                return Ok(());
+            }
             let client = openforge_session_client::Client::connect(self.root.path())
                 .map_err(|error| error.to_string())?;
             client

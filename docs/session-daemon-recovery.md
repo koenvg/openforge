@@ -4,6 +4,8 @@ Electron keeps **Recover Incomplete Restart** available in the application menu 
 
 The saved operation distinguishes failed preparation, failed activation, delayed relaunch, incomplete workspace restoration, and loss of the original session process. Only acknowledged workspace restoration commits the restart. Termination is recorded separately, not as a successful update.
 
+An interrupted Quit needs no recovery. If the Sidecar is killed before Quit finishes, the saved operation still says Quit. The next launch then stops the sessions that are still live on the same daemon, records the Quit as committed, and starts normally. A Quit saved by a daemon that has since restarted is cancelled instead, because its sessions are already gone.
+
 Readiness deadlines limit waiting, not session lifetimes. Retry reuses the operation and attaches to the existing daemon before restoring windows. The launch guard passes to a delayed child so losing the launcher cannot permit a competing launch. Once ready, the daemon's lifetime lock protects ownership.
 
 ## Local recovery without Electron

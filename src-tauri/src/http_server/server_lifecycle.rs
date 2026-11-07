@@ -119,6 +119,16 @@ pub(super) async fn shutdown_sidecar_runtime(
     state
         .frontend_host_requests
         .shutdown("OpenForge is shutting down before the frontend host request completed");
+    // Terminals go first. An interrupted Quit leaves agents running, and the plugin
+    // sidecar stop below can wait out the whole budget on its own.
+    if let Some(pty_manager) = &state.pty_manager {
+        if let Some(daemon) = &pty_manager.daemon_shells {
+            if let Err(error) = daemon.shutdown().await {
+                warn!("[http_server] Daemon shutdown refused or incomplete: {error}");
+            }
+        }
+        pty_manager.kill_all().await;
+    }
     if let Some(companion_restore) = companion_restore {
         companion_restore.abort().await;
     }
@@ -132,15 +142,6 @@ pub(super) async fn shutdown_sidecar_runtime(
                 error
             );
         }
-    }
-
-    if let Some(pty_manager) = &state.pty_manager {
-        if let Some(daemon) = &pty_manager.daemon_shells {
-            if let Err(error) = daemon.shutdown().await {
-                warn!("[http_server] Daemon shutdown refused or incomplete: {error}");
-            }
-        }
-        pty_manager.kill_all().await;
     }
 
     info!("[http_server] Rust sidecar shutdown cleanup completed");
