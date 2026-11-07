@@ -233,7 +233,7 @@ export const electronFakes = (() => {
     readonly addedViews: FakeWebContentsView[] = []
     readonly removedViews: FakeWebContentsView[] = []
     readonly handlers = new Map<string, Listener[]>()
-    readonly webContents: FakeWebContents
+    readonly #webContents: FakeWebContents
     readonly contentView = {
       addChildView: (view: FakeWebContentsView) => { this.addedViews.push(view) },
       removeChildView: (view: FakeWebContentsView) => { this.removedViews.push(view) },
@@ -242,7 +242,12 @@ export const electronFakes = (() => {
 
     constructor(readonly options: PopupResponse['overrideBrowserWindowOptions'] = {}) {
       const partition = options?.webPreferences?.partition ?? ''
-      this.webContents = new FakeWebContents(sessionFor(partition))
+      this.#webContents = new FakeWebContents(sessionFor(partition))
+    }
+
+    get webContents(): FakeWebContents {
+      if (this.destroyed) throw new TypeError('Object has been destroyed')
+      return this.#webContents
     }
 
     on(event: string, handler: Listener): void {
@@ -257,8 +262,8 @@ export const electronFakes = (() => {
 
     destroy(): void {
       if (this.destroyed) return
+      this.#webContents.close()
       this.destroyed = true
-      this.webContents.close()
       this.emit('closed')
     }
 

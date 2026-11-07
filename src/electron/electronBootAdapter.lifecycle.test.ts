@@ -31,7 +31,7 @@ class HostWindow extends electronFakes.FakeBrowserWindow {
   static getAllWindows() { return windows.filter(window => !window.isDestroyed()) }
   static getFocusedWindow() { return this.getAllWindows().at(-1) ?? null }
   static fromId(id: number) { return windows.find(window => window.id === id) ?? null }
-  static fromWebContents(contents: unknown) { return windows.find(window => window.webContents === contents) ?? null }
+  static fromWebContents(contents: unknown) { return windows.find(window => !window.isDestroyed() && window.webContents === contents) ?? null }
   readonly id = windows.length + 1
   readonly renderer = Object.assign(this.webContents, { id: this.id + 100, mainFrame: {} })
   constructor(options: ConstructorParameters<typeof electronFakes.FakeBrowserWindow>[0]) {
@@ -317,7 +317,10 @@ describe('Electron BootLifecycleAdapter host policies', () => {
     await vi.waitFor(() => expect(commands).toContainEqual({ command: 'list_browser_session_purge_intents', payload: null }))
   })
 
-  it('routes host requests only to the selected renderer and fails them when that renderer is lost', async () => {
+  it.each([
+    ['its renderer process is gone', (window: HostWindow) => window.renderer.emit('render-process-gone')],
+    ['its window is destroyed', (window: HostWindow) => window.destroy()],
+  ])('routes host requests only to the selected renderer and fails them when %s', async (_case, loseRenderer) => {
     const { host, emit, commands } = await liveHost()
     const first = await host.createMainWindow() as HostWindow
     const second = await host.createMainWindow() as HostWindow
@@ -330,7 +333,7 @@ describe('Electron BootLifecycleAdapter host policies', () => {
     expect(first.renderer.sentMessages).toEqual([])
     const acknowledgement = { correlationId: 'request-1', outcome: { status: 'success', output: {} } }
     await expect(invoke(first, 'plugin_frontend_command_acknowledge', acknowledgement)).rejects.toThrow('does not own')
-    second.renderer.emit('render-process-gone')
+    loseRenderer(second)
     await vi.waitFor(() => expect(commands).toContainEqual({
       command: 'plugin_frontend_command_acknowledge',
       payload: { correlationId: 'request-1', outcome: { status: 'error', error: 'OpenForge trusted renderer was lost before the request completed' } },
