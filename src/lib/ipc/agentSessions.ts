@@ -54,6 +54,20 @@ export async function sendAgentFollowUp(taskId: string, message: string): Promis
   return invoke<TaskFollowUpReceipt>('send_agent_follow_up', { taskId, message })
 }
 
+export interface AgentSessionLaunchReceipt {
+  taskId: string
+  sessionId: string
+  ptyInstanceId: number
+}
+
+export async function resumeAgentSession(taskId: string): Promise<AgentSessionLaunchReceipt> {
+  return invoke<AgentSessionLaunchReceipt>('resume_agent_session', { taskId })
+}
+
+export async function startNewAgentSession(taskId: string): Promise<AgentSessionLaunchReceipt> {
+  return invoke<AgentSessionLaunchReceipt>('start_new_agent_session', { taskId })
+}
+
 export async function getLatestSessions(taskIds: string[]): Promise<AgentSession[]> {
   return invoke<AgentSession[]>("get_latest_sessions", { taskIds });
 }

@@ -29,6 +29,10 @@ impl ProviderLauncher for SuccessfulProviderLauncher {
     ) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>> {
         Box::pin(async { Ok(()) })
     }
+
+    fn is_live<'a>(&'a self, _task_id: &'a str) -> Pin<Box<dyn Future<Output = bool> + Send + 'a>> {
+        Box::pin(async { false })
+    }
 }
 
 #[derive(Clone)]
@@ -62,6 +66,10 @@ impl ProviderLauncher for RecordingProviderLauncher {
     ) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>> {
         Box::pin(async { Ok(()) })
     }
+
+    fn is_live<'a>(&'a self, _task_id: &'a str) -> Pin<Box<dyn Future<Output = bool> + Send + 'a>> {
+        Box::pin(async { false })
+    }
 }
 
 pub(super) struct FailingProviderLauncher;
@@ -84,6 +92,10 @@ impl ProviderLauncher for FailingProviderLauncher {
         _task_id: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>> {
         Box::pin(async { Ok(()) })
+    }
+
+    fn is_live<'a>(&'a self, _task_id: &'a str) -> Pin<Box<dyn Future<Output = bool> + Send + 'a>> {
+        Box::pin(async { false })
     }
 }
 
@@ -119,6 +131,10 @@ impl ProviderLauncher for StaleAfterLaunchProvider {
             self.aborted.store(true, Ordering::SeqCst);
             Ok(())
         })
+    }
+
+    fn is_live<'a>(&'a self, _task_id: &'a str) -> Pin<Box<dyn Future<Output = bool> + Send + 'a>> {
+        Box::pin(async { false })
     }
 }
 

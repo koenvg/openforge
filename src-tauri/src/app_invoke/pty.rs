@@ -17,6 +17,14 @@ struct AgentFollowUpReceipt {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct AgentResumeReceipt {
+    task_id: String,
+    session_id: String,
+    pty_instance_id: u64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct E2eFixtureOutputReceipt {
     shell_session_key: String,
     marker: String,
@@ -32,6 +40,7 @@ fn agent_follow_up_error_response(
     let status = match &error {
         AgentFollowUpError::NoSession { .. }
         | AgentFollowUpError::InactiveSession { .. }
+        | AgentFollowUpError::AlreadyLive { .. }
         | AgentFollowUpError::TaskMissing { .. } => StatusCode::CONFLICT,
         AgentFollowUpError::LiveDelivery(_)
         | AgentFollowUpError::WorkspaceResolution(_)
@@ -186,6 +195,24 @@ pub(super) async fn handle_app_pty_command(
                 task_id: outcome.task_id,
                 session_id: outcome.session_id,
                 disposition: outcome.disposition.as_str(),
+            })?
+        }
+        "resume_agent_session" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let service = crate::agent_follow_up::AgentFollowUpService::new(
+                state.app.clone(),
+                std::sync::Arc::clone(&state.db),
+                pty_manager.clone(),
+                state.app_event_tx.clone(),
+            );
+            let outcome = service
+                .resume(&task_id)
+                .await
+                .map_err(agent_follow_up_error_response)?;
+            json_value(AgentResumeReceipt {
+                task_id: outcome.task_id,
+                session_id: outcome.session_id,
+                pty_instance_id: outcome.pty_instance_id,
             })?
         }
         "e2e_emit_terminal_fixture" => {

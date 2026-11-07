@@ -206,6 +206,109 @@ async fn start_implementation_uses_authoritative_project_path_and_publishes_cano
 }
 
 #[tokio::test]
+async fn start_new_agent_session_relaunches_the_provider_for_a_task_in_progress() {
+    let fixture = ProviderLifecycleFixture::new("app_invoke_start_new_agent_session").await;
+    let state = fixture.state();
+    let (_temp, repo_dir) = provider_repo_dir();
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let project = db
+            .create_project(
+                "New Session Project",
+                repo_dir.to_str().expect("utf8 repo path"),
+            )
+            .expect("create project");
+        db.set_project_config(&project.id, "ai_provider", "pi")
+            .expect("set provider");
+        db.create_task_with_worktree_source(
+            "Start again from the stored prompt",
+            "backlog",
+            Some(&project.id),
+            None,
+            None,
+            crate::db::TaskWorktreeOptions {
+                source: Some("disabled"),
+                branch: None,
+            },
+        )
+        .expect("create task")
+        .id
+    };
+    let mut provider_events = state
+        .app_event_tx
+        .as_ref()
+        .expect("provider event sender")
+        .subscribe();
+    let first = invoke_ok(
+        state,
+        "start_implementation",
+        json!({ "taskId": task_id, "repoPath": repo_dir.to_string_lossy() }),
+    )
+    .await;
+    read_provider_log_record_after_ready(
+        &mut provider_events,
+        &task_id,
+        fixture.log_path(),
+        "pi",
+        "Start again from the stored prompt",
+    )
+    .await;
+    let pty_manager = state.pty_manager.as_ref().expect("pty manager");
+    pty_manager
+        .kill_pty(&task_id)
+        .await
+        .expect("end the first agent");
+
+    let receipt = invoke_ok(
+        state,
+        "start_new_agent_session",
+        json!({ "taskId": task_id }),
+    )
+    .await;
+
+    assert_eq!(receipt["taskId"], task_id);
+    assert_ne!(receipt["sessionId"], first["session_id"]);
+    assert!(receipt["ptyInstanceId"].is_u64());
+    let log = read_provider_log_record_after_ready(
+        &mut provider_events,
+        &task_id,
+        fixture.log_path(),
+        "pi",
+        "Start again from the stored prompt",
+    )
+    .await;
+    assert_eq!(
+        log.matches("provider=pi").count(),
+        2,
+        "got provider log: {log}"
+    );
+    {
+        let db = crate::db::acquire_db(&state.db);
+        assert_eq!(
+            db.get_task(&task_id)
+                .expect("get task")
+                .expect("task exists")
+                .status,
+            "doing"
+        );
+        let session = db
+            .get_latest_session_for_ticket(&task_id)
+            .expect("get latest session")
+            .expect("session should be recorded");
+        assert_eq!(receipt["sessionId"], session.id);
+        assert_eq!(session.status, "running");
+    }
+    pty_manager
+        .kill_pty(&task_id)
+        .await
+        .expect("end the second agent");
+
+    fixture
+        .finish()
+        .expect("provider fixture cleanup should succeed");
+}
+
+#[tokio::test]
 async fn start_implementation_rejects_stale_non_backlog_task_state() {
     let fixture = ProviderLifecycleFixture::new("app_invoke_start_rejects_stale_state").await;
     let state = fixture.state();

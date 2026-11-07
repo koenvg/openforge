@@ -8,6 +8,8 @@ const { listenCallbacks } = vi.hoisted(() => ({
 
 vi.mock('../../lib/ipc', () => ({
   getLatestSession: vi.fn().mockResolvedValue(null),
+  resumeAgentSession: vi.fn(),
+  startNewAgentSession: vi.fn(),
   getWorktreeForTask: vi.fn().mockResolvedValue(null),
   writePty: vi.fn().mockResolvedValue(undefined),
   resizePty: vi.fn().mockResolvedValue(undefined),

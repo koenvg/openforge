@@ -76,13 +76,7 @@ impl ClaudeCodeProvider {
 
         let resume_id = session.claude_session_id.as_deref();
 
-        // Distinguish between two contexts:
-        // - Some(prompt) → caller sending new prompt, never use --continue
-        // - None → startup resume: resume in-progress session, use --continue if no session ID
-        let (actual_prompt, use_continue) = match prompt {
-            Some(p) => (p, false),
-            None => ("", resume_id.is_none()),
-        };
+        let (actual_prompt, use_continue) = resume_launch(prompt, resume_id);
 
         let pty_instance_id = self
             .pty_mgr
@@ -286,6 +280,15 @@ impl ClaudeCodeProvider {
     }
 }
 
+/// A prompt means the caller is starting new work, so `--continue` is never used for it.
+/// Without one, the stored conversation is reopened, or the folder's latest when none is stored.
+fn resume_launch<'a>(prompt: Option<&'a str>, resume_id: Option<&str>) -> (&'a str, bool) {
+    match prompt {
+        Some(prompt) => (prompt, false),
+        None => ("", resume_id.is_none()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -310,6 +313,28 @@ mod tests {
             output_revision: 0,
             viewed_output_revision: 0,
         }
+    }
+
+    #[test]
+    fn resume_without_a_prompt_reopens_the_stored_conversation_or_the_latest_one() {
+        let hooks = Path::new("/tmp/hooks.json");
+        let args = |prompt: Option<&str>, resume_id: Option<&str>| {
+            let (prompt, continue_session) = resume_launch(prompt, resume_id);
+            crate::pty_manager::build_claude_args(prompt, resume_id, continue_session, hooks, None)
+        };
+
+        assert_eq!(
+            args(None, Some("claude-abc")),
+            vec!["--resume", "claude-abc", "--settings", "/tmp/hooks.json"]
+        );
+        assert_eq!(
+            args(None, None),
+            vec!["--continue", "--settings", "/tmp/hooks.json"]
+        );
+        assert_eq!(
+            args(Some("fix it"), None),
+            vec!["fix it", "--settings", "/tmp/hooks.json"]
+        );
     }
 
     #[test]

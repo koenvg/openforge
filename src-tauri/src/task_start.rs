@@ -46,6 +46,13 @@ pub(crate) struct TaskStartReceipt {
     pub(crate) port: u16,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct NewAgentSessionReceipt {
+    pub(crate) task_id: String,
+    pub(crate) session_id: String,
+    pub(crate) pty_instance_id: u64,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct TaskStartExecution {
     pub(crate) outcome: TaskStartOutcome,
@@ -58,6 +65,7 @@ pub(crate) enum TaskStartError {
     ProjectRequired,
     ProjectNotFound { project_id: String },
     InvalidState { status: String },
+    NotStarted,
     StaleState,
     AlreadyInProgress,
     ActiveSession,
@@ -84,6 +92,7 @@ impl fmt::Display for TaskStartError {
                     "Task must be in backlog to start; current state is {status}"
                 )
             }
+            Self::NotStarted => write!(f, "Task has no workspace yet, so start the Task first"),
             Self::StaleState => write!(f, "Task changed while Start was in progress"),
             Self::AlreadyInProgress => {
                 write!(f, "Task already has an implementation start in progress")
@@ -169,6 +178,8 @@ trait ProviderLauncher: Send + Sync {
         &'a self,
         task_id: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
+
+    fn is_live<'a>(&'a self, task_id: &'a str) -> Pin<Box<dyn Future<Output = bool> + Send + 'a>>;
 }
 
 struct NativeProviderLauncher {
@@ -209,6 +220,10 @@ impl ProviderLauncher for NativeProviderLauncher {
                 .await
                 .map_err(|error| error.to_string())
         })
+    }
+
+    fn is_live<'a>(&'a self, task_id: &'a str) -> Pin<Box<dyn Future<Output = bool> + Send + 'a>> {
+        Box::pin(async move { self.pty_manager.pty_buffer_state(task_id).await.is_live })
     }
 }
 
@@ -268,7 +283,7 @@ impl TaskStartService {
             .try_claim(request.task_id, TaskOperation::StartImplementation)
             .ok_or(TaskStartError::AlreadyInProgress)?;
 
-        let context = self.load_context(request.task_id)?;
+        let context = self.load_context(request.task_id, StartKind::FirstStart)?;
         if self
             .requires_desktop_action(
                 &context,
@@ -375,40 +390,99 @@ impl TaskStartService {
         })
     }
 
-    fn load_context(&self, task_id: &str) -> Result<StartContext, TaskStartError> {
+    /// Starts a fresh agent on the Task's stored prompt, in the workspace its first start created.
+    /// The Task's status and workspace are left as they are, and earlier sessions are kept.
+    pub(crate) async fn start_new_session(
+        &self,
+        task_id: &str,
+    ) -> Result<NewAgentSessionReceipt, TaskStartError> {
+        let _start_claim = self
+            .task_claims
+            .try_claim(task_id, TaskOperation::StartImplementation)
+            .ok_or(TaskStartError::AlreadyInProgress)?;
+        let provider_launcher = self
+            .provider_launcher
+            .as_ref()
+            .ok_or(TaskStartError::RuntimeUnavailable)?;
+        if provider_launcher.is_live(task_id).await {
+            return Err(TaskStartError::ActiveSession);
+        }
+
+        let context = self.load_context(task_id, StartKind::NewSession)?;
+        let workspace_path = {
+            let db = db::acquire_db(&self.db);
+            crate::provider_runtime::get_task_workspace(&db, task_id)
+                .map_err(TaskStartError::Persistence)?
+                .ok_or(TaskStartError::NotStarted)?
+                .workspace_path
+        };
+        let prompt = self.materialize_prompt(&context, None)?;
+        let provider_start_context = ProviderStartContext::new(RuntimeEventPublisher::new(
+            self.app.clone(),
+            self.app_event_tx.clone(),
+        ));
+        let provider_options = ProviderRunOptions::for_task(&context.task);
+        let provider_result = provider_launcher
+            .launch(ProviderLaunchRequest {
+                provider_name: &context.provider_name,
+                task_id,
+                workspace_path: Path::new(&workspace_path),
+                prompt: &prompt,
+                agent: provider_options.agent,
+                permission_mode: provider_options.permission_mode,
+                model: provider_options.model,
+                start_context: &provider_start_context,
+            })
+            .await?;
+
+        let Some(pty_instance_id) = provider_result.pty_instance_id else {
+            self.abort_new_session(provider_launcher.as_ref(), task_id)
+                .await;
+            return Err(TaskStartError::ProviderLaunch(
+                "the provider did not report a terminal for the new session".to_string(),
+            ));
+        };
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let recorded = db::acquire_db(&self.db).record_new_agent_session(db::NewAgentSession {
+            id: &session_id,
+            task_id,
+            provider_name: &context.provider_name,
+            opencode_session_id: provider_result.opencode_session_id.as_deref(),
+            pi_session_id: provider_result.pi_session_id.as_deref(),
+            pty_instance_id,
+        });
+        if let Err(error) = recorded {
+            self.abort_new_session(provider_launcher.as_ref(), task_id)
+                .await;
+            return Err(TaskStartError::Persistence(error.to_string()));
+        }
+        self.publish_task_changed(task_id, &context.project_id);
+
+        Ok(NewAgentSessionReceipt {
+            task_id: task_id.to_string(),
+            session_id,
+            pty_instance_id,
+        })
+    }
+
+    async fn abort_new_session(&self, provider_launcher: &dyn ProviderLauncher, task_id: &str) {
+        if let Err(abort_error) = provider_launcher.abort(task_id).await {
+            error!(
+                "[task_start] Failed to abort provider after a failed new session for {} error_bytes={}",
+                task_id,
+                abort_error.len()
+            );
+        }
+    }
+
+    fn load_context(&self, task_id: &str, kind: StartKind) -> Result<StartContext, TaskStartError> {
         let db = db::acquire_db(&self.db);
         let task = db
             .get_task(task_id)
             .map_err(|error| TaskStartError::Persistence(format!("Failed to get Task: {error}")))?
             .ok_or(TaskStartError::NotFound)?;
-        if db
-            .get_latest_session_for_ticket(task_id)
-            .map_err(|error| {
-                TaskStartError::Persistence(format!("Failed to get latest Agent Session: {error}"))
-            })?
-            .is_some_and(|session| matches!(session.status.as_str(), "running" | "paused"))
-        {
-            return Err(TaskStartError::ActiveSession);
-        }
-        if task.status != "backlog" {
-            return Err(TaskStartError::InvalidState {
-                status: task.status,
-            });
-        }
-        for dependency_id in &task.depends_on {
-            let dependency = db.get_task(dependency_id).map_err(|error| {
-                TaskStartError::Persistence(format!("Failed to get dependency Task: {error}"))
-            })?;
-            if !matches!(
-                dependency
-                    .as_ref()
-                    .map(|dependency| dependency.status.as_str()),
-                Some("done")
-            ) {
-                return Err(TaskStartError::DependencyBlocked {
-                    dependency_id: dependency_id.clone(),
-                });
-            }
+        if kind == StartKind::FirstStart {
+            Self::check_first_start(&db, &task)?;
         }
 
         let project_id = task
@@ -483,6 +557,39 @@ impl TaskStartService {
             additional_instructions,
             start_prompt_contributions,
         })
+    }
+
+    fn check_first_start(db: &Database, task: &TaskRow) -> Result<(), TaskStartError> {
+        if db
+            .get_latest_session_for_ticket(&task.id)
+            .map_err(|error| {
+                TaskStartError::Persistence(format!("Failed to get latest Agent Session: {error}"))
+            })?
+            .is_some_and(|session| matches!(session.status.as_str(), "running" | "paused"))
+        {
+            return Err(TaskStartError::ActiveSession);
+        }
+        if task.status != "backlog" {
+            return Err(TaskStartError::InvalidState {
+                status: task.status.clone(),
+            });
+        }
+        for dependency_id in &task.depends_on {
+            let dependency = db.get_task(dependency_id).map_err(|error| {
+                TaskStartError::Persistence(format!("Failed to get dependency Task: {error}"))
+            })?;
+            if !matches!(
+                dependency
+                    .as_ref()
+                    .map(|dependency| dependency.status.as_str()),
+                Some("done")
+            ) {
+                return Err(TaskStartError::DependencyBlocked {
+                    dependency_id: dependency_id.clone(),
+                });
+            }
+        }
+        Ok(())
     }
 
     async fn requires_desktop_action(
@@ -701,6 +808,13 @@ impl TaskStartService {
             }),
         );
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StartKind {
+    FirstStart,
+    /// A new session for a Task already in progress, which skips the checks that guard its first start.
+    NewSession,
 }
 
 struct StartContext {

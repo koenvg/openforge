@@ -40,7 +40,7 @@ fn start_context_resolves_saved_provider_override() {
     };
 
     let context = service_for_state(&state)
-        .load_context(&task_id)
+        .load_context(&task_id, StartKind::FirstStart)
         .expect("load Start context");
 
     assert_eq!(context.provider_name, "opencode");

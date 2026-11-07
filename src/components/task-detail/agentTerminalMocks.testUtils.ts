@@ -1,4 +1,5 @@
 import { vi } from 'vitest'
+import type { ShellLifecycleState } from '@openforge-app/terminal-runtime'
 
 const mocks = vi.hoisted(() => ({
   poolEntry: {
@@ -31,6 +32,7 @@ const mocks = vi.hoisted(() => ({
     currentPtyInstance: null as number | null,
     hasOutput: false,
   },
+  shellLifecycleListeners: new Set<(state: ShellLifecycleState) => void>(),
 }))
 
 vi.mock('@xterm/xterm', () => {
@@ -72,6 +74,13 @@ vi.mock('../../lib/terminalSessionService', () => ({ agentTerminalSessions: {
   release: vi.fn(),
   releaseAll: vi.fn(),
   getShellLifecycleState: vi.fn().mockImplementation(() => ({ ...mocks.shellLifecycleState })),
+  subscribeShellLifecycle: vi.fn().mockImplementation((
+    _shellSessionKey: string,
+    listener: (state: ShellLifecycleState) => void,
+  ) => {
+    mocks.shellLifecycleListeners.add(listener)
+    return () => mocks.shellLifecycleListeners.delete(listener)
+  }),
   isPtyActive: vi.fn().mockImplementation(() => mocks.shellLifecycleState.ptyActive),
   isValidTerminalDimensions: vi.fn().mockReturnValue(true),
 } }))
@@ -79,6 +88,11 @@ vi.mock('../../lib/terminalSessionService', () => ({ agentTerminalSessions: {
 export const mockPoolEntry = mocks.poolEntry
 export const mockAttachment = mocks.attachment
 export const mockShellLifecycleState = mocks.shellLifecycleState
+
+export function emitShellLifecycle(state: Partial<ShellLifecycleState>) {
+  Object.assign(mocks.shellLifecycleState, state)
+  mocks.shellLifecycleListeners.forEach(listener => listener({ ...mocks.shellLifecycleState }))
+}
 
 export function resetAgentTerminalMocks() {
   mocks.poolEntry.taskId = ''
@@ -92,4 +106,5 @@ export function resetAgentTerminalMocks() {
   mocks.shellLifecycleState.ptyActive = false
   mocks.shellLifecycleState.shellExited = false
   mocks.shellLifecycleState.currentPtyInstance = null
+  mocks.shellLifecycleListeners.clear()
 }

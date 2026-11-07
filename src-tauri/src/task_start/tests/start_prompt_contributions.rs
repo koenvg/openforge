@@ -15,7 +15,7 @@ fn start_context_rejects_malformed_start_prompt_contributions_config() {
         .expect("store malformed contribution config");
 
     let error = service_for_state(&state)
-        .load_context(&task_id)
+        .load_context(&task_id, StartKind::FirstStart)
         .err()
         .expect("malformed contribution config must reject Task Start");
     let TaskStartError::InvalidConfiguration(message) = error else {
@@ -47,7 +47,7 @@ fn start_context_reports_unreadable_start_prompt_contributions_config() {
         .expect("store unreadable contribution config");
 
     let error = service_for_state(&state)
-        .load_context(&task_id)
+        .load_context(&task_id, StartKind::FirstStart)
         .err()
         .expect("unreadable contribution config must reject Task Start");
     let TaskStartError::Persistence(message) = error else {
@@ -136,7 +136,7 @@ fn start_context_excludes_contributions_from_disabled_plugins_and_restores_them_
     let service = service_for_state(&state);
 
     let enabled_context = service
-        .load_context(&task_id)
+        .load_context(&task_id, StartKind::FirstStart)
         .expect("load enabled context");
     assert_eq!(enabled_context.start_prompt_contributions.len(), 1);
 
@@ -145,7 +145,7 @@ fn start_context_excludes_contributions_from_disabled_plugins_and_restores_them_
         .set_plugin_enabled(&project_id, plugin_id, false)
         .expect("disable plugin");
     let disabled_context = service
-        .load_context(&task_id)
+        .load_context(&task_id, StartKind::FirstStart)
         .expect("load disabled context");
     assert!(disabled_context.start_prompt_contributions.is_empty());
 
@@ -153,7 +153,7 @@ fn start_context_excludes_contributions_from_disabled_plugins_and_restores_them_
         .set_plugin_enabled(&project_id, plugin_id, true)
         .expect("re-enable plugin");
     let reenabled_context = service
-        .load_context(&task_id)
+        .load_context(&task_id, StartKind::FirstStart)
         .expect("load re-enabled context");
     assert_eq!(reenabled_context.start_prompt_contributions.len(), 1);
 
@@ -170,7 +170,7 @@ fn start_context_excludes_contributions_from_uninstalled_plugins_and_restores_th
     let service = service_for_state(&state);
 
     let enabled_context = service
-        .load_context(&task_id)
+        .load_context(&task_id, StartKind::FirstStart)
         .expect("load enabled context");
     assert_eq!(enabled_context.start_prompt_contributions.len(), 1);
 
@@ -179,7 +179,7 @@ fn start_context_excludes_contributions_from_uninstalled_plugins_and_restores_th
         .uninstall_plugin(plugin_id)
         .expect("uninstall plugin");
     let uninstalled_context = service
-        .load_context(&task_id)
+        .load_context(&task_id, StartKind::FirstStart)
         .expect("load uninstalled context");
     assert!(uninstalled_context.start_prompt_contributions.is_empty());
 
@@ -190,7 +190,7 @@ fn start_context_excludes_contributions_from_uninstalled_plugins_and_restores_th
         .expect("enable reinstalled plugin");
     drop(db);
     let reinstalled_context = service
-        .load_context(&task_id)
+        .load_context(&task_id, StartKind::FirstStart)
         .expect("load reinstalled context");
     assert_eq!(reinstalled_context.start_prompt_contributions.len(), 1);
 

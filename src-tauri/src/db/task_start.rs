@@ -14,6 +14,15 @@ pub(crate) struct TaskStartFinalization<'a> {
     pub pty_instance_id: Option<u64>,
 }
 
+pub(crate) struct NewAgentSession<'a> {
+    pub id: &'a str,
+    pub task_id: &'a str,
+    pub provider_name: &'a str,
+    pub opencode_session_id: Option<&'a str>,
+    pub pi_session_id: Option<&'a str>,
+    pub pty_instance_id: u64,
+}
+
 #[derive(Debug)]
 pub(crate) enum FinalizeTaskStartError {
     StaleState,
@@ -114,6 +123,34 @@ impl super::Database {
         )?;
 
         transaction.commit()?;
+        Ok(())
+    }
+
+    /// Records a running session for a Task that is already in progress, alongside its earlier ones.
+    pub(crate) fn record_new_agent_session(
+        &self,
+        session: NewAgentSession<'_>,
+    ) -> Result<(), FinalizeTaskStartError> {
+        let pty_instance_id = i64::try_from(session.pty_instance_id)
+            .map_err(|_| FinalizeTaskStartError::InvalidPtyInstance(session.pty_instance_id))?;
+        let conn = self.lock_conn()?;
+        let now = super::current_unix_timestamp()?;
+        conn.execute(
+            "INSERT INTO agent_sessions (
+                id, ticket_id, opencode_session_id, stage, status, provider,
+                claude_session_id, pi_session_id, pty_instance_id, created_at, updated_at
+             ) VALUES (?1, ?2, ?3, 'implementing', 'running', ?4, NULL, ?5, ?6, ?7, ?8)",
+            rusqlite::params![
+                session.id,
+                session.task_id,
+                session.opencode_session_id,
+                session.provider_name,
+                session.pi_session_id,
+                pty_instance_id,
+                now,
+                now,
+            ],
+        )?;
         Ok(())
     }
 }

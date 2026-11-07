@@ -108,6 +108,8 @@ export const desktopIpcFunctionDomains = {
   abortScopedAgentSession: 'agent-session-pty',
   releaseScopedAgentSession: 'agent-session-pty',
   sendAgentFollowUp: 'agent-session-pty',
+  resumeAgentSession: 'agent-session-pty',
+  startNewAgentSession: 'agent-session-pty',
   getLatestSessions: 'agent-session-pty',
   getGithubUsername: 'github-review',
   fetchReviewPrs: 'github-review',
