@@ -11,6 +11,7 @@
   import AppTaskCreationDialogs from './components/shell/AppTaskCreationDialogs.svelte'
   import BranchDivergenceModal from './components/BranchDivergenceModal.svelte'
   import AppCloseConfirmationDialog from './components/shell/AppCloseConfirmationDialog.svelte'
+  import TerminalTaskConfirmationDialog from './components/shared/tasks/TerminalTaskConfirmationDialog.svelte'
   import AppShortcutHelpDialog from './components/shell/AppShortcutHelpDialog.svelte'
   import ToastHost from './components/feedback/toasts/ToastHost.svelte'
   import AppSidebar from './components/shell/AppSidebar.svelte'
@@ -475,6 +476,7 @@
     <BranchDivergenceModal />
 
     <AppCloseConfirmationDialog controller={closeController} />
+    <TerminalTaskConfirmationDialog />
     <AppShortcutHelpDialog
       controller={shortcutHelp}
       taskSelected={selectedTask !== null}

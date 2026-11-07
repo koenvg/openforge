@@ -2,22 +2,13 @@ import { get } from 'svelte/store'
 import { deleteTask } from './ipc'
 import { notifyTaskCompleted } from './openAttentionOnSessionSubmit'
 import { completingTasks, error } from './stores'
+import { requestTerminalTaskConfirmation, type TerminalTaskAction } from './terminalTaskConfirmation'
 
 // Started Tasks use "Complete" and retain a Completed Task reference, while backlog
 // Tasks use permanent "Delete" and remove the Task entirely. Both terminal actions
 // remove runtime workspace state, so every terminal action must confirm first.
-export const COMPLETE_TASK_CONFIRM_MESSAGE =
-  'Complete this task? Its runtime workspace state will be removed — this cannot be undone. The Completed Task will remain available for reference.'
-
-export const DELETE_BACKLOG_TASK_CONFIRM_MESSAGE =
-  'Delete this task from the backlog? The Task and any runtime workspace state will be permanently deleted — this cannot be undone. The Task will not remain available for reference.'
-
-/** Prompt the user to confirm destructive runtime cleanup for the displayed action. */
-export function confirmTerminalTaskAction(action: 'Complete' | 'Delete'): boolean {
-  const message = action === 'Delete'
-    ? DELETE_BACKLOG_TASK_CONFIRM_MESSAGE
-    : COMPLETE_TASK_CONFIRM_MESSAGE
-  return window.confirm(message)
+export function confirmTerminalTaskAction(action: TerminalTaskAction, taskId: string): Promise<boolean> {
+  return requestTerminalTaskConfirmation(action, taskId)
 }
 
 /** Whether completion is already in flight for the Task. */

@@ -59,12 +59,12 @@ export function useActionPaletteController(options: ActionPaletteControllerOptio
         if (task) await options.taskActions.handleRunAction({ taskId: task.id, actionPrompt: '' })
         break
       case 'delete-task':
-        if (task && !isTaskCompleting(task.id) && confirmTerminalTaskAction('Delete')) {
+        if (task && !isTaskCompleting(task.id) && await confirmTerminalTaskAction('Delete', task.id)) {
           await options.taskActions.deleteTaskAndReload(task.id)
         }
         break
       case 'complete-task':
-        if (task && !isTaskCompleting(task.id) && confirmTerminalTaskAction('Complete')) {
+        if (task && !isTaskCompleting(task.id) && await confirmTerminalTaskAction('Complete', task.id)) {
           await options.taskActions.completeTaskAndReload(task.id)
         }
         break

@@ -1,5 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { requestTerminalTaskConfirmation } from '../../lib/terminalTaskConfirmation'
+
+vi.mock('../../lib/terminalTaskConfirmation', () => ({
+  requestTerminalTaskConfirmation: vi.fn(),
+}))
 import {
   baseTask,
   mockOnRunAction,
@@ -45,6 +50,7 @@ describe('TaskDetailToolbar — more actions menu', () => {
 
   beforeEach(async () => {
     resetTaskDetailViewTestState()
+    vi.mocked(requestTerminalTaskConfirmation).mockReset()
     const { getProjectConfig, setProjectConfig } = await import('../../lib/ipc')
     vi.mocked(getProjectConfig).mockResolvedValue(null)
     vi.mocked(setProjectConfig).mockClear()
@@ -127,7 +133,7 @@ describe('TaskDetailToolbar — more actions menu', () => {
   it('completes the task from the primary half without opening the menu', async () => {
     const { deleteTask } = await import('../../lib/ipc')
     vi.mocked(deleteTask).mockClear()
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(requestTerminalTaskConfirmation).mockResolvedValue(true)
     await renderToolbar(doingTask)
 
     await fireEvent.click(screen.getByRole('button', { name: 'Complete' }))
@@ -137,21 +143,17 @@ describe('TaskDetailToolbar — more actions menu', () => {
     })
     expect(notifyTaskCompleted).toHaveBeenCalledOnce()
     expect(screen.queryByRole('menu')).toBeNull()
-    confirmSpy.mockRestore()
   })
 
   it('does not complete when confirmation is cancelled', async () => {
     const { deleteTask } = await import('../../lib/ipc')
     vi.mocked(deleteTask).mockClear()
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
-    try {
-      await renderToolbar(doingTask)
-      await fireEvent.click(screen.getByRole('button', { name: 'Complete' }))
-      expect(deleteTask).not.toHaveBeenCalled()
-      expect(notifyTaskCompleted).not.toHaveBeenCalled()
-    } finally {
-      confirmSpy.mockRestore()
-    }
+    vi.mocked(requestTerminalTaskConfirmation).mockResolvedValue(false)
+    await renderToolbar(doingTask)
+    await fireEvent.click(screen.getByRole('button', { name: 'Complete' }))
+    await waitFor(() => expect(requestTerminalTaskConfirmation).toHaveBeenCalledWith('Complete', 'T-42'))
+    expect(deleteTask).not.toHaveBeenCalled()
+    expect(notifyTaskCompleted).not.toHaveBeenCalled()
   })
 
   it('keeps secondary actions available while completion is in progress', async () => {
